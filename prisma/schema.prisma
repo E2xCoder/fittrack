@@ -30,9 +30,10 @@ model User {
   dailyLogs      DailyLog[]
   weightLogs     WeightLog[]
   progressPhotos ProgressPhoto[]
-  emailVerified  Boolean         @default(false)
-  sessions       Session[]
-  accounts       Account[]
+
+  emailVerified Boolean   @default(false)
+  sessions      Session[]
+  accounts      Account[]
 
   @@map("user")
 }
@@ -50,7 +51,8 @@ model Meal {
   servingSize  Float  @default(1)
   servingLabel String @default("serving")
 
-  imageUrl String?
+  ingredients String?
+  imageUrl    String?
 
   mealType MealType
 
@@ -63,6 +65,8 @@ model Meal {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model MealLog {
@@ -72,13 +76,25 @@ model MealLog {
 
   mealSnapshot Json?
 
+  calories Float @default(0)
+  protein  Float @default(0)
+  carbs    Float @default(0)
+  fat      Float @default(0)
+
   mealId String
   meal   Meal   @relation(fields: [mealId], references: [id], onDelete: Cascade)
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  dailyLogId String?
+  dailyLog   DailyLog? @relation(fields: [dailyLogId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
+
+  @@index([mealId])
+  @@index([userId])
+  @@index([dailyLogId])
 }
 
 model Workout {
@@ -123,9 +139,16 @@ model ExerciseSet {
 model DailyLog {
   id String @id @default(cuid())
 
+  date DateTime @default(now())
+
   steps Int   @default(0)
   water Float @default(0)
   sleep Float @default(0)
+
+  totalCalories Float @default(0)
+  totalProtein  Float @default(0)
+  totalCarbs    Float @default(0)
+  totalFat      Float @default(0)
 
   hadWorkShift Boolean @default(false)
   isGymDay     Boolean @default(false)
@@ -133,7 +156,12 @@ model DailyLog {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  mealLogs MealLog[]
+
   createdAt DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([userId])
 }
 
 model WeightLog {
@@ -167,7 +195,8 @@ model Session {
   ipAddress String?  @db.Text
   userAgent String?  @db.Text
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([token])
   @@index([userId])
@@ -179,7 +208,6 @@ model Account {
   accountId             String    @db.Text
   providerId            String    @db.Text
   userId                String
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessToken           String?   @db.Text
   refreshToken          String?   @db.Text
   idToken               String?   @db.Text
@@ -189,6 +217,8 @@ model Account {
   password              String?   @db.Text
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("account")
