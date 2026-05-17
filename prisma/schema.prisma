@@ -7,3 +7,148 @@ datasource db {
   url          = env("DATABASE_URL")
   relationMode = "prisma"
 }
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+  SHAKE
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  image     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  meals          Meal[]
+  mealLogs       MealLog[]
+  workouts       Workout[]
+  dailyLogs      DailyLog[]
+  weightLogs     WeightLog[]
+  progressPhotos ProgressPhoto[]
+}
+
+model Meal {
+  id       String @id @default(cuid())
+  name     String
+  calories Int
+  protein  Float
+  carbs    Float
+  fat      Float
+  fiber    Float?
+  sodium   Float?
+
+  servingSize  Float  @default(1)
+  servingLabel String @default("serving")
+
+  imageUrl String?
+
+  mealType MealType
+
+  isFavorite Boolean @default(false)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  mealLogs MealLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MealLog {
+  id String @id @default(cuid())
+
+  quantity Float @default(1)
+
+  mealSnapshot Json?
+
+  mealId String
+  meal   Meal   @relation(fields: [mealId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+model Workout {
+  id String @id @default(cuid())
+
+  title String
+  notes String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  exercises Exercise[]
+
+  createdAt DateTime @default(now())
+}
+
+model Exercise {
+  id String @id @default(cuid())
+
+  name String
+
+  workoutId String
+  workout   Workout @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+
+  sets ExerciseSet[]
+}
+
+model ExerciseSet {
+  id String @id @default(cuid())
+
+  weight Float?
+  reps   Int?
+
+  isPR Boolean @default(false)
+
+  exerciseId String
+  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+model DailyLog {
+  id String @id @default(cuid())
+
+  steps Int   @default(0)
+  water Float @default(0)
+  sleep Float @default(0)
+
+  hadWorkShift Boolean @default(false)
+  isGymDay     Boolean @default(false)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+model WeightLog {
+  id String @id @default(cuid())
+
+  weight Float
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+model ProgressPhoto {
+  id String @id @default(cuid())
+
+  imageUrl String
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
