@@ -1,117 +1,46 @@
-import { NextResponse }
-from "next/server";
+import { headers } from "next/headers";
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
-import { prisma }
-from "@/lib/prisma";
-
-export async function DELETE(
-  request: Request,
-  context: {
-    params: Promise<{
-      id: string;
-    }>;
-  }
-) {
-  try {
-    const { id } =
-      await context.params;
-
-    await prisma.exerciseSet.deleteMany(
-      {
-        where: {
-          exercise: {
-            workoutId:
-              id,
-          },
-        },
-      }
-    );
-
-    await prisma.exercise.deleteMany(
-      {
-        where: {
-          workoutId:
-            id,
-        },
-      }
-    );
-
-    await prisma.workout.delete(
-      {
-        where: {
-          id,
-        },
-      }
-    );
-
-    return NextResponse.json(
-      {
-        success:
-          true,
-      }
-    );
-  } catch (
-    error
-  ) {
-    console.error(
-      error
-    );
-
-    return NextResponse.json(
-      {
-        error:
-          "Delete failed",
-      },
-      {
-        status: 500,
-      }
-    );
-  }
+async function getUser() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  return session?.user ?? null;
 }
 
 export async function GET(
   request: Request,
-  context: {
-    params: Promise<{
-      id: string;
-    }>;
-  }
+  context: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const { id } =
-      await context.params;
+  const user = await getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const workout =
-      await prisma.workout.findUnique(
-        {
-          where: {
-            id,
-          },
+  const { id } = await context.params;
 
-          include: {
-            exercises:
-              {
-                include:
-                  {
-                    sets: true,
-                  },
-              },
-          },
-        }
-      );
+  const workout = await prisma.workout.findFirst({
+    where: { id, userId: user.id },
+    include: { exercises: { include: { sets: true } } },
+  });
 
-    return NextResponse.json(
-      workout
-    );
-  } catch {
-    return NextResponse.json(
-      {
-        error:
-          "Failed",
-      },
-      {
-        status: 500,
-      }
-    );
-  }
+  if (!workout) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  return NextResponse.json(workout);
+}
+
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  const user = await getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await context.params;
+
+  // Verify ownership
+  const workout = await prisma.workout.findFirst({ where: { id, userId: user.id } });
+  if (!workout) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  await prisma.workout.delete({ where: { id } });
+
+  return NextResponse.json({ success: true });
 }

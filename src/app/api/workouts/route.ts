@@ -1,148 +1,58 @@
-import { NextResponse }
-from "next/server";
+import { headers } from "next/headers";
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
-import { prisma }
-from "@/lib/prisma";
-
-export async function GET() {
-  try {
-    const workouts =
-      await prisma.workout.findMany(
-        {
-          include: {
-            exercises:
-              {
-                include:
-                  {
-                    sets: true,
-                  },
-              },
-          },
-
-          orderBy: {
-            createdAt:
-              "desc",
-          },
-        }
-      );
-
-    return NextResponse.json(
-      workouts
-    );
-  } catch (
-    error
-  ) {
-    console.error(
-      error
-    );
-
-    return NextResponse.json(
-      {
-        error:
-          "Failed to fetch workouts",
-      },
-      {
-        status: 500,
-      }
-    );
-  }
+async function getUser() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  return session?.user ?? null;
 }
 
-export async function POST(
-  request: Request
-) {
-  try {
-    const body =
-      await request.json();
+export async function GET() {
+  const user = await getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    await prisma.workout.deleteMany();
-
-    const workout =
-      await prisma.workout.create(
-        {
-          data: {
-            title:
-              body.title ??
-              "Workout",
-
-            notes:
-              body.notes ??
-              "",
-
-            userId:
-              "temp-user",
-
-            exercises:
-              {
-                create:
-                  (
-                    body.exercises ??
-                    []
-                  ).map(
-                    (
-                      exercise: any
-                    ) => ({
-                      name:
-                        exercise.name,
-
-                      userId:
-                        "temp-user",
-
-                      sets:
-                        {
-                          create:
-                            (
-                              exercise.sets ??
-                              []
-                            ).map(
-                              (
-                                set: any
-                              ) => ({
-                                weight:
-                                  set.weight ??
-                                  null,
-
-                                reps:
-                                  set.reps ??
-                                  null,
-                              })
-                            ),
-                        },
-                    })
-                  ),
-              },
-          },
-
-          include: {
-            exercises:
-              {
-                include:
-                  {
-                    sets: true,
-                  },
-              },
-          },
-        }
-      );
-
-    return NextResponse.json(
-      workout
-    );
-  } catch (
-    error
-  ) {
-    console.error(
-      error
-    );
-
-    return NextResponse.json(
-      {
-        error:
-          "Failed to create workout",
+  const workouts = await prisma.workout.findMany({
+    where: { userId: user.id },
+    include: {
+      exercises: {
+        include: { sets: true },
       },
-      {
-        status: 500,
-      }
-    );
-  }
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return NextResponse.json(workouts);
+}
+
+export async function POST(request: Request) {
+  const user = await getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await request.json();
+
+  const workout = await prisma.workout.create({
+    data: {
+      userId: user.id,
+      title: body.title ?? "Workout",
+      notes: body.notes ?? "",
+      exercises: {
+        create: (body.exercises ?? []).map((exercise: any) => ({
+          name: exercise.name,
+          userId: user.id,
+          sets: {
+            create: (exercise.sets ?? []).map((set: any) => ({
+              weight: set.weight ?? null,
+              reps: set.reps ?? null,
+            })),
+          },
+        })),
+      },
+    },
+    include: {
+      exercises: { include: { sets: true } },
+    },
+  });
+
+  return NextResponse.json(workout);
 }

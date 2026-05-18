@@ -3,179 +3,74 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function POST(
-  request: Request
-) {
-  const session =
-    await auth.api.getSession({
-      headers: await headers(),
-    });
+export async function POST(request: Request) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!session?.user) {
-    return NextResponse.json(
-      {
-        error:
-          "Unauthorized",
-      },
-      { status: 401 }
-    );
-  }
+  const user = session.user;
+  const body = await request.json();
+  const quantity = Number(body.quantity) || 1;
 
-  const body =
-    await request.json();
+  // Verify meal belongs to this user
+  const meal = await prisma.meal.findFirst({
+    where: { id: body.mealId, userId: user.id },
+  });
+  if (!meal) return NextResponse.json({ error: "Meal not found" }, { status: 404 });
 
-  const quantity =
-    Number(
-      body.quantity
-    ) || 1;
+  // Get today's date at midnight
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  const meal =
-    await prisma.meal.findUnique({
-      where: {
-        id:
-          body.mealId,
-      },
-    });
-
-  if (!meal) {
-    return NextResponse.json(
-      {
-        error:
-          "Meal not found",
-      },
-      { status: 404 }
-    );
-  }
-
-  const today =
-    new Date();
-
-  today.setHours(
-    0,
-    0,
-    0,
-    0
-  );
-
-  let dailyLog =
-    await prisma.dailyLog.findFirst({
-      where: {
-        userId:
-          session.user.id,
-        date: today,
-      },
-    });
+  // Get or create daily log for today
+  let dailyLog = await prisma.dailyLog.findFirst({
+    where: { userId: user.id, date: today },
+  });
 
   if (!dailyLog) {
-    dailyLog =
-      await prisma.dailyLog.create({
-        data: {
-          userId:
-            session.user.id,
-          date: today,
-        },
-      });
-  }
-
-  const calories =
-    meal.calories *
-    quantity;
-
-  const protein =
-    meal.protein *
-    quantity;
-
-  const carbs =
-    meal.carbs *
-    quantity;
-
-  const fat =
-    meal.fat *
-    quantity;
-
-  const existing =
-    await prisma.mealLog.findFirst({
-      where: {
-        mealId:
-          meal.id,
-        dailyLogId:
-          dailyLog.id,
-      },
-    });
-
-  if (existing) {
-    await prisma.mealLog.update({
-      where: {
-        id:
-          existing.id,
-      },
-      data: {
-        quantity: {
-          increment:
-            quantity,
-        },
-        calories: {
-          increment:
-            calories,
-        },
-        protein: {
-          increment:
-            protein,
-        },
-        carbs: {
-          increment:
-            carbs,
-        },
-        fat: {
-          increment:
-            fat,
-        },
-      },
-    });
-  } else {
-    await prisma.mealLog.create({
-      data: {
-        mealId:
-          meal.id,
-        userId:
-          session.user.id,
-        dailyLogId:
-          dailyLog.id,
-        quantity,
-        calories,
-        protein,
-        carbs,
-        fat,
-      },
+    dailyLog = await prisma.dailyLog.create({
+      data: { userId: user.id, date: today },
     });
   }
 
-  await prisma.dailyLog.update({
-    where: {
-      id:
-        dailyLog.id,
-    },
+  const calories = meal.calories * quantity;
+  const protein = meal.protein * quantity;
+  const carbs = meal.carbs * quantity;
+  const fat = meal.fat * quantity;
+
+  // Save snapshot of macros at log time
+  const mealSnapshot = {
+    name: meal.name,
+    calories: meal.calories,
+    protein: meal.protein,
+    carbs: meal.carbs,
+    fat: meal.fat,
+    servingLabel: meal.servingLabel,
+  };
+
+  await prisma.mealLog.create({
     data: {
-      totalCalories: {
-        increment:
-          calories,
-      },
-      totalProtein: {
-        increment:
-          protein,
-      },
-      totalCarbs: {
-        increment:
-          carbs,
-      },
-      totalFat: {
-        increment:
-          fat,
-      },
+      mealId: meal.id,
+      userId: user.id,
+      dailyLogId: dailyLog.id,
+      quantity,
+      calories,
+      protein,
+      carbs,
+      fat,
+      mealSnapshot,
     },
   });
 
-  return NextResponse.json({
-    success: true,
+  // Update daily totals
+  await prisma.dailyLog.update({
+    where: { id: dailyLog.id },
+    data: {
+      totalCalories: { increment: calories },
+      totalProtein: { increment: protein },
+      totalCarbs: { increment: carbs },
+      totalFat: { increment: fat },
+    },
   });
+
+  return NextResponse.json({ success: true });
 }
