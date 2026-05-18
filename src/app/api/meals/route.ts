@@ -25,7 +25,6 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-
   if (!body.name || !body.calories) {
     return NextResponse.json({ error: "Name and calories required" }, { status: 400 });
   }
@@ -41,8 +40,8 @@ export async function POST(request: Request) {
       fiber: Number(body.fiber) || 0,
       sodium: Number(body.sodium) || 0,
       servingSize: Number(body.servingSize) || 1,
-      servingLabel: body.servingLabel || "serving",
-      mealType: body.mealType || "SNACK",
+      servingLabel: body.servingLabel || "piece",
+      category: body.category || "SNACK",
       isFavorite: Boolean(body.isFavorite),
     },
   });

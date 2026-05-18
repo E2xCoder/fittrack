@@ -18,7 +18,6 @@ export async function PUT(
   const { id } = await context.params;
   const body = await request.json();
 
-  // Verify ownership
   const meal = await prisma.meal.findFirst({ where: { id, userId: user.id } });
   if (!meal) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -33,8 +32,8 @@ export async function PUT(
       fiber: Number(body.fiber) || 0,
       sodium: Number(body.sodium) || 0,
       servingSize: Number(body.servingSize) || 1,
-      servingLabel: body.servingLabel || "serving",
-      mealType: body.mealType,
+      servingLabel: body.servingLabel || "piece",
+      category: body.category || "SNACK",
       isFavorite: Boolean(body.isFavorite),
     },
   });
@@ -51,11 +50,9 @@ export async function DELETE(
 
   const { id } = await context.params;
 
-  // Verify ownership before delete
   const meal = await prisma.meal.findFirst({ where: { id, userId: user.id } });
   if (!meal) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   await prisma.meal.delete({ where: { id } });
-
   return NextResponse.json({ success: true });
 }

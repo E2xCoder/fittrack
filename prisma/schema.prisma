@@ -7,12 +7,21 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum MealType {
-  BREAKFAST
-  LUNCH
-  DINNER
+enum MealCategory {
+  MEAL_1
+  MEAL_2
+  PRE_WORKOUT
+  POST_WORKOUT
   SNACK
   SHAKE
+}
+
+enum WorkoutSplit {
+  ARMS_FOREARMS
+  SHOULDERS_TRICEPS
+  CHEST_BACK
+  LEGS_ABS
+  REST_DAY
 }
 
 model User {
@@ -31,6 +40,7 @@ model User {
   fatTarget     Int?
 
   meals          Meal[]
+  mealPacks      MealPack[]
   mealLogs       MealLog[]
   dailyLogs      DailyLog[]
   workouts       Workout[]
@@ -44,7 +54,7 @@ model User {
 }
 
 model Meal {
-  id           String   @id @default(cuid())
+  id           String      @id @default(cuid())
   userId       String
   name         String
   calories     Float
@@ -53,37 +63,64 @@ model Meal {
   fat          Float
   fiber        Float?
   sodium       Float?
-  servingSize  Float    @default(1)
-  servingLabel String   @default("serving")
+  servingSize  Float       @default(1)
+  servingLabel String      @default("piece") // "piece", "g", "ml"
   ingredients  String?
   imageUrl     String?
-  mealType     MealType
-  isFavorite   Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  category     MealCategory @default(SNACK)
+  isFavorite   Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  mealLogs MealLog[]
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mealLogs      MealLog[]
+  mealPackItems MealPackItem[]
 
   @@index([userId])
 }
 
-model MealLog {
-  id         String   @id @default(cuid())
-  userId     String
-  mealId     String?
-  dailyLogId String?
-  quantity   Float    @default(1)
-  calories   Float
-  protein    Float
-  carbs      Float
-  fat        Float
-  mealSnapshot Json?
-  createdAt  DateTime @default(now())
+model MealPack {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  meal     Meal?     @relation(fields: [mealId], references: [id], onDelete: SetNull)
-  dailyLog DailyLog? @relation(fields: [dailyLogId], references: [id], onDelete: Cascade)
+  user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items MealPackItem[]
+
+  @@index([userId])
+}
+
+model MealPackItem {
+  id       String @id @default(cuid())
+  packId   String
+  mealId   String
+  quantity Float  @default(1)
+
+  pack MealPack @relation(fields: [packId], references: [id], onDelete: Cascade)
+  meal Meal     @relation(fields: [mealId], references: [id], onDelete: Cascade)
+
+  @@index([packId])
+  @@index([mealId])
+}
+
+model MealLog {
+  id           String       @id @default(cuid())
+  userId       String
+  mealId       String?
+  dailyLogId   String?
+  quantity     Float        @default(1)
+  calories     Float
+  protein      Float
+  carbs        Float
+  fat          Float
+  mealSnapshot Json?
+  createdAt    DateTime     @default(now())
+
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meal     Meal?        @relation(fields: [mealId], references: [id], onDelete: SetNull)
+  dailyLog DailyLog?    @relation(fields: [dailyLogId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([mealId])
@@ -113,16 +150,18 @@ model DailyLog {
 }
 
 model Workout {
-  id        String   @id @default(cuid())
+  id        String       @id @default(cuid())
   userId    String
-  title     String
+  split     WorkoutSplit @default(REST_DAY)
   notes     String?
-  createdAt DateTime @default(now())
+  date      DateTime     @db.Date
+  createdAt DateTime     @default(now())
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   exercises Exercise[]
 
   @@index([userId])
+  @@index([userId, date])
 }
 
 model Exercise {
@@ -130,6 +169,7 @@ model Exercise {
   userId    String
   workoutId String
   name      String
+  orderIndex Int     @default(0)
   createdAt DateTime @default(now())
 
   user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -144,8 +184,10 @@ model Exercise {
 model ExerciseSet {
   id         String   @id @default(cuid())
   exerciseId String
+  setNumber  Int      @default(1)
   weight     Float?
   reps       Int?
+  rpe        Int?     // 1-10 rate of perceived exertion
   isPR       Boolean  @default(false)
   createdAt  DateTime @default(now())
 

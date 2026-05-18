@@ -11,17 +11,14 @@ export async function POST(request: Request) {
   const body = await request.json();
   const quantity = Number(body.quantity) || 1;
 
-  // Verify meal belongs to this user
   const meal = await prisma.meal.findFirst({
     where: { id: body.mealId, userId: user.id },
   });
   if (!meal) return NextResponse.json({ error: "Meal not found" }, { status: 404 });
 
-  // Get today's date at midnight
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Get or create daily log for today
   let dailyLog = await prisma.dailyLog.findFirst({
     where: { userId: user.id, date: today },
   });
@@ -37,7 +34,6 @@ export async function POST(request: Request) {
   const carbs = meal.carbs * quantity;
   const fat = meal.fat * quantity;
 
-  // Save snapshot of macros at log time
   const mealSnapshot = {
     name: meal.name,
     calories: meal.calories,
@@ -45,6 +41,7 @@ export async function POST(request: Request) {
     carbs: meal.carbs,
     fat: meal.fat,
     servingLabel: meal.servingLabel,
+    servingSize: meal.servingSize,
   };
 
   await prisma.mealLog.create({
@@ -61,7 +58,6 @@ export async function POST(request: Request) {
     },
   });
 
-  // Update daily totals
   await prisma.dailyLog.update({
     where: { id: dailyLog.id },
     data: {
