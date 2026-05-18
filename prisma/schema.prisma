@@ -3,9 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider     = "postgresql"
-  url          = env("DATABASE_URL")
-  relationMode = "prisma"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum MealType {
@@ -30,179 +29,143 @@ model User {
   mealLogs       MealLog[]
   dailyLogs      DailyLog[]
   workouts       Workout[]
-  exercises      Exercise[]
   weightLogs     WeightLog[]
   progressPhotos ProgressPhoto[]
-
-  sessions Session[]
-  accounts Account[]
+  sessions       Session[]
+  accounts       Account[]
 
   @@map("user")
 }
 
 model Meal {
-  id String @id @default(cuid())
+  id           String   @id @default(cuid())
+  userId       String
+  name         String
+  calories     Float
+  protein      Float
+  carbs        Float
+  fat          Float
+  fiber        Float?
+  sodium       Float?
+  servingSize  Float    @default(1)
+  servingLabel String   @default("serving")
+  ingredients  String?
+  imageUrl     String?
+  mealType     MealType
+  isFavorite   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  name String
-
-  calories Float
-  protein  Float
-  carbs    Float
-  fat      Float
-
-  fiber  Float?
-  sodium Float?
-
-  servingSize  Float  @default(1)
-  servingLabel String @default("serving")
-
-  ingredients String?
-  imageUrl    String?
-
-  mealType MealType
-
-  isFavorite Boolean @default(false)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   mealLogs MealLog[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
   @@index([userId])
 }
 
 model MealLog {
-  id String @id @default(cuid())
-
-  quantity Float @default(1)
-
-  calories Float
-  protein  Float
-  carbs    Float
-  fat      Float
-
-  mealSnapshot Json?
-
-  mealId String
-  meal   Meal   @relation(fields: [mealId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  id        String   @id @default(cuid())
+  userId    String
+  mealId    String?  // optional — SetNull on meal delete
   dailyLogId String?
-  dailyLog   DailyLog? @relation(fields: [dailyLogId], references: [id], onDelete: Cascade)
-
+  quantity  Float    @default(1)
+  calories  Float
+  protein   Float
+  carbs     Float
+  fat       Float
+  mealSnapshot Json? // snapshot of macros at log time
   createdAt DateTime @default(now())
 
-  @@index([mealId])
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meal     Meal?     @relation(fields: [mealId], references: [id], onDelete: SetNull)
+  dailyLog DailyLog? @relation(fields: [dailyLogId], references: [id], onDelete: Cascade)
+
   @@index([userId])
+  @@index([mealId])
   @@index([dailyLogId])
 }
 
 model DailyLog {
-  id String @id @default(cuid())
+  id           String   @id @default(cuid())
+  userId       String
+  date         DateTime @db.Date  // date only, no time
+  totalCalories Float   @default(0)
+  totalProtein  Float   @default(0)
+  totalCarbs    Float   @default(0)
+  totalFat      Float   @default(0)
+  steps        Int      @default(0)
+  water        Float    @default(0)
+  sleep        Float    @default(0)
+  hadWorkShift Boolean  @default(false)
+  isGymDay     Boolean  @default(false)
+  createdAt    DateTime @default(now())
 
-  date DateTime @default(now())
-
-  totalCalories Float @default(0)
-  totalProtein  Float @default(0)
-  totalCarbs    Float @default(0)
-  totalFat      Float @default(0)
-
-  steps Int   @default(0)
-  water Float @default(0)
-  sleep Float @default(0)
-
-  hadWorkShift Boolean @default(false)
-  isGymDay     Boolean @default(false)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   mealLogs MealLog[]
-
-  createdAt DateTime @default(now())
 
   @@unique([userId, date])
   @@index([userId])
 }
 
 model Workout {
-  id String @id @default(cuid())
-
-  title String
-  notes String?
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  exercises Exercise[]
-
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  notes     String?
   createdAt DateTime @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercises Exercise[]
 
   @@index([userId])
 }
 
 model Exercise {
-  id String @id @default(cuid())
-
-  name String
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  id        String   @id @default(cuid())
+  userId    String
   workoutId String
-  workout   Workout @relation(fields: [workoutId], references: [id], onDelete: Cascade)
-
-  sets ExerciseSet[]
-
+  name      String
   createdAt DateTime @default(now())
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workout Workout       @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  sets    ExerciseSet[]
 
   @@index([userId])
   @@index([workoutId])
+  @@index([userId, name]) // for PR + previous performance queries
 }
 
 model ExerciseSet {
-  id String @id @default(cuid())
-
-  weight Float?
-  reps   Int?
-
-  isPR Boolean @default(false)
-
+  id         String   @id @default(cuid())
   exerciseId String
-  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  weight     Float?
+  reps       Int?
+  isPR       Boolean  @default(false)
+  createdAt  DateTime @default(now())
 
-  createdAt DateTime @default(now())
+  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
 
   @@index([exerciseId])
 }
 
 model WeightLog {
-  id String @id @default(cuid())
-
-  weight Float
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  id        String   @id @default(cuid())
+  userId    String
+  weight    Float
   createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model ProgressPhoto {
-  id String @id @default(cuid())
-
-  imageUrl String
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  id        String   @id @default(cuid())
+  userId    String
+  imageUrl  String
   createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -210,43 +173,33 @@ model ProgressPhoto {
 model Session {
   id        String   @id
   expiresAt DateTime
-  token     String
-
+  token     String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  ipAddress String? @db.Text
-  userAgent String? @db.Text
-
-  userId String
+  ipAddress String?  @db.Text
+  userAgent String?  @db.Text
+  userId    String
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([token])
   @@index([userId])
   @@map("session")
 }
 
 model Account {
-  id String @id
-
-  accountId  String @db.Text
-  providerId String @db.Text
-
-  userId String
-
-  accessToken  String? @db.Text
-  refreshToken String? @db.Text
-  idToken      String? @db.Text
-
+  id                    String    @id
+  accountId             String    @db.Text
+  providerId            String    @db.Text
+  userId                String
+  accessToken           String?   @db.Text
+  refreshToken          String?   @db.Text
+  idToken               String?   @db.Text
   accessTokenExpiresAt  DateTime?
   refreshTokenExpiresAt DateTime?
-
-  scope    String? @db.Text
-  password String? @db.Text
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  scope                 String?   @db.Text
+  password              String?   @db.Text
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -255,15 +208,12 @@ model Account {
 }
 
 model Verification {
-  id String @id
-
-  identifier String @db.Text
-  value      String @db.Text
-
-  expiresAt DateTime
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id
+  identifier String   @db.Text
+  value      String   @db.Text
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([identifier])
   @@map("verification")
