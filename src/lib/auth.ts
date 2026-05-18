@@ -6,17 +6,17 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
-
   emailAndPassword: {
     enabled: true,
   },
-
   socialProviders: {
     google: {
-      clientId:
-        process.env.GOOGLE_CLIENT_ID ?? "",
-      clientSecret:
-        process.env.GOOGLE_CLIENT_SECRET ?? "",
+      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
     },
   },
+  trustedOrigins: [
+    "http://localhost:3000",
+    "https://fittrack-ten-umber.vercel.app",
+  ],
 });
