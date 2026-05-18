@@ -15,9 +15,7 @@ export async function GET() {
   const workouts = await prisma.workout.findMany({
     where: { userId: user.id },
     include: {
-      exercises: {
-        include: { sets: true },
-      },
+      exercises: { include: { sets: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -31,19 +29,26 @@ export async function POST(request: Request) {
 
   const body = await request.json();
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   const workout = await prisma.workout.create({
     data: {
       userId: user.id,
-      title: body.title ?? "Workout",
+      split: body.split ?? "REST_DAY",
       notes: body.notes ?? "",
+      date: today,
       exercises: {
-        create: (body.exercises ?? []).map((exercise: any) => ({
+        create: (body.exercises ?? []).map((exercise: any, index: number) => ({
           name: exercise.name,
           userId: user.id,
+          orderIndex: index,
           sets: {
-            create: (exercise.sets ?? []).map((set: any) => ({
+            create: (exercise.sets ?? []).map((set: any, i: number) => ({
+              setNumber: i + 1,
               weight: set.weight ?? null,
               reps: set.reps ?? null,
+              rpe: set.rpe ?? null,
             })),
           },
         })),

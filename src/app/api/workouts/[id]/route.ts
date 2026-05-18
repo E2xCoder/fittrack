@@ -36,11 +36,9 @@ export async function DELETE(
 
   const { id } = await context.params;
 
-  // Verify ownership
   const workout = await prisma.workout.findFirst({ where: { id, userId: user.id } });
   if (!workout) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   await prisma.workout.delete({ where: { id } });
-
   return NextResponse.json({ success: true });
 }
