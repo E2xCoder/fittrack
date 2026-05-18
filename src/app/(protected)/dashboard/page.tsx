@@ -1,9 +1,7 @@
 "use client";
 
-import {
-  useEffect,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 
 interface MealLog {
   id: string;
@@ -12,12 +10,14 @@ interface MealLog {
   protein: number;
   carbs: number;
   fat: number;
+  meal: { name: string; mealType: string };
+}
 
-  meal: {
-    name: string;
-    mealType: string;
-    isFavorite: boolean;
-  };
+interface Goals {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
 }
 
 interface DashboardData {
@@ -26,273 +26,205 @@ interface DashboardData {
   totalCarbs: number;
   totalFat: number;
   mealLogs: MealLog[];
+  goals: Goals;
+}
+
+function toDateString(date: Date) {
+  return date.toISOString().split("T")[0];
+}
+
+function MacroBar({
+  label,
+  current,
+  target,
+  unit,
+  color,
+}: {
+  label: string;
+  current: number;
+  target: number;
+  unit: string;
+  color: string;
+}) {
+  const pct = Math.min((current / target) * 100, 100);
+  const remaining = Math.max(target - current, 0);
+
+  return (
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-sm font-medium text-zinc-300">{label}</span>
+        <span className="text-xs text-zinc-500">{Math.round(remaining)}{unit} left</span>
+      </div>
+      <div className="mb-2 flex items-baseline gap-1">
+        <span className="text-2xl font-bold">{Math.round(current)}</span>
+        <span className="text-sm text-zinc-500">/ {target}{unit}</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${color}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
 }
 
 export default function DashboardPage() {
-  const [data, setData] =
-    useState<DashboardData | null>(
-      null
-    );
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState(toDateString(new Date()));
 
-  const [loading, setLoading] =
-    useState(true);
-
-  const [calorieGoal,
-    setCalorieGoal] =
-    useState(2400);
-
-  const [proteinGoal,
-    setProteinGoal] =
-    useState(170);
-
-  async function fetchData() {
-    const response =
-      await fetch(
-        "/api/dashboard"
-      );
-
-    const dashboard =
-      await response.json();
-
-    setData(
-      dashboard
-    );
-
-    setLoading(
-      false
-    );
+  async function fetchData(date: string) {
+    setLoading(true);
+    const res = await fetch(`/api/dashboard?date=${date}`);
+    const json = await res.json();
+    setData(json);
+    setLoading(false);
   }
 
   useEffect(() => {
-    fetchData();
+    fetchData(selectedDate);
+  }, [selectedDate]);
 
-    const profile =
-      localStorage.getItem(
-        "profile"
-      );
-
-    if (profile) {
-      const parsed =
-        JSON.parse(
-          profile
-        );
-
-      setCalorieGoal(
-        Number(
-          parsed.dailyCalories
-        ) || 2400
-      );
-
-      setProteinGoal(
-        Number(
-          parsed.dailyProtein
-        ) || 170
-      );
-    }
-  }, []);
-
-  async function removeMeal(
-    id: string
-  ) {
-    await fetch(
-      `/api/log-meal/${id}`,
-      {
-        method:
-          "DELETE",
-      }
-    );
-
-    fetchData();
+  async function removeMeal(id: string) {
+    await fetch(`/api/log-meal/${id}`, { method: "DELETE" });
+    fetchData(selectedDate);
   }
 
-  if (
-    loading ||
-    !data
-  ) {
-    return (
-      <main className="p-6">
-        Loading...
-      </main>
-    );
+  function changeDate(offset: number) {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + offset);
+    setSelectedDate(toDateString(d));
   }
 
-  const calorieProgress =
-    Math.min(
-      (data.totalCalories /
-        calorieGoal) *
-        100,
-      100
-    );
+  const isToday = selectedDate === toDateString(new Date());
 
-  const proteinProgress =
-    Math.min(
-      (data.totalProtein /
-        proteinGoal) *
-        100,
-      100
-    );
+  const displayDate = new Date(selectedDate).toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
 
   return (
-    <main className="mx-auto max-w-7xl p-6">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold">
-          Dashboard
-        </h1>
+    <main className="mx-auto max-w-2xl p-4">
+      {/* Date navigator */}
+      <div className="mb-6 flex items-center justify-between">
+        <button
+          onClick={() => changeDate(-1)}
+          className="rounded-xl bg-zinc-800 px-4 py-2 text-sm hover:bg-zinc-700"
+        >
+          ← Prev
+        </button>
 
-        <p className="text-zinc-400">
-          Daily nutrition tracking
-        </p>
+        <div className="text-center">
+          <p className="text-sm text-zinc-400">{displayDate}</p>
+          {isToday && (
+            <span className="text-xs font-medium text-green-400">Today</span>
+          )}
+        </div>
+
+        <button
+          onClick={() => changeDate(1)}
+          disabled={isToday}
+          className="rounded-xl bg-zinc-800 px-4 py-2 text-sm hover:bg-zinc-700 disabled:opacity-30"
+        >
+          Next →
+        </button>
       </div>
 
-      <div className="mb-8 grid gap-4 lg:grid-cols-2">
-        <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
-          <div className="mb-3 flex justify-between">
-            <h2 className="font-semibold">
-              Calories
-            </h2>
-
-            <span className="text-zinc-400">
-              {
-                data.totalCalories
-              }
-              /
-              {
-                calorieGoal
-              }
-            </span>
-          </div>
-
-          <div className="h-4 overflow-hidden rounded-full bg-zinc-800">
-            <div
-              className="h-full bg-green-500"
-              style={{
-                width: `${calorieProgress}%`,
-              }}
+      {loading || !data ? (
+        <div className="space-y-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-24 animate-pulse rounded-2xl bg-zinc-800" />
+          ))}
+        </div>
+      ) : (
+        <>
+          {/* Macro cards */}
+          <div className="mb-6 grid grid-cols-2 gap-3">
+            <MacroBar
+              label="Calories"
+              current={data.totalCalories}
+              target={data.goals.calories}
+              unit="kcal"
+              color="bg-green-500"
+            />
+            <MacroBar
+              label="Protein"
+              current={data.totalProtein}
+              target={data.goals.protein}
+              unit="g"
+              color="bg-blue-500"
+            />
+            <MacroBar
+              label="Carbs"
+              current={data.totalCarbs}
+              target={data.goals.carbs}
+              unit="g"
+              color="bg-amber-500"
+            />
+            <MacroBar
+              label="Fat"
+              current={data.totalFat}
+              target={data.goals.fat}
+              unit="g"
+              color="bg-rose-500"
             />
           </div>
-        </div>
 
-        <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
-          <div className="mb-3 flex justify-between">
-            <h2 className="font-semibold">
-              Protein
-            </h2>
+          {/* Quick add button */}
+          {isToday && (
+            <Link
+              href="/meals"
+              className="mb-6 flex w-full items-center justify-center rounded-2xl border border-dashed border-zinc-700 py-4 text-sm text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+            >
+              + Add meal
+            </Link>
+          )}
 
-            <span className="text-zinc-400">
-              {
-                data.totalProtein
-              }
-              g /
-              {
-                proteinGoal
-              }
-              g
-            </span>
-          </div>
+          {/* Meal log */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-semibold">
+                {isToday ? "Today's Meals" : "Meals"}
+              </h2>
+              <span className="text-xs text-zinc-500">
+                {data.mealLogs.length} logged
+              </span>
+            </div>
 
-          <div className="h-4 overflow-hidden rounded-full bg-zinc-800">
-            <div
-              className="h-full bg-blue-500"
-              style={{
-                width: `${proteinProgress}%`,
-              }}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-2xl font-semibold">
-            Today's Meals
-          </h2>
-
-          <span className="text-sm text-zinc-500">
-            {
-              data.mealLogs
-                .length
-            }{" "}
-            meals
-          </span>
-        </div>
-
-        {!data.mealLogs
-          .length ? (
-          <p className="text-zinc-500">
-            No meals today
-          </p>
-        ) : (
-          <div className="space-y-4">
-            {data.mealLogs.map(
-              (
-                mealLog
-              ) => (
-                <div
-                  key={
-                    mealLog.id
-                  }
-                  className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4"
-                >
-                  <div className="flex items-start justify-between">
+            {data.mealLogs.length === 0 ? (
+              <p className="text-sm text-zinc-500">No meals logged</p>
+            ) : (
+              <div className="space-y-3">
+                {data.mealLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="flex items-center justify-between rounded-xl bg-zinc-800 p-3"
+                  >
                     <div>
-                      <h3 className="font-semibold">
-                        {
-                          mealLog
-                            .meal
-                            .name
-                        }
-                      </h3>
-
-                      <p className="text-sm text-zinc-400">
-                        {
-                          mealLog
-                            .meal
-                            .mealType
-                        }
+                      <p className="font-medium">{log.meal.name}</p>
+                      <p className="text-xs text-zinc-400">
+                        {Math.round(log.calories)} kcal · P:{Math.round(log.protein)}g ·
+                        C:{Math.round(log.carbs)}g · F:{Math.round(log.fat)}g
+                        {log.quantity > 1 && ` · x${log.quantity}`}
                       </p>
                     </div>
-
-                    <button
-                      onClick={() =>
-                        removeMeal(
-                          mealLog.id
-                        )
-                      }
-                      className="rounded-xl bg-red-600 px-3 py-2"
-                    >
-                      🗑
-                    </button>
+                    {isToday && (
+                      <button
+                        onClick={() => removeMeal(log.id)}
+                        className="ml-3 rounded-lg bg-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:bg-red-900 hover:text-red-300"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="rounded-full bg-zinc-800 px-3 py-1 text-sm">
-                      x
-                      {
-                        mealLog.quantity
-                      }
-                    </span>
-
-                    <span className="rounded-full bg-zinc-800 px-3 py-1 text-sm">
-                      {
-                        mealLog.calories
-                      }{" "}
-                      kcal
-                    </span>
-
-                    <span className="rounded-full bg-blue-950 px-3 py-1 text-sm text-blue-300">
-                      P:
-                      {
-                        mealLog.protein
-                      }
-                      g
-                    </span>
-                  </div>
-                </div>
-              )
+                ))}
+              </div>
             )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </main>
   );
 }

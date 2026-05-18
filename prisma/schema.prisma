@@ -25,10 +25,16 @@ model User {
 
   emailVerified Boolean @default(false)
 
+  calorieTarget Int?
+  proteinTarget Int?
+  carbTarget    Int?
+  fatTarget     Int?
+
   meals          Meal[]
   mealLogs       MealLog[]
   dailyLogs      DailyLog[]
   workouts       Workout[]
+  exercises      Exercise[]
   weightLogs     WeightLog[]
   progressPhotos ProgressPhoto[]
   sessions       Session[]
@@ -63,17 +69,17 @@ model Meal {
 }
 
 model MealLog {
-  id        String   @id @default(cuid())
-  userId    String
-  mealId    String?  // optional — SetNull on meal delete
+  id         String   @id @default(cuid())
+  userId     String
+  mealId     String?
   dailyLogId String?
-  quantity  Float    @default(1)
-  calories  Float
-  protein   Float
-  carbs     Float
-  fat       Float
-  mealSnapshot Json? // snapshot of macros at log time
-  createdAt DateTime @default(now())
+  quantity   Float    @default(1)
+  calories   Float
+  protein    Float
+  carbs      Float
+  fat        Float
+  mealSnapshot Json?
+  createdAt  DateTime @default(now())
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   meal     Meal?     @relation(fields: [mealId], references: [id], onDelete: SetNull)
@@ -85,19 +91,19 @@ model MealLog {
 }
 
 model DailyLog {
-  id           String   @id @default(cuid())
-  userId       String
-  date         DateTime @db.Date  // date only, no time
-  totalCalories Float   @default(0)
-  totalProtein  Float   @default(0)
-  totalCarbs    Float   @default(0)
-  totalFat      Float   @default(0)
-  steps        Int      @default(0)
-  water        Float    @default(0)
-  sleep        Float    @default(0)
-  hadWorkShift Boolean  @default(false)
-  isGymDay     Boolean  @default(false)
-  createdAt    DateTime @default(now())
+  id            String   @id @default(cuid())
+  userId        String
+  date          DateTime @db.Date
+  totalCalories Float    @default(0)
+  totalProtein  Float    @default(0)
+  totalCarbs    Float    @default(0)
+  totalFat      Float    @default(0)
+  steps         Int      @default(0)
+  water         Float    @default(0)
+  sleep         Float    @default(0)
+  hadWorkShift  Boolean  @default(false)
+  isGymDay      Boolean  @default(false)
+  createdAt     DateTime @default(now())
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   mealLogs MealLog[]
@@ -132,7 +138,7 @@ model Exercise {
 
   @@index([userId])
   @@index([workoutId])
-  @@index([userId, name]) // for PR + previous performance queries
+  @@index([userId, name])
 }
 
 model ExerciseSet {
