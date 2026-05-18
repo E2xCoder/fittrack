@@ -1,50 +1,106 @@
-import Link from "next/link";
-import { redirect } from "next/navigation";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
+"use client";
 
-export default async function ProtectedLayout({
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+const navItems = [
+  {
+    href:
+      "/dashboard",
+    label:
+      "Dashboard",
+    icon: "📊",
+  },
+  {
+    href:
+      "/meals",
+    label:
+      "Meals",
+    icon: "🍽️",
+  },
+  {
+    href:
+      "/workout",
+    label:
+      "Workout",
+    icon: "🏋️",
+  },
+  {
+    href:
+      "/analytics",
+    label:
+      "Analytics",
+    icon: "📈",
+  },
+  {
+    href:
+      "/profile",
+    label:
+      "Profile",
+    icon: "👤",
+  },
+];
+
+export default function ProtectedLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  if (!session?.user) {
-    redirect("/");
-  }
+  const pathname =
+    usePathname();
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      <main className="pb-24">
-        {children}
-      </main>
-
-      <nav className="fixed bottom-0 left-0 right-0 border-t border-zinc-800 bg-zinc-900">
-        <div className="mx-auto flex max-w-md justify-around py-4 text-sm">
-          <Link href="/dashboard">
-            Dashboard
+    <div className="min-h-screen bg-black text-white">
+      <nav className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+          <Link
+            href="/dashboard"
+            className="text-xl font-bold"
+          >
+            FitTrack
           </Link>
 
-          <Link href="/meals">
-            Meals
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {navItems.map(
+              (item) => {
+                const active =
+                  pathname ===
+                  item.href;
 
-          <Link href="/workout">
-            Workout
-          </Link>
+                return (
+                  <Link
+                    key={
+                      item.href
+                    }
+                    href={
+                      item.href
+                    }
+                    className={`rounded-2xl px-4 py-2 text-sm transition ${
+                      active
+                        ? "bg-green-600 text-white"
+                        : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                    }`}
+                  >
+                    <span className="mr-2">
+                      {
+                        item.icon
+                      }
+                    </span>
 
-          <Link href="/analytics">
-            Analytics
-          </Link>
-
-          <Link href="/profile">
-            Profile
-          </Link>
+                    {
+                      item.label
+                    }
+                  </Link>
+                );
+              }
+            )}
+          </div>
         </div>
       </nav>
+
+      <div className="mx-auto max-w-7xl">
+        {children}
+      </div>
     </div>
   );
 }
