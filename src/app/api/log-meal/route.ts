@@ -17,7 +17,6 @@ export async function POST(request: Request) {
   });
   if (!meal) return NextResponse.json({ error: "Meal not found" }, { status: 404 });
 
-  // Use provided date or today
   let logDate: Date;
   if (body.date) {
     logDate = new Date(body.date + "T12:00:00");
@@ -41,27 +40,51 @@ export async function POST(request: Request) {
   const carbs = meal.carbs * quantity;
   const fat = meal.fat * quantity;
 
-  await prisma.mealLog.create({
-    data: {
+  // Check if this meal is already logged today — if so, merge
+  const existing = await prisma.mealLog.findFirst({
+    where: {
+      dailyLogId: dailyLog.id,
       mealId: meal.id,
       userId: user.id,
-      dailyLogId: dailyLog.id,
-      quantity,
-      calories,
-      protein,
-      carbs,
-      fat,
-      mealSnapshot: {
-        name: meal.name,
-        calories: meal.calories,
-        protein: meal.protein,
-        carbs: meal.carbs,
-        fat: meal.fat,
-        servingLabel: meal.servingLabel,
-        servingSize: meal.servingSize,
-      },
     },
   });
+
+  if (existing) {
+    // Merge: add to existing entry
+    await prisma.mealLog.update({
+      where: { id: existing.id },
+      data: {
+        quantity: existing.quantity + quantity,
+        calories: existing.calories + calories,
+        protein: existing.protein + protein,
+        carbs: existing.carbs + carbs,
+        fat: existing.fat + fat,
+      },
+    });
+  } else {
+    // New entry
+    await prisma.mealLog.create({
+      data: {
+        mealId: meal.id,
+        userId: user.id,
+        dailyLogId: dailyLog.id,
+        quantity,
+        calories,
+        protein,
+        carbs,
+        fat,
+        mealSnapshot: {
+          name: meal.name,
+          calories: meal.calories,
+          protein: meal.protein,
+          carbs: meal.carbs,
+          fat: meal.fat,
+          servingLabel: meal.servingLabel,
+          servingSize: meal.servingSize,
+        },
+      },
+    });
+  }
 
   await prisma.dailyLog.update({
     where: { id: dailyLog.id },

@@ -147,7 +147,6 @@ export default function DashboardPage() {
                       <p className="text-xs text-zinc-400">
                         {Math.round(log.calories)} kcal · P:{Math.round(log.protein)}g ·
                         C:{Math.round(log.carbs)}g · F:{Math.round(log.fat)}g
-                        {log.quantity !== 1 && ` · x${log.quantity}`}
                       </p>
                     </div>
                     <button
