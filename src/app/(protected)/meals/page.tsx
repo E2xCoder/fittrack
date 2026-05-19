@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 type MealCategory = "MEAL_1" | "MEAL_2" | "PRE_WORKOUT" | "POST_WORKOUT" | "SNACK" | "SHAKE";
 type ServingType = "piece" | "g" | "ml";
@@ -43,6 +44,9 @@ const CATEGORY_LABELS: Record<MealCategory, string> = {
 };
 
 export default function MealsPage() {
+  const searchParams = useSearchParams();
+  const dateParam = searchParams.get("date");
+
   const [meals, setMeals] = useState<Meal[]>([]);
   const [packs, setPacks] = useState<MealPack[]>([]);
   const [search, setSearch] = useState("");
@@ -127,11 +131,17 @@ export default function MealsPage() {
     const amount = rawAmount ? Number(rawAmount) : meal.servingLabel === "piece" ? 1 : meal.servingSize;
     if (!amount || amount <= 0) { alert("Enter a valid amount"); return; }
     const multiplier = meal.servingLabel === "piece" ? amount : amount / meal.servingSize;
+
     await fetch("/api/log-meal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mealId: meal.id, quantity: multiplier }),
+      body: JSON.stringify({
+        mealId: meal.id,
+        quantity: multiplier,
+        date: dateParam, // null = today, string = past date
+      }),
     });
+
     setAdded((p) => ({ ...p, [meal.id]: true }));
     setTimeout(() => setAdded((p) => ({ ...p, [meal.id]: false })), 1500);
   }
@@ -254,11 +264,21 @@ export default function MealsPage() {
     });
   }, [meals, search, filter]);
 
+  const displayDate = dateParam
+    ? new Date(dateParam + "T12:00:00").toLocaleDateString("en-GB", {
+        weekday: "long", day: "numeric", month: "long",
+      })
+    : null;
+
   return (
     <main className="mx-auto max-w-2xl p-4">
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Meals</h1>
-        <p className="text-sm text-zinc-400">Your personal meal library</p>
+        {displayDate ? (
+          <p className="text-sm text-amber-400">Adding meals to: {displayDate}</p>
+        ) : (
+          <p className="text-sm text-zinc-400">Your personal meal library</p>
+        )}
       </div>
 
       {/* Tabs */}
@@ -420,7 +440,7 @@ export default function MealsPage() {
                   <div className="flex gap-2">
                     <button onClick={() => addMeal(meal)}
                       className={`flex-1 rounded-xl py-2 font-medium transition ${added[meal.id] ? "bg-green-800 text-green-300" : "bg-green-600 hover:bg-green-700"}`}>
-                      {added[meal.id] ? "Added ✓" : "Add to Today"}
+                      {added[meal.id] ? "Added ✓" : dateParam ? "Add to Day" : "Add to Today"}
                     </button>
                     <button onClick={() => editMeal(meal)} className="rounded-xl bg-zinc-800 px-3 hover:bg-zinc-700">✏</button>
                     <button onClick={() => deleteMeal(meal.id)} className="rounded-xl bg-zinc-800 px-3 hover:bg-red-900">🗑</button>
@@ -478,7 +498,6 @@ export default function MealsPage() {
                     </div>
                   </div>
 
-                  {/* Pack totals */}
                   <div className="mb-3 flex flex-wrap gap-2">
                     <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs">{Math.round(totals.calories)} kcal</span>
                     <span className="rounded-full bg-blue-950 px-3 py-1 text-xs text-blue-300">P:{Math.round(totals.protein)}g</span>
@@ -486,7 +505,6 @@ export default function MealsPage() {
                     <span className="rounded-full bg-rose-950 px-3 py-1 text-xs text-rose-300">F:{Math.round(totals.fat)}g</span>
                   </div>
 
-                  {/* Items */}
                   {pack.items.length > 0 && (
                     <div className="mb-3 space-y-2">
                       {pack.items.map((item) => (
@@ -505,16 +523,17 @@ export default function MealsPage() {
                             </div>
                           </div>
 
-                          {/* Quantity controls — always visible */}
                           <div className="mt-2 flex items-center gap-2">
                             <button
                               onClick={() => updatePackItemQuantity(
                                 pack.id, item.id,
-                                Math.max(item.meal.servingLabel === "piece" ? 1 : 0.5,
-                                  item.quantity - (item.meal.servingLabel === "piece" ? 1 : 0.5))
+                                Math.max(
+                                  item.meal.servingLabel === "piece" ? 1 : 0.5,
+                                  item.quantity - (item.meal.servingLabel === "piece" ? 1 : 0.5)
+                                )
                               )}
                               className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600">−</button>
-                            <span className="min-w-[4rem] text-center text-sm">
+                            <span className="min-w-16 text-center text-sm">
                               {item.meal.servingLabel === "piece"
                                 ? `${item.quantity} pc`
                                 : `${Math.round(item.quantity * item.meal.servingSize)}${item.meal.servingLabel}`}
@@ -534,7 +553,6 @@ export default function MealsPage() {
                     </div>
                   )}
 
-                  {/* Add meal to pack */}
                   {isExpanded && (
                     <div>
                       <p className="mb-2 text-xs text-zinc-500">Add meal to pack:</p>

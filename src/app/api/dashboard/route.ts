@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getTodayInTimezone } from "@/lib/date";
 
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -10,8 +11,13 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const dateParam = searchParams.get("date");
 
-  const date = dateParam ? new Date(dateParam) : new Date();
-  date.setHours(0, 0, 0, 0);
+  let date: Date;
+  if (dateParam) {
+    date = new Date(dateParam + "T12:00:00");
+    date.setHours(0, 0, 0, 0);
+  } else {
+    date = getTodayInTimezone();
+  }
 
   const [dailyLog, user] = await Promise.all([
     prisma.dailyLog.findFirst({

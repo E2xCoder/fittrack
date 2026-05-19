@@ -30,7 +30,7 @@ interface DashboardData {
 }
 
 function toDateString(date: Date) {
-  return date.toLocaleDateString("en-CA", { timeZone: "Europe/Istanbul" });
+  return date.toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
 }
 
 function MacroBar({ label, current, target, unit, color }: {
@@ -81,7 +81,8 @@ export default function DashboardPage() {
     setSelectedDate(toDateString(d));
   }
 
-  const isToday = selectedDate === toDateString(new Date());
+  const todayStr = toDateString(new Date());
+  const isToday = selectedDate === todayStr;
 
   const displayDate = new Date(selectedDate + "T12:00:00").toLocaleDateString("en-GB", {
     weekday: "long", day: "numeric", month: "long",
@@ -89,6 +90,7 @@ export default function DashboardPage() {
 
   return (
     <main className="mx-auto max-w-2xl p-4">
+      {/* Date navigator */}
       <div className="mb-6 flex items-center justify-between">
         <button onClick={() => changeDate(-1)} className="rounded-xl bg-zinc-800 px-4 py-2 text-sm hover:bg-zinc-700">
           ← Prev
@@ -118,12 +120,13 @@ export default function DashboardPage() {
             <MacroBar label="Fat" current={data.totalFat} target={data.goals.fat} unit="g" color="bg-rose-500" />
           </div>
 
-          {isToday && (
-            <Link href="/meals"
-              className="mb-6 flex w-full items-center justify-center rounded-2xl border border-dashed border-zinc-700 py-4 text-sm text-zinc-400 hover:border-zinc-500 hover:text-zinc-200">
-              + Add meal
-            </Link>
-          )}
+          {/* Add meal button — ALL days */}
+          <Link
+            href={`/meals?date=${selectedDate}`}
+            className="mb-6 flex w-full items-center justify-center rounded-2xl border border-dashed border-zinc-700 py-4 text-sm text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+          >
+            + Add meal {!isToday && `to ${displayDate}`}
+          </Link>
 
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
             <div className="mb-4 flex items-center justify-between">
@@ -147,7 +150,6 @@ export default function DashboardPage() {
                         {log.quantity !== 1 && ` · x${log.quantity}`}
                       </p>
                     </div>
-                    {/* Remove button on ALL days */}
                     <button
                       onClick={() => removeMeal(log.id)}
                       className="ml-3 rounded-lg bg-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:bg-red-900 hover:text-red-300"

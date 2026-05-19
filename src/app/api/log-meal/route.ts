@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getTodayInTimezone } from "@/lib/date";
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -16,16 +17,22 @@ export async function POST(request: Request) {
   });
   if (!meal) return NextResponse.json({ error: "Meal not found" }, { status: 404 });
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Use provided date or today
+  let logDate: Date;
+  if (body.date) {
+    logDate = new Date(body.date + "T12:00:00");
+    logDate.setHours(0, 0, 0, 0);
+  } else {
+    logDate = getTodayInTimezone();
+  }
 
   let dailyLog = await prisma.dailyLog.findFirst({
-    where: { userId: user.id, date: today },
+    where: { userId: user.id, date: logDate },
   });
 
   if (!dailyLog) {
     dailyLog = await prisma.dailyLog.create({
-      data: { userId: user.id, date: today },
+      data: { userId: user.id, date: logDate },
     });
   }
 
@@ -33,16 +40,6 @@ export async function POST(request: Request) {
   const protein = meal.protein * quantity;
   const carbs = meal.carbs * quantity;
   const fat = meal.fat * quantity;
-
-  const mealSnapshot = {
-    name: meal.name,
-    calories: meal.calories,
-    protein: meal.protein,
-    carbs: meal.carbs,
-    fat: meal.fat,
-    servingLabel: meal.servingLabel,
-    servingSize: meal.servingSize,
-  };
 
   await prisma.mealLog.create({
     data: {
@@ -54,7 +51,15 @@ export async function POST(request: Request) {
       protein,
       carbs,
       fat,
-      mealSnapshot,
+      mealSnapshot: {
+        name: meal.name,
+        calories: meal.calories,
+        protein: meal.protein,
+        carbs: meal.carbs,
+        fat: meal.fat,
+        servingLabel: meal.servingLabel,
+        servingSize: meal.servingSize,
+      },
     },
   });
 
