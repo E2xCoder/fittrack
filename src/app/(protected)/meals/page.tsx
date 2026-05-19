@@ -86,10 +86,8 @@ export default function MealsPage() {
 
   async function saveMeal() {
     if (!form.name || !form.calories) { alert("Fill name and calories"); return; }
-
     const servingLabel = form.servingType;
     const servingSize = form.servingType === "piece" ? 1 : Number(form.servingSize) || 100;
-
     const payload = {
       name: form.name,
       calories: Number(form.calories),
@@ -103,16 +101,9 @@ export default function MealsPage() {
       category: form.category,
       isFavorite: form.isFavorite,
     };
-
     const method = editingId ? "PUT" : "POST";
     const url = editingId ? `/api/meals/${editingId}` : "/api/meals";
-
-    await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
+    await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     resetForm();
     fetchMeals();
   }
@@ -135,15 +126,12 @@ export default function MealsPage() {
     const rawAmount = amounts[meal.id];
     const amount = rawAmount ? Number(rawAmount) : meal.servingLabel === "piece" ? 1 : meal.servingSize;
     if (!amount || amount <= 0) { alert("Enter a valid amount"); return; }
-
     const multiplier = meal.servingLabel === "piece" ? amount : amount / meal.servingSize;
-
     await fetch("/api/log-meal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mealId: meal.id, quantity: multiplier }),
     });
-
     setAdded((p) => ({ ...p, [meal.id]: true }));
     setTimeout(() => setAdded((p) => ({ ...p, [meal.id]: false })), 1500);
   }
@@ -175,6 +163,16 @@ export default function MealsPage() {
 
   async function removeMealFromPack(packId: string, itemId: string) {
     await fetch(`/api/meal-packs/${packId}/items?itemId=${itemId}`, { method: "DELETE" });
+    fetchPacks();
+  }
+
+  async function updatePackItemQuantity(packId: string, itemId: string, quantity: number) {
+    if (quantity <= 0) return;
+    await fetch(`/api/meal-packs/${packId}/items`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemId, quantity }),
+    });
     fetchPacks();
   }
 
@@ -267,25 +265,16 @@ export default function MealsPage() {
       <div className="mb-6 flex rounded-xl bg-zinc-900 p-1">
         <button
           onClick={() => setActiveTab("meals")}
-          className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${
-            activeTab === "meals" ? "bg-zinc-700 text-white" : "text-zinc-400"
-          }`}
-        >
-          Meals
-        </button>
+          className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${activeTab === "meals" ? "bg-zinc-700 text-white" : "text-zinc-400"}`}
+        >Meals</button>
         <button
           onClick={() => setActiveTab("packs")}
-          className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${
-            activeTab === "packs" ? "bg-zinc-700 text-white" : "text-zinc-400"
-          }`}
-        >
-          Packs 📦
-        </button>
+          className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${activeTab === "packs" ? "bg-zinc-700 text-white" : "text-zinc-400"}`}
+        >Packs 📦</button>
       </div>
 
       {activeTab === "meals" && (
         <>
-          {/* Meal form */}
           <div className="mb-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
             <h2 className="mb-3 font-semibold">{editingId ? "Edit Meal" : "New Meal"}</h2>
             <div className="space-y-3">
@@ -295,23 +284,17 @@ export default function MealsPage() {
                 onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                 className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
               />
-
               <div className="grid grid-cols-2 gap-3">
-                <select
-                  value={form.category}
+                <select value={form.category}
                   onChange={(e) => setForm((p) => ({ ...p, category: e.target.value as MealCategory }))}
-                  className="rounded-xl bg-zinc-800 p-3"
-                >
+                  className="rounded-xl bg-zinc-800 p-3">
                   {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
-
-                <select
-                  value={form.servingType}
+                <select value={form.servingType}
                   onChange={(e) => setForm((p) => ({ ...p, servingType: e.target.value as ServingType }))}
-                  className="rounded-xl bg-zinc-800 p-3"
-                >
+                  className="rounded-xl bg-zinc-800 p-3">
                   <option value="piece">Per piece</option>
                   <option value="g">Per grams (g)</option>
                   <option value="ml">Per ml</option>
@@ -321,12 +304,9 @@ export default function MealsPage() {
               {form.servingType !== "piece" && (
                 <div className="flex items-center gap-2 rounded-xl bg-zinc-800 p-3">
                   <span className="text-sm text-zinc-400">Base:</span>
-                  <input
-                    type="number"
-                    value={form.servingSize}
+                  <input type="number" value={form.servingSize}
                     onChange={(e) => setForm((p) => ({ ...p, servingSize: e.target.value }))}
-                    className="w-20 bg-transparent outline-none"
-                  />
+                    className="w-20 bg-transparent outline-none" />
                   <span className="text-sm text-zinc-400">{form.servingType}</span>
                   <span className="ml-auto text-xs text-zinc-500">macros are for this amount</span>
                 </div>
@@ -353,8 +333,7 @@ export default function MealsPage() {
                   {editingId ? "Update" : "Save Meal"}
                 </button>
                 {editingId && (
-                  <button onClick={resetForm}
-                    className="rounded-xl bg-zinc-800 px-5 hover:bg-zinc-700">
+                  <button onClick={resetForm} className="rounded-xl bg-zinc-800 px-5 hover:bg-zinc-700">
                     Cancel
                   </button>
                 )}
@@ -362,19 +341,13 @@ export default function MealsPage() {
             </div>
           </div>
 
-          {/* Search + filter */}
           <div className="mb-4 flex gap-3">
-            <input
-              placeholder="Search meals..."
-              value={search}
+            <input placeholder="Search meals..." value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 rounded-xl bg-zinc-900 p-3 outline-none"
-            />
-            <select
-              value={filter}
+              className="flex-1 rounded-xl bg-zinc-900 p-3 outline-none" />
+            <select value={filter}
               onChange={(e) => setFilter(e.target.value as MealCategory | "ALL")}
-              className="rounded-xl bg-zinc-900 px-4"
-            >
+              className="rounded-xl bg-zinc-900 px-4">
               <option value="ALL">All</option>
               {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
@@ -382,12 +355,10 @@ export default function MealsPage() {
             </select>
           </div>
 
-          {/* Meal cards */}
           <div className="space-y-3">
             {filteredMeals.map((meal) => {
               const preview = getPreview(meal);
               const isPiece = meal.servingLabel === "piece";
-
               return (
                 <div key={meal.id} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
                   <div className="mb-3 flex items-start justify-between">
@@ -398,9 +369,7 @@ export default function MealsPage() {
                           {isPiece ? "per piece" : `per ${meal.servingSize}${meal.servingLabel}`}
                         </span>
                       </div>
-                      <p className="mt-0.5 text-xs text-zinc-500">
-                        {CATEGORY_LABELS[meal.category]}
-                      </p>
+                      <p className="mt-0.5 text-xs text-zinc-500">{CATEGORY_LABELS[meal.category]}</p>
                     </div>
                     <button onClick={() => toggleFavorite(meal)} className="text-lg">
                       {meal.isFavorite ? "⭐" : "☆"}
@@ -419,13 +388,11 @@ export default function MealsPage() {
                       <div className="flex items-center gap-3">
                         <button
                           onClick={() => setAmounts((p) => ({ ...p, [meal.id]: String(Math.max(1, Number(p[meal.id] || 1) - 1)) }))}
-                          className="rounded-lg bg-zinc-800 px-4 py-2 hover:bg-zinc-700"
-                        >−</button>
-                        <span className="min-w-[2rem] text-center font-semibold">{amounts[meal.id] || "1"}</span>
+                          className="rounded-lg bg-zinc-800 px-4 py-2 hover:bg-zinc-700">−</button>
+                        <span className="w-8 text-center font-semibold">{amounts[meal.id] || "1"}</span>
                         <button
                           onClick={() => setAmounts((p) => ({ ...p, [meal.id]: String(Number(p[meal.id] || 1) + 1) }))}
-                          className="rounded-lg bg-zinc-800 px-4 py-2 hover:bg-zinc-700"
-                        >+</button>
+                          className="rounded-lg bg-zinc-800 px-4 py-2 hover:bg-zinc-700">+</button>
                         <span className="text-sm text-zinc-400">pieces</span>
                       </div>
                     ) : (
@@ -451,12 +418,8 @@ export default function MealsPage() {
                   )}
 
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => addMeal(meal)}
-                      className={`flex-1 rounded-xl py-2 font-medium transition ${
-                        added[meal.id] ? "bg-green-800 text-green-300" : "bg-green-600 hover:bg-green-700"
-                      }`}
-                    >
+                    <button onClick={() => addMeal(meal)}
+                      className={`flex-1 rounded-xl py-2 font-medium transition ${added[meal.id] ? "bg-green-800 text-green-300" : "bg-green-600 hover:bg-green-700"}`}>
                       {added[meal.id] ? "Added ✓" : "Add to Today"}
                     </button>
                     <button onClick={() => editMeal(meal)} className="rounded-xl bg-zinc-800 px-3 hover:bg-zinc-700">✏</button>
@@ -471,7 +434,6 @@ export default function MealsPage() {
 
       {activeTab === "packs" && (
         <>
-          {/* Create pack */}
           <div className="mb-6 flex gap-3">
             <input
               placeholder="Pack name (e.g. Morning Pack)"
@@ -480,15 +442,11 @@ export default function MealsPage() {
               onKeyDown={(e) => e.key === "Enter" && createPack()}
               className="flex-1 rounded-xl bg-zinc-900 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
             />
-            <button
-              onClick={createPack}
-              className="rounded-xl bg-green-600 px-4 font-semibold hover:bg-green-700"
-            >
+            <button onClick={createPack} className="rounded-xl bg-green-600 px-4 font-semibold hover:bg-green-700">
               + Create
             </button>
           </div>
 
-          {/* Pack list */}
           <div className="space-y-4">
             {packs.length === 0 && (
               <p className="text-center text-sm text-zinc-500">No packs yet. Create one above.</p>
@@ -507,22 +465,16 @@ export default function MealsPage() {
                     <div className="flex gap-2">
                       <button
                         onClick={() => setExpandedPack(isExpanded ? null : pack.id)}
-                        className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-zinc-700"
-                      >
+                        className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-zinc-700">
                         {isExpanded ? "Close" : "Manage"}
                       </button>
                       <button
                         onClick={() => logPack(pack.id)}
-                        className={`rounded-xl px-3 py-2 text-xs font-medium transition ${
-                          loggedPack[pack.id] ? "bg-green-800 text-green-300" : "bg-green-600 hover:bg-green-700"
-                        }`}
-                      >
+                        className={`rounded-xl px-3 py-2 text-xs font-medium transition ${loggedPack[pack.id] ? "bg-green-800 text-green-300" : "bg-green-600 hover:bg-green-700"}`}>
                         {loggedPack[pack.id] ? "Logged ✓" : "Log All"}
                       </button>
-                      <button
-                        onClick={() => deletePack(pack.id)}
-                        className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-red-900"
-                      >🗑</button>
+                      <button onClick={() => deletePack(pack.id)}
+                        className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-red-900">🗑</button>
                     </div>
                   </div>
 
@@ -534,29 +486,48 @@ export default function MealsPage() {
                     <span className="rounded-full bg-rose-950 px-3 py-1 text-xs text-rose-300">F:{Math.round(totals.fat)}g</span>
                   </div>
 
-                  {/* Items in pack */}
+                  {/* Items */}
                   {pack.items.length > 0 && (
                     <div className="mb-3 space-y-2">
                       {pack.items.map((item) => (
-                        <div key={item.id} className="flex items-center justify-between rounded-xl bg-zinc-800 px-3 py-2">
-                          <div>
-                            <span className="text-sm">{item.meal.name}</span>
-                            <span className="ml-2 text-xs text-zinc-500">
-                              {item.meal.servingLabel === "piece"
-                                ? `x${item.quantity}`
-                                : `${item.quantity * item.meal.servingSize}${item.meal.servingLabel}`}
-                            </span>
+                        <div key={item.id} className="rounded-xl bg-zinc-800 px-3 py-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">{item.meal.name}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-zinc-400">
+                                {Math.round(item.meal.calories * item.quantity)} kcal
+                              </span>
+                              {isExpanded && (
+                                <button
+                                  onClick={() => removeMealFromPack(pack.id, item.id)}
+                                  className="text-xs text-zinc-500 hover:text-red-400">✕</button>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-zinc-400">
-                              {Math.round(item.meal.calories * item.quantity)} kcal
+
+                          {/* Quantity controls — always visible */}
+                          <div className="mt-2 flex items-center gap-2">
+                            <button
+                              onClick={() => updatePackItemQuantity(
+                                pack.id, item.id,
+                                Math.max(item.meal.servingLabel === "piece" ? 1 : 0.5,
+                                  item.quantity - (item.meal.servingLabel === "piece" ? 1 : 0.5))
+                              )}
+                              className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600">−</button>
+                            <span className="min-w-[4rem] text-center text-sm">
+                              {item.meal.servingLabel === "piece"
+                                ? `${item.quantity} pc`
+                                : `${Math.round(item.quantity * item.meal.servingSize)}${item.meal.servingLabel}`}
                             </span>
-                            {isExpanded && (
-                              <button
-                                onClick={() => removeMealFromPack(pack.id, item.id)}
-                                className="text-xs text-zinc-500 hover:text-red-400"
-                              >✕</button>
-                            )}
+                            <button
+                              onClick={() => updatePackItemQuantity(
+                                pack.id, item.id,
+                                item.quantity + (item.meal.servingLabel === "piece" ? 1 : 0.5)
+                              )}
+                              className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600">+</button>
+                            <span className="text-xs text-zinc-500">
+                              P:{Math.round(item.meal.protein * item.quantity)}g
+                            </span>
                           </div>
                         </div>
                       ))}

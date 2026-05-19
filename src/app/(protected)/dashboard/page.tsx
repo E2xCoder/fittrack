@@ -30,25 +30,14 @@ interface DashboardData {
 }
 
 function toDateString(date: Date) {
-  return date.toISOString().split("T")[0];
+  return date.toLocaleDateString("en-CA", { timeZone: "Europe/Istanbul" });
 }
 
-function MacroBar({
-  label,
-  current,
-  target,
-  unit,
-  color,
-}: {
-  label: string;
-  current: number;
-  target: number;
-  unit: string;
-  color: string;
+function MacroBar({ label, current, target, unit, color }: {
+  label: string; current: number; target: number; unit: string; color: string;
 }) {
   const pct = Math.min((current / target) * 100, 100);
   const remaining = Math.max(target - current, 0);
-
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
       <div className="mb-1 flex items-center justify-between">
@@ -60,10 +49,7 @@ function MacroBar({
         <span className="text-sm text-zinc-500">/ {target}{unit}</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
-        <div
-          className={`h-full rounded-full transition-all duration-500 ${color}`}
-          style={{ width: `${pct}%` }}
-        />
+        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -82,9 +68,7 @@ export default function DashboardPage() {
     setLoading(false);
   }
 
-  useEffect(() => {
-    fetchData(selectedDate);
-  }, [selectedDate]);
+  useEffect(() => { fetchData(selectedDate); }, [selectedDate]);
 
   async function removeMeal(id: string) {
     await fetch(`/api/log-meal/${id}`, { method: "DELETE" });
@@ -92,42 +76,29 @@ export default function DashboardPage() {
   }
 
   function changeDate(offset: number) {
-    const d = new Date(selectedDate);
+    const d = new Date(selectedDate + "T12:00:00");
     d.setDate(d.getDate() + offset);
     setSelectedDate(toDateString(d));
   }
 
   const isToday = selectedDate === toDateString(new Date());
 
-  const displayDate = new Date(selectedDate).toLocaleDateString("en-GB", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
+  const displayDate = new Date(selectedDate + "T12:00:00").toLocaleDateString("en-GB", {
+    weekday: "long", day: "numeric", month: "long",
   });
 
   return (
     <main className="mx-auto max-w-2xl p-4">
-      {/* Date navigator */}
       <div className="mb-6 flex items-center justify-between">
-        <button
-          onClick={() => changeDate(-1)}
-          className="rounded-xl bg-zinc-800 px-4 py-2 text-sm hover:bg-zinc-700"
-        >
+        <button onClick={() => changeDate(-1)} className="rounded-xl bg-zinc-800 px-4 py-2 text-sm hover:bg-zinc-700">
           ← Prev
         </button>
-
         <div className="text-center">
           <p className="text-sm text-zinc-400">{displayDate}</p>
-          {isToday && (
-            <span className="text-xs font-medium text-green-400">Today</span>
-          )}
+          {isToday && <span className="text-xs font-medium text-green-400">Today</span>}
         </div>
-
-        <button
-          onClick={() => changeDate(1)}
-          disabled={isToday}
-          className="rounded-xl bg-zinc-800 px-4 py-2 text-sm hover:bg-zinc-700 disabled:opacity-30"
-        >
+        <button onClick={() => changeDate(1)} disabled={isToday}
+          className="rounded-xl bg-zinc-800 px-4 py-2 text-sm hover:bg-zinc-700 disabled:opacity-30">
           Next →
         </button>
       </div>
@@ -140,57 +111,26 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          {/* Macro cards */}
           <div className="mb-6 grid grid-cols-2 gap-3">
-            <MacroBar
-              label="Calories"
-              current={data.totalCalories}
-              target={data.goals.calories}
-              unit="kcal"
-              color="bg-green-500"
-            />
-            <MacroBar
-              label="Protein"
-              current={data.totalProtein}
-              target={data.goals.protein}
-              unit="g"
-              color="bg-blue-500"
-            />
-            <MacroBar
-              label="Carbs"
-              current={data.totalCarbs}
-              target={data.goals.carbs}
-              unit="g"
-              color="bg-amber-500"
-            />
-            <MacroBar
-              label="Fat"
-              current={data.totalFat}
-              target={data.goals.fat}
-              unit="g"
-              color="bg-rose-500"
-            />
+            <MacroBar label="Calories" current={data.totalCalories} target={data.goals.calories} unit="kcal" color="bg-green-500" />
+            <MacroBar label="Protein" current={data.totalProtein} target={data.goals.protein} unit="g" color="bg-blue-500" />
+            <MacroBar label="Carbs" current={data.totalCarbs} target={data.goals.carbs} unit="g" color="bg-amber-500" />
+            <MacroBar label="Fat" current={data.totalFat} target={data.goals.fat} unit="g" color="bg-rose-500" />
           </div>
 
-          {/* Quick add button */}
           {isToday && (
-            <Link
-              href="/meals"
-              className="mb-6 flex w-full items-center justify-center rounded-2xl border border-dashed border-zinc-700 py-4 text-sm text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
-            >
+            <Link href="/meals"
+              className="mb-6 flex w-full items-center justify-center rounded-2xl border border-dashed border-zinc-700 py-4 text-sm text-zinc-400 hover:border-zinc-500 hover:text-zinc-200">
               + Add meal
             </Link>
           )}
 
-          {/* Meal log */}
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">
-                {isToday ? "Today's Meals" : "Meals"}
+                {isToday ? "Today's Meals" : `Meals — ${displayDate}`}
               </h2>
-              <span className="text-xs text-zinc-500">
-                {data.mealLogs.length} logged
-              </span>
+              <span className="text-xs text-zinc-500">{data.mealLogs.length} logged</span>
             </div>
 
             {data.mealLogs.length === 0 ? (
@@ -198,26 +138,20 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 {data.mealLogs.map((log) => (
-                  <div
-                    key={log.id}
-                    className="flex items-center justify-between rounded-xl bg-zinc-800 p-3"
-                  >
+                  <div key={log.id} className="flex items-center justify-between rounded-xl bg-zinc-800 p-3">
                     <div>
                       <p className="font-medium">{log.meal.name}</p>
                       <p className="text-xs text-zinc-400">
                         {Math.round(log.calories)} kcal · P:{Math.round(log.protein)}g ·
                         C:{Math.round(log.carbs)}g · F:{Math.round(log.fat)}g
-                        {log.quantity > 1 && ` · x${log.quantity}`}
+                        {log.quantity !== 1 && ` · x${log.quantity}`}
                       </p>
                     </div>
-                    {isToday && (
-                      <button
-                        onClick={() => removeMeal(log.id)}
-                        className="ml-3 rounded-lg bg-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:bg-red-900 hover:text-red-300"
-                      >
-                        ✕
-                      </button>
-                    )}
+                    {/* Remove button on ALL days */}
+                    <button
+                      onClick={() => removeMeal(log.id)}
+                      className="ml-3 rounded-lg bg-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:bg-red-900 hover:text-red-300"
+                    >✕</button>
                   </div>
                 ))}
               </div>

@@ -8,7 +8,6 @@ async function getUser() {
   return session?.user ?? null;
 }
 
-// Add meal to pack
 export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> }
@@ -19,27 +18,46 @@ export async function POST(
   const { id: packId } = await context.params;
   const body = await request.json();
 
-  // Verify pack ownership
   const pack = await prisma.mealPack.findFirst({ where: { id: packId, userId: user.id } });
   if (!pack) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Verify meal ownership
   const meal = await prisma.meal.findFirst({ where: { id: body.mealId, userId: user.id } });
   if (!meal) return NextResponse.json({ error: "Meal not found" }, { status: 404 });
 
   const item = await prisma.mealPackItem.create({
-    data: {
-      packId,
-      mealId: body.mealId,
-      quantity: Number(body.quantity) || 1,
-    },
+    data: { packId, mealId: body.mealId, quantity: Number(body.quantity) || 1 },
     include: { meal: true },
   });
 
   return NextResponse.json(item);
 }
 
-// Remove meal from pack
+// Update quantity of item in pack
+export async function PATCH(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  const user = await getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id: packId } = await context.params;
+  const body = await request.json();
+  const { itemId, quantity } = body;
+
+  if (!itemId || !quantity) return NextResponse.json({ error: "itemId and quantity required" }, { status: 400 });
+
+  const pack = await prisma.mealPack.findFirst({ where: { id: packId, userId: user.id } });
+  if (!pack) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const updated = await prisma.mealPackItem.update({
+    where: { id: itemId },
+    data: { quantity: Number(quantity) },
+    include: { meal: true },
+  });
+
+  return NextResponse.json(updated);
+}
+
 export async function DELETE(
   request: Request,
   context: { params: Promise<{ id: string }> }
