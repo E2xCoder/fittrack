@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
 type MealCategory = "MEAL_1" | "MEAL_2" | "PRE_WORKOUT" | "POST_WORKOUT" | "SNACK" | "SHAKE";
@@ -43,7 +43,7 @@ const CATEGORY_LABELS: Record<MealCategory, string> = {
   SHAKE: "Shake",
 };
 
-export default function MealsPage() {
+function MealsContent() {
   const searchParams = useSearchParams();
   const dateParam = searchParams.get("date");
 
@@ -131,17 +131,11 @@ export default function MealsPage() {
     const amount = rawAmount ? Number(rawAmount) : meal.servingLabel === "piece" ? 1 : meal.servingSize;
     if (!amount || amount <= 0) { alert("Enter a valid amount"); return; }
     const multiplier = meal.servingLabel === "piece" ? amount : amount / meal.servingSize;
-
     await fetch("/api/log-meal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mealId: meal.id,
-        quantity: multiplier,
-        date: dateParam, // null = today, string = past date
-      }),
+      body: JSON.stringify({ mealId: meal.id, quantity: multiplier, date: dateParam }),
     });
-
     setAdded((p) => ({ ...p, [meal.id]: true }));
     setTimeout(() => setAdded((p) => ({ ...p, [meal.id]: false })), 1500);
   }
@@ -281,7 +275,6 @@ export default function MealsPage() {
         )}
       </div>
 
-      {/* Tabs */}
       <div className="mb-6 flex rounded-xl bg-zinc-900 p-1">
         <button
           onClick={() => setActiveTab("meals")}
@@ -474,7 +467,6 @@ export default function MealsPage() {
             {packs.map((pack) => {
               const totals = packTotals(pack);
               const isExpanded = expandedPack === pack.id;
-
               return (
                 <div key={pack.id} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
                   <div className="mb-3 flex items-center justify-between">
@@ -522,7 +514,6 @@ export default function MealsPage() {
                               )}
                             </div>
                           </div>
-
                           <div className="mt-2 flex items-center gap-2">
                             <button
                               onClick={() => updatePackItemQuantity(
@@ -581,5 +572,13 @@ export default function MealsPage() {
         </>
       )}
     </main>
+  );
+}
+
+export default function MealsPage() {
+  return (
+    <Suspense fallback={<main className="p-4 text-zinc-400">Loading...</main>}>
+      <MealsContent />
+    </Suspense>
   );
 }
