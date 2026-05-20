@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getTodayInTimezone } from "@/lib/date";
 
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -10,10 +11,15 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const exerciseName = searchParams.get("exercise") ?? "";
 
+  const today = getTodayInTimezone();
+
   const lastExercise = await prisma.exercise.findFirst({
     where: {
       userId: session.user.id,
       name: { contains: exerciseName },
+      workout: {
+        date: { lt: today }, // exclude today
+      },
     },
     orderBy: { createdAt: "desc" },
     include: {

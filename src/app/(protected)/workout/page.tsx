@@ -60,27 +60,27 @@ export default function WorkoutPage() {
     if (data.length > 0) setSelectedSplit(data[0].name);
   }
 
-  async function loadTodayWorkout() {
-    const res = await fetch("/api/workouts/today");
-    const data = await res.json();
-    if (data.workout) {
-      setSelectedSplit(data.workout.split);
-      setNotes(data.workout.notes ?? "");
-      setExercises(
-        data.workout.exercises.map((ex: any) => ({
-          name: ex.name,
-          sets: ex.sets.length > 0
-            ? ex.sets.map((s: any) => ({
-                setNumber: s.setNumber,
-                weight: s.weight ? String(s.weight) : "",
-                reps: s.reps ? String(s.reps) : "",
-                rpe: s.rpe ? String(s.rpe) : "",
-              }))
-            : [{ setNumber: 1, weight: "", reps: "", rpe: "" }],
-        }))
-      );
-    }
+ async function loadTodayWorkout() {
+  const res = await fetch("/api/workouts/today");
+  const data = await res.json();
+  if (data.workout) {
+    setSelectedSplit(data.workout.split);
+    setNotes(data.workout.notes ?? "");
+    setExercises(
+      data.workout.exercises.map((ex: any) => ({
+        name: ex.name,
+        sets: ex.sets.length > 0
+          ? ex.sets.map((s: any) => ({
+              setNumber: s.setNumber,
+              weight: s.weight ? String(s.weight) : "",
+              reps: s.reps ? String(s.reps) : "",
+              rpe: s.rpe ? String(s.rpe) : "",
+            }))
+          : [{ setNumber: 1, weight: "", reps: "", rpe: "" }],
+      }))
+    );
   }
+}
 
   async function createSplit() {
     if (!newSplitName.trim()) return;
@@ -95,12 +95,6 @@ export default function WorkoutPage() {
   }
   function handleSplitSelect(splitName: string) {
   if (splitName === selectedSplit) return;
-  if (exercises.length > 0) {
-    const confirm = window.confirm(
-      "Switching splits will clear current exercises. Continue?"
-    );
-    if (!confirm) return;
-  }
   setSelectedSplit(splitName);
   setExercises([]);
   setNotes("");
