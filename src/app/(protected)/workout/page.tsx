@@ -93,7 +93,18 @@ export default function WorkoutPage() {
     setNewSplitEmoji("🏋️");
     fetchSplits();
   }
-
+  function handleSplitSelect(splitName: string) {
+  if (splitName === selectedSplit) return;
+  if (exercises.length > 0) {
+    const confirm = window.confirm(
+      "Switching splits will clear current exercises. Continue?"
+    );
+    if (!confirm) return;
+  }
+  setSelectedSplit(splitName);
+  setExercises([]);
+  setNotes("");
+}
   async function deleteSplit(id: string) {
     await fetch(`/api/splits/${id}`, { method: "DELETE" });
     fetchSplits();
@@ -254,7 +265,7 @@ export default function WorkoutPage() {
           {splits.map((split) => (
             <button
               key={split.id}
-              onClick={() => setSelectedSplit(split.name)}
+              onClick={() => handleSplitSelect(split.name)}
               className={`rounded-xl px-4 py-3 text-left text-sm font-medium transition ${
                 selectedSplit === split.name
                   ? "bg-green-600 text-white"

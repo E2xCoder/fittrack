@@ -12,13 +12,13 @@ export async function DELETE(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await context.params;
 
   const mealLog = await prisma.mealLog.findFirst({
-    where: { id, userId: session.user.id },
+    where: { id, userId: user.id },
   });
   if (!mealLog) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -54,18 +54,17 @@ export async function PATCH(
   });
   if (!mealLog) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const meal = mealLog.meal;
-  if (!meal) return NextResponse.json({ error: "Original meal deleted" }, { status: 400 });
+  if (!mealLog.meal) return NextResponse.json({ error: "Original meal deleted" }, { status: 400 });
 
   const newQuantity = Number(body.quantity);
   if (newQuantity <= 0) return NextResponse.json({ error: "Invalid quantity" }, { status: 400 });
 
+  const meal = mealLog.meal;
   const newCalories = meal.calories * newQuantity;
   const newProtein = meal.protein * newQuantity;
   const newCarbs = meal.carbs * newQuantity;
   const newFat = meal.fat * newQuantity;
 
-  // Update daily log totals — remove old, add new
   if (mealLog.dailyLogId) {
     await prisma.dailyLog.update({
       where: { id: mealLog.dailyLogId },
@@ -78,7 +77,7 @@ export async function PATCH(
     });
   }
 
-  const updated = await prisma.mealLog.update({
+  await prisma.mealLog.update({
     where: { id },
     data: {
       quantity: newQuantity,
@@ -89,5 +88,5 @@ export async function PATCH(
     },
   });
 
-  return NextResponse.json(updated);
+  return NextResponse.json({ success: true });
 }
