@@ -29,6 +29,41 @@ export async function POST(request: Request) {
   const body = await request.json();
   const today = getTodayInTimezone();
 
+  // Check if workout already exists for today — update instead of create
+  const existing = await prisma.workout.findFirst({
+    where: { userId: user.id, date: today },
+  });
+
+  if (existing) {
+    await prisma.exercise.deleteMany({ where: { workoutId: existing.id } });
+
+    const workout = await prisma.workout.update({
+      where: { id: existing.id },
+      data: {
+        split: body.split ?? existing.split,
+        notes: body.notes ?? "",
+        exercises: {
+          create: (body.exercises ?? []).map((exercise: any, index: number) => ({
+            name: exercise.name,
+            userId: user.id,
+            orderIndex: index,
+            sets: {
+              create: (exercise.sets ?? []).map((set: any, i: number) => ({
+                setNumber: i + 1,
+                weight: set.weight ?? null,
+                reps: set.reps ?? null,
+                rpe: set.rpe ?? null,
+              })),
+            },
+          })),
+        },
+      },
+      include: { exercises: { include: { sets: true } } },
+    });
+
+    return NextResponse.json(workout);
+  }
+
   const workout = await prisma.workout.create({
     data: {
       userId: user.id,

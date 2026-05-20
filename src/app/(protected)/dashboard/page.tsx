@@ -10,7 +10,12 @@ interface MealLog {
   protein: number;
   carbs: number;
   fat: number;
-  meal: { name: string; mealType: string };
+  meal: {
+    id: string;
+    name: string;
+    servingLabel: string;
+    servingSize: number;
+  };
 }
 
 interface Goals {
@@ -55,10 +60,17 @@ function MacroBar({ label, current, target, unit, color }: {
   );
 }
 
+function formatQuantity(log: MealLog): string {
+  const label = log.meal.servingLabel;
+  if (label === "piece") return `x${log.quantity}`;
+  return `${Math.round(log.quantity * log.meal.servingSize)}${label}`;
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(toDateString(new Date()));
+  const [adjusting, setAdjusting] = useState<Record<string, boolean>>({});
 
   async function fetchData(date: string) {
     setLoading(true);
@@ -72,6 +84,28 @@ export default function DashboardPage() {
 
   async function removeMeal(id: string) {
     await fetch(`/api/log-meal/${id}`, { method: "DELETE" });
+    fetchData(selectedDate);
+  }
+
+  async function adjustMeal(log: MealLog, delta: number) {
+    const label = log.meal.servingLabel;
+    const deltaQuantity = label === "piece" ? delta : delta / log.meal.servingSize;
+    const newQuantity = log.quantity + deltaQuantity;
+
+    if (newQuantity <= 0) {
+      await removeMeal(log.id);
+      return;
+    }
+
+    setAdjusting((p) => ({ ...p, [log.id]: true }));
+
+    await fetch(`/api/log-meal/${log.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quantity: newQuantity }),
+    });
+
+    setAdjusting((p) => ({ ...p, [log.id]: false }));
     fetchData(selectedDate);
   }
 
@@ -90,7 +124,6 @@ export default function DashboardPage() {
 
   return (
     <main className="mx-auto max-w-2xl p-4">
-      {/* Date navigator */}
       <div className="mb-6 flex items-center justify-between">
         <button onClick={() => changeDate(-1)} className="rounded-xl bg-zinc-800 px-4 py-2 text-sm hover:bg-zinc-700">
           ← Prev
@@ -120,7 +153,6 @@ export default function DashboardPage() {
             <MacroBar label="Fat" current={data.totalFat} target={data.goals.fat} unit="g" color="bg-rose-500" />
           </div>
 
-          {/* Add meal button — ALL days */}
           <Link
             href={`/meals?date=${selectedDate}`}
             className="mb-6 flex w-full items-center justify-center rounded-2xl border border-dashed border-zinc-700 py-4 text-sm text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
@@ -140,21 +172,46 @@ export default function DashboardPage() {
               <p className="text-sm text-zinc-500">No meals logged</p>
             ) : (
               <div className="space-y-3">
-                {data.mealLogs.map((log) => (
-                  <div key={log.id} className="flex items-center justify-between rounded-xl bg-zinc-800 p-3">
-                    <div>
-                      <p className="font-medium">{log.meal.name}</p>
-                      <p className="text-xs text-zinc-400">
-                        {Math.round(log.calories)} kcal · P:{Math.round(log.protein)}g ·
-                        C:{Math.round(log.carbs)}g · F:{Math.round(log.fat)}g
-                      </p>
+                {data.mealLogs.map((log) => {
+                  const isPiece = log.meal.servingLabel === "piece";
+                  const step = isPiece ? 1 : 0.5;
+                  return (
+                    <div key={log.id} className="rounded-xl bg-zinc-800 p-3">
+                      <div className="mb-2 flex items-start justify-between">
+                        <div>
+                          <p className="font-medium">{log.meal.name}</p>
+                          <p className="text-xs text-zinc-400">
+                            {Math.round(log.calories)} kcal · P:{Math.round(log.protein)}g ·
+                            C:{Math.round(log.carbs)}g · F:{Math.round(log.fat)}g
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => removeMeal(log.id)}
+                          className="ml-3 rounded-lg bg-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:bg-red-900 hover:text-red-300"
+                        >✕</button>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => adjustMeal(log, -step)}
+                          disabled={adjusting[log.id]}
+                          className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600 disabled:opacity-50"
+                        >−</button>
+                        <span className="min-w-16 text-center text-sm font-medium">
+                          {formatQuantity(log)}
+                        </span>
+                        <button
+                          onClick={() => adjustMeal(log, step)}
+                          disabled={adjusting[log.id]}
+                          className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600 disabled:opacity-50"
+                        >+</button>
+                        <span className="text-xs text-zinc-500">
+                          {isPiece ? "pieces" : log.meal.servingLabel}
+                        </span>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => removeMeal(log.id)}
-                      className="ml-3 rounded-lg bg-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:bg-red-900 hover:text-red-300"
-                    >✕</button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
