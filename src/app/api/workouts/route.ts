@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getTodayInTimezone } from "@/lib/date";
 
 async function getUser() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -14,9 +15,7 @@ export async function GET() {
 
   const workouts = await prisma.workout.findMany({
     where: { userId: user.id },
-    include: {
-      exercises: { include: { sets: true } },
-    },
+    include: { exercises: { include: { sets: true } } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -28,14 +27,12 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = getTodayInTimezone();
 
   const workout = await prisma.workout.create({
     data: {
       userId: user.id,
-      split: body.split ?? "REST_DAY",
+      split: body.split ?? "Rest Day",
       notes: body.notes ?? "",
       date: today,
       exercises: {
@@ -54,9 +51,7 @@ export async function POST(request: Request) {
         })),
       },
     },
-    include: {
-      exercises: { include: { sets: true } },
-    },
+    include: { exercises: { include: { sets: true } } },
   });
 
   return NextResponse.json(workout);

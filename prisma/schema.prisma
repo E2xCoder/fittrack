@@ -16,14 +16,6 @@ enum MealCategory {
   SHAKE
 }
 
-enum WorkoutSplit {
-  ARMS_FOREARMS
-  SHOULDERS_TRICEPS
-  CHEST_BACK
-  LEGS_ABS
-  REST_DAY
-}
-
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -45,6 +37,7 @@ model User {
   dailyLogs      DailyLog[]
   workouts       Workout[]
   exercises      Exercise[]
+  userSplits     UserSplit[]
   weightLogs     WeightLog[]
   progressPhotos ProgressPhoto[]
   sessions       Session[]
@@ -53,8 +46,21 @@ model User {
   @@map("user")
 }
 
+model UserSplit {
+  id         String   @id @default(cuid())
+  userId     String
+  name       String
+  emoji      String   @default("🏋️")
+  orderIndex Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
 model Meal {
-  id           String      @id @default(cuid())
+  id           String       @id @default(cuid())
   userId       String
   name         String
   calories     Float
@@ -63,14 +69,14 @@ model Meal {
   fat          Float
   fiber        Float?
   sodium       Float?
-  servingSize  Float       @default(1)
-  servingLabel String      @default("piece") // "piece", "g", "ml"
+  servingSize  Float        @default(1)
+  servingLabel String       @default("piece")
   ingredients  String?
   imageUrl     String?
   category     MealCategory @default(SNACK)
-  isFavorite   Boolean     @default(false)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  isFavorite   Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   mealLogs      MealLog[]
@@ -106,21 +112,21 @@ model MealPackItem {
 }
 
 model MealLog {
-  id           String       @id @default(cuid())
-  userId       String
-  mealId       String?
-  dailyLogId   String?
-  quantity     Float        @default(1)
-  calories     Float
-  protein      Float
-  carbs        Float
-  fat          Float
+  id         String    @id @default(cuid())
+  userId     String
+  mealId     String?
+  dailyLogId String?
+  quantity   Float     @default(1)
+  calories   Float
+  protein    Float
+  carbs      Float
+  fat        Float
   mealSnapshot Json?
-  createdAt    DateTime     @default(now())
+  createdAt  DateTime  @default(now())
 
-  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  meal     Meal?        @relation(fields: [mealId], references: [id], onDelete: SetNull)
-  dailyLog DailyLog?    @relation(fields: [dailyLogId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meal     Meal?     @relation(fields: [mealId], references: [id], onDelete: SetNull)
+  dailyLog DailyLog? @relation(fields: [dailyLogId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([mealId])
@@ -150,12 +156,12 @@ model DailyLog {
 }
 
 model Workout {
-  id        String       @id @default(cuid())
+  id        String   @id @default(cuid())
   userId    String
-  split     WorkoutSplit @default(REST_DAY)
+  split     String   @default("Rest Day")
   notes     String?
-  date      DateTime     @db.Date
-  createdAt DateTime     @default(now())
+  date      DateTime @db.Date
+  createdAt DateTime @default(now())
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   exercises Exercise[]
@@ -165,12 +171,12 @@ model Workout {
 }
 
 model Exercise {
-  id        String   @id @default(cuid())
-  userId    String
-  workoutId String
-  name      String
-  orderIndex Int     @default(0)
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  userId     String
+  workoutId  String
+  name       String
+  orderIndex Int      @default(0)
+  createdAt  DateTime @default(now())
 
   user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   workout Workout       @relation(fields: [workoutId], references: [id], onDelete: Cascade)
@@ -187,7 +193,7 @@ model ExerciseSet {
   setNumber  Int      @default(1)
   weight     Float?
   reps       Int?
-  rpe        Int?     // 1-10 rate of perceived exertion
+  rpe        Int?
   isPR       Boolean  @default(false)
   createdAt  DateTime @default(now())
 
