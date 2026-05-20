@@ -28,10 +28,11 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   const today = getTodayInTimezone();
+  const split = body.split ?? "Rest Day";
 
-  // Check if workout already exists for today — update instead of create
+  // Find existing workout for today AND this specific split
   const existing = await prisma.workout.findFirst({
-    where: { userId: user.id, date: today },
+    where: { userId: user.id, date: today, split },
   });
 
   if (existing) {
@@ -40,7 +41,6 @@ export async function POST(request: Request) {
     const workout = await prisma.workout.update({
       where: { id: existing.id },
       data: {
-        split: body.split ?? existing.split,
         notes: body.notes ?? "",
         exercises: {
           create: (body.exercises ?? []).map((exercise: any, index: number) => ({
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
   const workout = await prisma.workout.create({
     data: {
       userId: user.id,
-      split: body.split ?? "Rest Day",
+      split,
       notes: body.notes ?? "",
       date: today,
       exercises: {
