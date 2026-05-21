@@ -89,7 +89,8 @@ function MealsContent() {
   }, []);
 
   async function saveMeal() {
-    if (!form.name || !form.calories) { alert("Fill name and calories"); return; }
+    if (!form.name || form.calories === "") 
+      { alert("Fill name and calories"); return; }
     const servingLabel = form.servingType;
     const servingSize = form.servingType === "piece" ? 1 : Number(form.servingSize) || 100;
     const payload = {

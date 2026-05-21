@@ -25,8 +25,8 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  if (!body.name || !body.calories) {
-    return NextResponse.json({ error: "Name and calories required" }, { status: 400 });
+  if (!body.name || body.calories === undefined || body.calories === null) {
+  return NextResponse.json({ error: "Name and calories required" }, { status: 400 });
   }
 
   const meal = await prisma.meal.create({
