@@ -108,8 +108,8 @@ function WeightChart({ data }: { data: HistoryLog[] }) {
         ))}
       </svg>
       <div className="mt-1 flex justify-between text-xs text-zinc-600">
-        <span>{new Date(weights[0].date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
-        <span>{new Date(weights[weights.length - 1].date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+        <span>{new Date(weights[0].date.includes("T") ? weights[0].date : weights[0].date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+        <span>{new Date(weights[weights.length - 1].date.includes("T") ? weights[weights.length - 1].date : weights[weights.length - 1].date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
       </div>
     </div>
   );
@@ -409,9 +409,13 @@ export default function BodyPage() {
                   <div key={i} className="rounded-xl border border-zinc-800 bg-zinc-900 p-3">
                     <div className="mb-1 flex items-center justify-between">
                       <p className="text-sm font-medium">
-                        {new Date(log.date + "T12:00:00").toLocaleDateString("en-GB", {
-                          weekday: "short", day: "numeric", month: "short"
-                        })}
+                        {(() => {
+                        const d = new Date(log.date);
+                        d.setDate(d.getDate() + 1); // UTC offset fix
+                        return d.toLocaleDateString("en-GB", {
+                        weekday: "short", day: "numeric", month: "short"
+                        });
+                        })()}
                       </p>
                       {log.weight && <span className="text-sm font-bold text-green-400">{log.weight} kg</span>}
                     </div>
