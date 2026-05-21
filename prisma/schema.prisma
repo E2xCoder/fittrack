@@ -35,6 +35,7 @@ model User {
   stepTarget    Int?   @default(10000)
   waterTarget   Float? @default(2.5)
   sleepTarget   Float? @default(8)
+  apiToken      String? @unique
 
   meals          Meal[]
   mealPacks      MealPack[]
