@@ -13,8 +13,8 @@ interface ExerciseSet {
   setNumber: number;
   weight: string;
   reps: string;
-  sets: string;  // kaç set
-  rpe: string;    // RPE değeri
+  sets: string;
+  rpe: string;
 }
 
 interface Exercise {
@@ -62,27 +62,27 @@ export default function WorkoutPage() {
     if (data.length > 0) setSelectedSplit(data[0].name);
   }
 
- async function loadTodayWorkout() {
-  const res = await fetch(`/api/workouts/today?split=${encodeURIComponent(selectedSplit)}`);
-  const data = await res.json();
-  if (data.workout) {
-    setNotes(data.workout.notes ?? "");
-    setExercises(
-      data.workout.exercises.map((ex: any) => ({
-        name: ex.name,
-        sets: ex.sets.length > 0
-  ? ex.sets.map((s: any) => ({
-      setNumber: s.setNumber,
-      weight: s.weight ? String(s.weight) : "",
-      reps: s.reps ? String(s.reps) : "",
-      sets: s.sets ? String(s.sets) : "1",
-      rpe: s.rpe ? String(s.rpe) : "",
-    }))
-  : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
-      }))
-    );
+  async function loadTodayWorkout() {
+    const res = await fetch(`/api/workouts/today?split=${encodeURIComponent(selectedSplit)}`);
+    const data = await res.json();
+    if (data.workout) {
+      setNotes(data.workout.notes ?? "");
+      setExercises(
+        data.workout.exercises.map((ex: any) => ({
+          name: ex.name,
+          sets: ex.sets.length > 0
+            ? ex.sets.map((s: any) => ({
+                setNumber: s.setNumber,
+                weight: s.weight ? String(s.weight) : "",
+                reps: s.reps ? String(s.reps) : "",
+                sets: s.sets ? String(s.sets) : "1",
+                rpe: s.rpe ? String(s.rpe) : "",
+              }))
+            : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
+        }))
+      );
+    }
   }
-}
 
   async function createSplit() {
     if (!newSplitName.trim()) return;
@@ -95,31 +95,33 @@ export default function WorkoutPage() {
     setNewSplitEmoji("🏋️");
     fetchSplits();
   }
+
   async function handleSplitSelect(splitName: string) {
-  if (splitName === selectedSplit) return;
-  setSelectedSplit(splitName);
-  setExercises([]);
-  setNotes("");
-  // Load this split's workout for today
-  const res = await fetch(`/api/workouts/today?split=${encodeURIComponent(splitName)}`);
-  const data = await res.json();
-  if (data.workout) {
-    setNotes(data.workout.notes ?? "");
-    setExercises(
-      data.workout.exercises.map((ex: any) => ({
-        name: ex.name,
-        sets: ex.sets.length > 0
-          ? ex.sets.map((s: any) => ({
-              setNumber: s.setNumber,
-              weight: s.weight ? String(s.weight) : "",
-              reps: s.reps ? String(s.reps) : "",
-              rpe: s.rpe ? String(s.rpe) : "",
-            }))
-          : [{ setNumber: 1, weight: "", reps: "", rpe: "" }],
-      }))
-    );
+    if (splitName === selectedSplit) return;
+    setSelectedSplit(splitName);
+    setExercises([]);
+    setNotes("");
+    const res = await fetch(`/api/workouts/today?split=${encodeURIComponent(splitName)}`);
+    const data = await res.json();
+    if (data.workout) {
+      setNotes(data.workout.notes ?? "");
+      setExercises(
+        data.workout.exercises.map((ex: any) => ({
+          name: ex.name,
+          sets: ex.sets.length > 0
+            ? ex.sets.map((s: any) => ({
+                setNumber: s.setNumber,
+                weight: s.weight ? String(s.weight) : "",
+                reps: s.reps ? String(s.reps) : "",
+                sets: s.sets ? String(s.sets) : "1",
+                rpe: s.rpe ? String(s.rpe) : "",
+              }))
+            : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
+        }))
+      );
+    }
   }
-}
+
   async function deleteSplit(id: string) {
     await fetch(`/api/splits/${id}`, { method: "DELETE" });
     fetchSplits();
@@ -166,7 +168,7 @@ export default function WorkoutPage() {
       const last = updated[exIdx].sets[updated[exIdx].sets.length - 1];
       updated[exIdx].sets = [
         ...updated[exIdx].sets,
-        { setNumber: updated[exIdx].sets.length + 1, weight: last?.weight ?? "", reps: last?.reps ?? "", sets: "1", rpe: ""},
+        { setNumber: updated[exIdx].sets.length + 1, weight: last?.weight ?? "", reps: last?.reps ?? "", sets: "1", rpe: "" },
       ];
       return updated;
     });
@@ -214,7 +216,7 @@ export default function WorkoutPage() {
             setNumber: j + 1,
             weight: Number(s.weight) || null,
             reps: Number(s.reps) || null,
-            sets: Number(s.sets) || null,
+            sets: Number(s.sets) || 1,
             rpe: Number(s.rpe) || null,
           })),
         })),
@@ -365,15 +367,18 @@ export default function WorkoutPage() {
                     </div>
                   )}
 
-                  <div className="mb-2 grid grid-cols-3 gap-2 px-1 text-xs text-zinc-500">
+                  {/* Header */}
+                  <div className="mb-2 grid grid-cols-4 gap-2 px-1 text-xs text-zinc-500">
                     <span>kg</span>
                     <span>Reps</span>
+                    <span>Sets</span>
                     <span>RPE</span>
                   </div>
 
+                  {/* Rows */}
                   <div className="space-y-2">
                     {exercise.sets.map((set, setIdx) => (
-                      <div key={setIdx} className="grid grid-cols-3 gap-2 items-center">
+                      <div key={setIdx} className="grid grid-cols-4 gap-2 items-center">
                         <input
                           type="number"
                           placeholder="0"
@@ -386,6 +391,13 @@ export default function WorkoutPage() {
                           placeholder="0"
                           value={set.reps}
                           onChange={(e) => updateSet(exIdx, setIdx, "reps", e.target.value)}
+                          className="rounded-lg bg-zinc-800 p-2 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600"
+                        />
+                        <input
+                          type="number"
+                          placeholder="1"
+                          value={set.sets}
+                          onChange={(e) => updateSet(exIdx, setIdx, "sets", e.target.value)}
                           className="rounded-lg bg-zinc-800 p-2 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600"
                         />
                         <div className="flex gap-1">
@@ -413,7 +425,7 @@ export default function WorkoutPage() {
                     onClick={() => addSet(exIdx)}
                     className="mt-3 w-full rounded-xl bg-zinc-800 py-2 text-sm text-zinc-400 hover:bg-zinc-700"
                   >
-                    + Add Set
+                    + Add Variation
                   </button>
                 </div>
               );
