@@ -54,6 +54,111 @@ function ProgressBar({ value, target, color, unit }: {
   );
 }
 
+function WeightChart({ data }: { data: HistoryLog[] }) {
+  const weights = data.filter(d => d.weight).map(d => ({
+    date: d.date,
+    w: Number(d.weight),
+  }));
+  if (weights.length < 2) return (
+    <p className="text-center text-xs text-zinc-500 py-4">Need at least 2 entries for chart</p>
+  );
+
+  const min = Math.min(...weights.map(w => w.w)) - 0.5;
+  const max = Math.max(...weights.map(w => w.w)) + 0.5;
+  const range = max - min || 1;
+  const W = 300;
+  const H = 80;
+
+  const points = weights.map((w, i) => ({
+    x: weights.length === 1 ? W / 2 : (i / (weights.length - 1)) * (W - 20) + 10,
+    y: H - 10 - ((w.w - min) / range) * (H - 20),
+    weight: w.w,
+    date: w.date,
+  }));
+
+  const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+  const areaD = `${pathD} L ${points[points.length - 1].x} ${H} L ${points[0].x} ${H} Z`;
+
+  const change = weights[weights.length - 1].w - weights[0].w;
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs text-zinc-500">
+          {weights[0].w} → {weights[weights.length - 1].w} kg
+        </span>
+        <span className={`text-xs font-medium ${change < 0 ? "text-green-400" : change > 0 ? "text-rose-400" : "text-zinc-400"}`}>
+          {change > 0 ? "+" : ""}{change.toFixed(1)} kg
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-24" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="wGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#22c55e" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={areaD} fill="url(#wGrad)" />
+        <path d={pathD} fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        {points.map((p, i) => (
+          <g key={i}>
+            <circle cx={p.x} cy={p.y} r="3" fill="#22c55e" stroke="#000" strokeWidth="1" />
+            <text x={p.x} y={p.y - 6} textAnchor="middle" fontSize="7" fill="#a1a1aa">{p.weight}</text>
+          </g>
+        ))}
+      </svg>
+      <div className="mt-1 flex justify-between text-xs text-zinc-600">
+        <span>{new Date(weights[0].date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+        <span>{new Date(weights[weights.length - 1].date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+      </div>
+    </div>
+  );
+}
+
+function StepsChart({ data, target }: { data: HistoryLog[]; target: number }) {
+  const maxSteps = Math.max(...data.map(h => Number(h.steps) || 0), target);
+
+  return (
+    <div>
+      <div className="flex items-end gap-1 h-24 mb-2">
+        {data.map((log, i) => {
+          const steps = Number(log.steps) || 0;
+          const pct = steps > 0 ? (steps / maxSteps) * 100 : 0;
+          const hitTarget = steps >= target;
+          const dayLabel = new Date(log.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short" });
+
+          return (
+            <div key={i} className="flex-1 flex flex-col items-center gap-1">
+              <div className="w-full flex flex-col justify-end" style={{ height: "80px" }}>
+                <div
+                  className={`w-full rounded-t transition-all ${
+                    steps === 0 ? "bg-zinc-800" : hitTarget ? "bg-green-500" : "bg-purple-500"
+                  }`}
+                  style={{ height: `${Math.max(pct, steps > 0 ? 3 : 0)}%` }}
+                />
+              </div>
+              <span className="text-zinc-600" style={{ fontSize: "6px" }}>
+                {dayLabel.charAt(0)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-3 text-xs text-zinc-500">
+        <div className="flex items-center gap-1">
+          <div className="h-2 w-2 rounded-full bg-green-500" />
+          <span>Goal hit</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="h-2 w-2 rounded-full bg-purple-500" />
+          <span>Below goal</span>
+        </div>
+        <span className="ml-auto">Goal: {target.toLocaleString()}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function BodyPage() {
   const [selectedDate, setSelectedDate] = useState(toDateString(new Date()));
   const [bodyLog, setBodyLog] = useState<BodyLog>({});
@@ -62,6 +167,7 @@ export default function BodyPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<"daily" | "measurements" | "history">("daily");
+  const [period, setPeriod] = useState<"week" | "month">("week");
 
   const [form, setForm] = useState({
     weight: "", steps: "", water: "", sleep: "",
@@ -129,24 +235,26 @@ export default function BodyPage() {
   });
 
   const bmi = userProfile.height && userProfile.weight
-    ? (userProfile.weight / ((userProfile.height / 100) ** 2)).toFixed(1)
-    : null;
-
+    ? (userProfile.weight / ((userProfile.height / 100) ** 2)).toFixed(1) : null;
   const bmiCategory = bmi
     ? Number(bmi) < 18.5 ? "Underweight"
     : Number(bmi) < 25 ? "Normal"
-    : Number(bmi) < 30 ? "Overweight"
-    : "Obese"
-    : null;
+    : Number(bmi) < 30 ? "Overweight" : "Obese" : null;
 
   const steps = Number(form.steps) || 0;
   const caloriesBurned = Math.round(steps * 0.04 * ((userProfile.weight ?? 70) / 70));
 
-  // Weight chart data
-  const weightData = history.filter(h => h.weight).map(h => ({
-    date: h.date,
-    weight: h.weight!,
-  }));
+  // Filter history by period
+  const now = new Date();
+  const filteredHistory = history.filter(log => {
+    const logDate = new Date(log.date + "T12:00:00");
+    if (period === "week") {
+      const weekAgo = new Date(now);
+      weekAgo.setDate(now.getDate() - 6);
+      return logDate >= weekAgo;
+    }
+    return true; // month = all 30 days
+  });
 
   return (
     <main className="mx-auto max-w-2xl p-4">
@@ -156,17 +264,13 @@ export default function BodyPage() {
       </div>
 
       <div className="mb-6 flex items-center justify-between">
-        <button onClick={() => changeDate(-1)} className="rounded-xl bg-zinc-800 px-4 py-2 text-sm hover:bg-zinc-700">
-          ← Prev
-        </button>
+        <button onClick={() => changeDate(-1)} className="rounded-xl bg-zinc-800 px-4 py-2 text-sm hover:bg-zinc-700">← Prev</button>
         <div className="text-center">
           <p className="text-sm text-zinc-400">{displayDate}</p>
           {isToday && <span className="text-xs font-medium text-green-400">Today</span>}
         </div>
         <button onClick={() => changeDate(1)} disabled={isToday}
-          className="rounded-xl bg-zinc-800 px-4 py-2 text-sm hover:bg-zinc-700 disabled:opacity-30">
-          Next →
-        </button>
+          className="rounded-xl bg-zinc-800 px-4 py-2 text-sm hover:bg-zinc-700 disabled:opacity-30">Next →</button>
       </div>
 
       {bmi && (
@@ -175,11 +279,9 @@ export default function BodyPage() {
             <div>
               <p className="text-xs text-zinc-400">BMI</p>
               <p className="text-3xl font-bold">{bmi}</p>
-              <p className={`text-sm ${
-                bmiCategory === "Normal" ? "text-green-400"
-                : bmiCategory === "Underweight" ? "text-blue-400"
-                : "text-rose-400"
-              }`}>{bmiCategory}</p>
+              <p className={`text-sm ${bmiCategory === "Normal" ? "text-green-400" : bmiCategory === "Underweight" ? "text-blue-400" : "text-rose-400"}`}>
+                {bmiCategory}
+              </p>
             </div>
             <div className="text-right text-xs text-zinc-500">
               <p>{userProfile.height} cm</p>
@@ -192,9 +294,7 @@ export default function BodyPage() {
       <div className="mb-6 flex rounded-xl bg-zinc-900 p-1">
         {(["daily", "measurements", "history"] as const).map((tab) => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`flex-1 rounded-lg py-2 text-sm font-medium capitalize transition ${
-              activeTab === tab ? "bg-zinc-700 text-white" : "text-zinc-400"
-            }`}>
+            className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${activeTab === tab ? "bg-zinc-700 text-white" : "text-zinc-400"}`}>
             {tab === "daily" ? "Daily" : tab === "measurements" ? "Measurements" : "History"}
           </button>
         ))}
@@ -272,86 +372,51 @@ export default function BodyPage() {
             <p className="text-center text-sm text-zinc-500">No history yet. Start logging daily!</p>
           ) : (
             <>
-              {/* Weight chart */}
-              {weightData.length >= 2 && (
+              <div className="flex rounded-xl bg-zinc-900 p-1">
+                {(["week", "month"] as const).map((p) => (
+                  <button key={p} onClick={() => setPeriod(p)}
+                    className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${period === p ? "bg-zinc-700 text-white" : "text-zinc-400"}`}>
+                    {p === "week" ? "This Week" : "This Month"}
+                  </button>
+                ))}
+              </div>
+
+              {filteredHistory.some(h => h.weight) && (
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-                  <h2 className="mb-4 font-semibold">⚖️ Weight trend</h2>
-                  <div className="relative h-32">
-                    <svg viewBox="0 0 300 80" className="w-full h-full" preserveAspectRatio="none">
-                      {(() => {
-                        const min = Math.min(...weightData.map(w => w.weight)) - 0.5;
-                        const max = Math.max(...weightData.map(w => w.weight)) + 0.5;
-                        const range = max - min || 1;
-                        const points = weightData.map((w, i) => ({
-                          x: (i / (weightData.length - 1)) * 280 + 10,
-                          y: 70 - ((w.weight - min) / range) * 60,
-                          weight: w.weight,
-                        }));
-                        const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-                        const areaD = `${pathD} L ${points[points.length-1].x} 75 L ${points[0].x} 75 Z`;
-                        return (
-                          <>
-                            <path d={areaD} fill="#22c55e" fillOpacity="0.1" />
-                            <path d={pathD} fill="none" stroke="#22c55e" strokeWidth="1.5" />
-                            {points.map((p, i) => (
-                              <g key={i}>
-                                <circle cx={p.x} cy={p.y} r="2.5" fill="#22c55e" />
-                                <text x={p.x} y={p.y - 5} textAnchor="middle" fontSize="7" fill="#a1a1aa">
-                                  {p.weight}
-                                </text>
-                              </g>
-                            ))}
-                          </>
-                        );
-                      })()}
-                    </svg>
-                  </div>
-                  <div className="mt-2 flex justify-between text-xs text-zinc-500">
-                    <span>{new Date(weightData[0].date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
-                    <span>{new Date(weightData[weightData.length-1].date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
-                  </div>
+                  <h2 className="mb-1 font-semibold">⚖️ Weight</h2>
+                  <p className="mb-3 text-xs text-zinc-500">
+                    {filteredHistory.filter(h => h.weight).length} entries
+                  </p>
+                  <WeightChart data={filteredHistory} />
                 </div>
               )}
 
-              {/* Steps chart */}
-              {history.some(h => h.steps) && (
+              {filteredHistory.some(h => h.steps) && (
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-                  <h2 className="mb-4 font-semibold">👟 Steps (30 days)</h2>
-                  <div className="flex items-end gap-0.5 h-20">
-                    {history.map((log, i) => {
-                      const maxSteps = Math.max(...history.map(h => h.steps ?? 0));
-                      const pct = log.steps && maxSteps > 0 ? (log.steps / maxSteps) * 100 : 0;
-                      return (
-                        <div key={i} className="flex-1 flex flex-col items-center">
-                          <div
-                            className={`w-full rounded-t transition-all ${pct > 0 ? "bg-purple-500" : "bg-zinc-800"}`}
-                            style={{ height: `${Math.max(pct, 2)}%` }}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-2 flex justify-between text-xs text-zinc-500">
-                    <span>{new Date(history[0].date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
-                    <span>{new Date(history[history.length-1].date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
-                  </div>
+                  <h2 className="mb-1 font-semibold">👟 Steps</h2>
+                  <p className="mb-3 text-xs text-zinc-500">
+                    Avg: {Math.round(
+                      filteredHistory.filter(h => h.steps).reduce((s, h) => s + Number(h.steps ?? 0), 0) /
+                      Math.max(filteredHistory.filter(h => h.steps).length, 1)
+                    ).toLocaleString()} steps/day
+                  </p>
+                  <StepsChart data={filteredHistory} target={userProfile.stepTarget ?? 10000} />
                 </div>
               )}
 
-              {/* Log list */}
               <div className="space-y-2">
-                {history.slice().reverse().map((log, i) => (
+                {filteredHistory.slice().reverse().map((log, i) => (
                   <div key={i} className="rounded-xl border border-zinc-800 bg-zinc-900 p-3">
                     <div className="mb-1 flex items-center justify-between">
                       <p className="text-sm font-medium">
-                        {new Date(log.date).toLocaleDateString("en-GB", {
+                        {new Date(log.date + "T12:00:00").toLocaleDateString("en-GB", {
                           weekday: "short", day: "numeric", month: "short"
                         })}
                       </p>
                       {log.weight && <span className="text-sm font-bold text-green-400">{log.weight} kg</span>}
                     </div>
                     <div className="flex flex-wrap gap-3 text-xs text-zinc-400">
-                      {log.steps && <span>👟 {log.steps.toLocaleString()}</span>}
+                      {log.steps && <span>👟 {Number(log.steps).toLocaleString()}</span>}
                       {log.caloriesBurned && <span>🔥 {log.caloriesBurned} kcal</span>}
                       {log.water && <span>💧 {log.water}L</span>}
                       {log.sleep && <span>😴 {log.sleep}h</span>}
