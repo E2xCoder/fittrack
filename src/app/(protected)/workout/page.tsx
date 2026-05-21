@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { searchExercises } from "@/lib/exercises";
+import Link from "next/link";
 
 interface UserSplit {
   id: string;
@@ -232,17 +233,24 @@ export default function WorkoutPage() {
 
   return (
     <main className="mx-auto max-w-2xl p-4">
+      {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Workout</h1>
           <p className="text-sm text-zinc-400">Log today's session</p>
         </div>
-        <button
-          onClick={() => setShowSplitManager(!showSplitManager)}
-          className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-zinc-700"
-        >
-          ⚙️ Manage Splits
-        </button>
+        <div className="flex gap-2">
+          <Link href="/workout/history"
+            className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-zinc-700">
+            📋 History
+          </Link>
+          <button
+            onClick={() => setShowSplitManager(!showSplitManager)}
+            className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-zinc-700"
+          >
+            ⚙️ Splits
+          </button>
+        </div>
       </div>
 
       {showSplitManager && (
@@ -367,7 +375,6 @@ export default function WorkoutPage() {
                     </div>
                   )}
 
-                  {/* Header */}
                   <div className="mb-2 grid grid-cols-4 gap-2 px-1 text-xs text-zinc-500">
                     <span>kg</span>
                     <span>Reps</span>
@@ -375,56 +382,33 @@ export default function WorkoutPage() {
                     <span>RPE</span>
                   </div>
 
-                  {/* Rows */}
                   <div className="space-y-2">
                     {exercise.sets.map((set, setIdx) => (
                       <div key={setIdx} className="grid grid-cols-4 gap-2 items-center">
-                        <input
-                          type="number"
-                          placeholder="0"
-                          value={set.weight}
+                        <input type="number" placeholder="0" value={set.weight}
                           onChange={(e) => updateSet(exIdx, setIdx, "weight", e.target.value)}
-                          className="rounded-lg bg-zinc-800 p-2 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600"
-                        />
-                        <input
-                          type="number"
-                          placeholder="0"
-                          value={set.reps}
+                          className="rounded-lg bg-zinc-800 p-2 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600" />
+                        <input type="number" placeholder="0" value={set.reps}
                           onChange={(e) => updateSet(exIdx, setIdx, "reps", e.target.value)}
-                          className="rounded-lg bg-zinc-800 p-2 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600"
-                        />
-                        <input
-                          type="number"
-                          placeholder="1"
-                          value={set.sets}
+                          className="rounded-lg bg-zinc-800 p-2 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600" />
+                        <input type="number" placeholder="1" value={set.sets}
                           onChange={(e) => updateSet(exIdx, setIdx, "sets", e.target.value)}
-                          className="rounded-lg bg-zinc-800 p-2 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600"
-                        />
+                          className="rounded-lg bg-zinc-800 p-2 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600" />
                         <div className="flex gap-1">
-                          <input
-                            type="number"
-                            placeholder="—"
-                            min="1"
-                            max="10"
-                            value={set.rpe}
+                          <input type="number" placeholder="—" min="1" max="10" value={set.rpe}
                             onChange={(e) => updateSet(exIdx, setIdx, "rpe", e.target.value)}
-                            className="w-full rounded-lg bg-zinc-800 p-2 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600"
-                          />
+                            className="w-full rounded-lg bg-zinc-800 p-2 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600" />
                           {exercise.sets.length > 1 && (
-                            <button
-                              onClick={() => removeSet(exIdx, setIdx)}
-                              className="px-1 text-xs text-zinc-600 hover:text-red-400"
-                            >✕</button>
+                            <button onClick={() => removeSet(exIdx, setIdx)}
+                              className="px-1 text-xs text-zinc-600 hover:text-red-400">✕</button>
                           )}
                         </div>
                       </div>
                     ))}
                   </div>
 
-                  <button
-                    onClick={() => addSet(exIdx)}
-                    className="mt-3 w-full rounded-xl bg-zinc-800 py-2 text-sm text-zinc-400 hover:bg-zinc-700"
-                  >
+                  <button onClick={() => addSet(exIdx)}
+                    className="mt-3 w-full rounded-xl bg-zinc-800 py-2 text-sm text-zinc-400 hover:bg-zinc-700">
                     + Add Variation
                   </button>
                 </div>
@@ -452,13 +436,10 @@ export default function WorkoutPage() {
         </div>
       )}
 
-      <button
-        onClick={saveWorkout}
-        disabled={saving}
+      <button onClick={saveWorkout} disabled={saving}
         className={`mt-6 w-full rounded-xl py-3 font-semibold transition ${
           saved ? "bg-green-800 text-green-300" : "bg-green-600 hover:bg-green-700"
-        } disabled:opacity-50`}
-      >
+        } disabled:opacity-50`}>
         {saved ? "Saved ✓" : saving ? "Saving..." : "Save Workout"}
       </button>
     </main>
