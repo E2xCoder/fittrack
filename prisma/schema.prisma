@@ -30,6 +30,11 @@ model User {
   proteinTarget Int?
   carbTarget    Int?
   fatTarget     Int?
+  height        Float?
+  weight        Float?
+  stepTarget    Int?   @default(10000)
+  waterTarget   Float? @default(2.5)
+  sleepTarget   Float? @default(8)
 
   meals          Meal[]
   mealPacks      MealPack[]
@@ -38,12 +43,36 @@ model User {
   workouts       Workout[]
   exercises      Exercise[]
   userSplits     UserSplit[]
+  bodyLogs       BodyLog[]
   weightLogs     WeightLog[]
   progressPhotos ProgressPhoto[]
   sessions       Session[]
   accounts       Account[]
 
   @@map("user")
+}
+
+model BodyLog {
+  id             String   @id @default(cuid())
+  userId         String
+  date           DateTime @db.Date
+  weight         Float?
+  steps          Int?
+  water          Float?
+  sleep          Float?
+  waist          Float?
+  chest          Float?
+  hip            Float?
+  arm            Float?
+  leg            Float?
+  bodyFat        Float?
+  caloriesBurned Float?
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId])
 }
 
 model UserSplit {
@@ -112,17 +141,17 @@ model MealPackItem {
 }
 
 model MealLog {
-  id         String    @id @default(cuid())
-  userId     String
-  mealId     String?
-  dailyLogId String?
-  quantity   Float     @default(1)
-  calories   Float
-  protein    Float
-  carbs      Float
-  fat        Float
+  id           String    @id @default(cuid())
+  userId       String
+  mealId       String?
+  dailyLogId   String?
+  quantity     Float     @default(1)
+  calories     Float
+  protein      Float
+  carbs        Float
+  fat          Float
   mealSnapshot Json?
-  createdAt  DateTime  @default(now())
+  createdAt    DateTime  @default(now())
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   meal     Meal?     @relation(fields: [mealId], references: [id], onDelete: SetNull)
@@ -193,7 +222,7 @@ model ExerciseSet {
   setNumber  Int      @default(1)
   weight     Float?
   reps       Int?
-  sets       Int?     @default(1)  // kaç set yapıldı
+  sets       Int?     @default(1)
   rpe        Int?
   isPR       Boolean  @default(false)
   createdAt  DateTime @default(now())

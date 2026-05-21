@@ -8,6 +8,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: "📊" },
   { href: "/meals", label: "Meals", icon: "🍽️" },
   { href: "/workout", label: "Workout", icon: "🏋️" },
+  { href: "/body", label: "Body", icon: "⚖️" },
   { href: "/analytics", label: "Analytics", icon: "📈" },
   { href: "/profile", label: "Profile", icon: "👤" },
 ];
@@ -27,7 +28,6 @@ export default function ProtectedLayout({
 
   return (
     <div className="min-h-screen bg-black text-white">
-      {/* Top nav — desktop */}
       <nav className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <Link href="/dashboard" className="text-xl font-bold">
@@ -60,12 +60,10 @@ export default function ProtectedLayout({
         </div>
       </nav>
 
-      {/* Page content */}
       <div className="mx-auto max-w-7xl pb-24 md:pb-0">
         {children}
       </div>
 
-      {/* Bottom nav — mobile */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-zinc-950 md:hidden">
         <div className="flex items-center justify-around py-2">
           {navItems.map((item) => (
@@ -73,9 +71,7 @@ export default function ProtectedLayout({
               key={item.href}
               href={item.href}
               className={`flex flex-col items-center gap-1 px-3 py-2 text-xs transition ${
-                pathname === item.href
-                  ? "text-green-400"
-                  : "text-zinc-500"
+                pathname === item.href ? "text-green-400" : "text-zinc-500"
               }`}
             >
               <span className="text-xl">{item.icon}</span>

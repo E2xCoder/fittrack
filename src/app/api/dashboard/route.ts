@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     date = getTodayInTimezone();
   }
 
-  const [dailyLog, user] = await Promise.all([
+  const [dailyLog, user, bodyLog] = await Promise.all([
     prisma.dailyLog.findFirst({
       where: { userId: session.user.id, date },
       include: {
@@ -36,7 +36,12 @@ export async function GET(request: Request) {
         proteinTarget: true,
         carbTarget: true,
         fatTarget: true,
+        weight: true,
+        stepTarget: true,
       },
+    }),
+    prisma.bodyLog.findFirst({
+      where: { userId: session.user.id, date },
     }),
   ]);
 
@@ -51,6 +56,11 @@ export async function GET(request: Request) {
       protein: user?.proteinTarget ?? 150,
       carbs: user?.carbTarget ?? 200,
       fat: user?.fatTarget ?? 70,
+      steps: user?.stepTarget ?? 10000,
     },
+    steps: bodyLog?.steps ?? 0,
+    caloriesBurned: bodyLog?.caloriesBurned ?? 0,
+    water: bodyLog?.water ?? 0,
+    sleep: bodyLog?.sleep ?? 0,
   });
 }

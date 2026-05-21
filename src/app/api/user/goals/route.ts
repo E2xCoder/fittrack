@@ -16,6 +16,11 @@ export async function GET() {
       proteinTarget: true,
       carbTarget: true,
       fatTarget: true,
+      height: true,
+      weight: true,
+      stepTarget: true,
+      waterTarget: true,
+      sleepTarget: true,
     },
   });
 
@@ -36,6 +41,11 @@ export async function POST(request: Request) {
       proteinTarget: Number(body.proteinTarget) || null,
       carbTarget: Number(body.carbTarget) || null,
       fatTarget: Number(body.fatTarget) || null,
+      height: Number(body.height) || null,
+      weight: Number(body.weight) || null,
+      stepTarget: Number(body.stepTarget) || 10000,
+      waterTarget: Number(body.waterTarget) || 2.5,
+      sleepTarget: Number(body.sleepTarget) || 8,
     },
   });
 

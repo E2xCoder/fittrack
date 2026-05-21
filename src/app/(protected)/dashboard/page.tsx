@@ -23,6 +23,7 @@ interface Goals {
   protein: number;
   carbs: number;
   fat: number;
+  steps: number;
 }
 
 interface DashboardData {
@@ -32,6 +33,10 @@ interface DashboardData {
   totalFat: number;
   mealLogs: MealLog[];
   goals: Goals;
+  steps: number;
+  caloriesBurned: number;
+  water: number;
+  sleep: number;
 }
 
 function toDateString(date: Date) {
@@ -98,13 +103,11 @@ export default function DashboardPage() {
     }
 
     setAdjusting((p) => ({ ...p, [log.id]: true }));
-
     await fetch(`/api/log-meal/${log.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ quantity: newQuantity }),
     });
-
     setAdjusting((p) => ({ ...p, [log.id]: false }));
     fetchData(selectedDate);
   }
@@ -146,20 +149,76 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          <div className="mb-6 grid grid-cols-2 gap-3">
+          {/* Macro bars */}
+          <div className="mb-4 grid grid-cols-2 gap-3">
             <MacroBar label="Calories" current={data.totalCalories} target={data.goals.calories} unit="kcal" color="bg-green-500" />
             <MacroBar label="Protein" current={data.totalProtein} target={data.goals.protein} unit="g" color="bg-blue-500" />
             <MacroBar label="Carbs" current={data.totalCarbs} target={data.goals.carbs} unit="g" color="bg-amber-500" />
             <MacroBar label="Fat" current={data.totalFat} target={data.goals.fat} unit="g" color="bg-rose-500" />
           </div>
 
-          <Link
-            href={`/meals?date=${selectedDate}`}
-            className="mb-6 flex w-full items-center justify-center rounded-2xl border border-dashed border-zinc-700 py-4 text-sm text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
-          >
-            + Add meal {!isToday && `to ${displayDate}`}
-          </Link>
+          {/* Net calorie + steps */}
+          {(data.steps > 0 || data.caloriesBurned > 0) && (
+            <div className="mb-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold">Net Calories</h2>
+                <Link href="/body" className="text-xs text-zinc-500 hover:text-zinc-300">
+                  Log Body →
+                </Link>
+              </div>
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div>
+                  <p className="text-xs text-zinc-500">Eaten</p>
+                  <p className="text-lg font-bold text-green-400">{Math.round(data.totalCalories)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-zinc-500">Burned</p>
+                  <p className="text-lg font-bold text-orange-400">-{data.caloriesBurned}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-zinc-500">Net</p>
+                  <p className={`text-lg font-bold ${
+                    data.totalCalories - data.caloriesBurned < data.goals.calories
+                      ? "text-blue-400" : "text-rose-400"
+                  }`}>
+                    {Math.round(data.totalCalories - data.caloriesBurned)}
+                  </p>
+                </div>
+              </div>
+              {data.steps > 0 && (
+                <div className="mt-3">
+                  <div className="mb-1 flex justify-between text-xs text-zinc-400">
+                    <span>👟 {data.steps.toLocaleString()} steps</span>
+                    <span>/ {data.goals.steps.toLocaleString()}</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
+                    <div
+                      className="h-full rounded-full bg-purple-500"
+                      style={{ width: `${Math.min((data.steps / data.goals.steps) * 100, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
+          {/* Add meal + body shortcuts */}
+          <div className="mb-4 grid grid-cols-2 gap-3">
+            <Link
+              href={`/meals?date=${selectedDate}`}
+              className="flex items-center justify-center rounded-2xl border border-dashed border-zinc-700 py-3 text-sm text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+            >
+              + Add meal
+            </Link>
+            <Link
+              href="/body"
+              className="flex items-center justify-center rounded-2xl border border-dashed border-zinc-700 py-3 text-sm text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+            >
+              ⚖️ Log body
+            </Link>
+          </div>
+
+          {/* Meal log */}
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">
@@ -190,7 +249,6 @@ export default function DashboardPage() {
                           className="ml-3 rounded-lg bg-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:bg-red-900 hover:text-red-300"
                         >✕</button>
                       </div>
-
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => adjustMeal(log, -step)}
