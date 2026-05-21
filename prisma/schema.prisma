@@ -193,6 +193,7 @@ model ExerciseSet {
   setNumber  Int      @default(1)
   weight     Float?
   reps       Int?
+  sets       Int?     @default(1)  // kaç set yapıldı
   rpe        Int?
   isPR       Boolean  @default(false)
   createdAt  DateTime @default(now())

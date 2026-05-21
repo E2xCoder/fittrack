@@ -36,6 +36,7 @@ export async function GET(request: Request) {
       sets: lastExercise.sets.map((s) => ({
         weight: s.weight,
         reps: s.reps,
+        sets: s.sets,
         rpe: s.rpe,
         isPR: s.isPR,
       })),

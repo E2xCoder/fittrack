@@ -13,7 +13,8 @@ interface ExerciseSet {
   setNumber: number;
   weight: string;
   reps: string;
-  rpe: string;
+  sets: string;  // kaç set
+  rpe: string;    // RPE değeri
 }
 
 interface Exercise {
@@ -24,6 +25,7 @@ interface Exercise {
 interface PreviousSet {
   weight: number | null;
   reps: number | null;
+  sets: number | null;
   rpe: number | null;
 }
 
@@ -69,13 +71,14 @@ export default function WorkoutPage() {
       data.workout.exercises.map((ex: any) => ({
         name: ex.name,
         sets: ex.sets.length > 0
-          ? ex.sets.map((s: any) => ({
-              setNumber: s.setNumber,
-              weight: s.weight ? String(s.weight) : "",
-              reps: s.reps ? String(s.reps) : "",
-              rpe: s.rpe ? String(s.rpe) : "",
-            }))
-          : [{ setNumber: 1, weight: "", reps: "", rpe: "" }],
+  ? ex.sets.map((s: any) => ({
+      setNumber: s.setNumber,
+      weight: s.weight ? String(s.weight) : "",
+      reps: s.reps ? String(s.reps) : "",
+      sets: s.sets ? String(s.sets) : "1",
+      rpe: s.rpe ? String(s.rpe) : "",
+    }))
+  : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
       }))
     );
   }
@@ -138,7 +141,7 @@ export default function WorkoutPage() {
     if (!exerciseName) return;
     setExercises((prev) => [
       ...prev,
-      { name: exerciseName, sets: [{ setNumber: 1, weight: "", reps: "", rpe: "" }] },
+      { name: exerciseName, sets: [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }] },
     ]);
     fetchPrevious(exerciseName);
     setNewExerciseName("");
@@ -163,7 +166,7 @@ export default function WorkoutPage() {
       const last = updated[exIdx].sets[updated[exIdx].sets.length - 1];
       updated[exIdx].sets = [
         ...updated[exIdx].sets,
-        { setNumber: updated[exIdx].sets.length + 1, weight: last?.weight ?? "", reps: last?.reps ?? "", rpe: "" },
+        { setNumber: updated[exIdx].sets.length + 1, weight: last?.weight ?? "", reps: last?.reps ?? "", sets: "1", rpe: ""},
       ];
       return updated;
     });
@@ -211,6 +214,7 @@ export default function WorkoutPage() {
             setNumber: j + 1,
             weight: Number(s.weight) || null,
             reps: Number(s.reps) || null,
+            sets: Number(s.sets) || null,
             rpe: Number(s.rpe) || null,
           })),
         })),
@@ -353,7 +357,7 @@ export default function WorkoutPage() {
                       <div className="flex flex-wrap gap-2">
                         {prev.sets.map((s, i) => (
                           <span key={i} className="text-xs text-zinc-300">
-                            {i + 1}: {s.weight ?? "?"}kg × {s.reps ?? "?"}
+                            {s.weight ?? "?"}kg × {s.reps ?? "?"} reps × {s.sets ?? 1} sets
                             {s.rpe && ` @${s.rpe}`}
                           </span>
                         ))}
@@ -361,8 +365,7 @@ export default function WorkoutPage() {
                     </div>
                   )}
 
-                  <div className="mb-2 grid grid-cols-4 gap-2 px-1 text-xs text-zinc-500">
-                    <span>Set</span>
+                  <div className="mb-2 grid grid-cols-3 gap-2 px-1 text-xs text-zinc-500">
                     <span>kg</span>
                     <span>Reps</span>
                     <span>RPE</span>
@@ -370,8 +373,7 @@ export default function WorkoutPage() {
 
                   <div className="space-y-2">
                     {exercise.sets.map((set, setIdx) => (
-                      <div key={setIdx} className="grid grid-cols-4 gap-2 items-center">
-                        <span className="pl-1 text-sm font-medium text-zinc-400">{set.setNumber}</span>
+                      <div key={setIdx} className="grid grid-cols-3 gap-2 items-center">
                         <input
                           type="number"
                           placeholder="0"
