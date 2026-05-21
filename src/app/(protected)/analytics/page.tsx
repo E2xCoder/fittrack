@@ -7,9 +7,14 @@ interface DayData {
   label: string;
   calories: number;
   protein: number;
+  steps: number;
+  caloriesBurned: number;
+  netCalories: number;
   deficit: number;
   proteinHit: boolean;
   logged: boolean;
+  isGymDay: boolean;
+  gymSplit: string | null;
 }
 
 interface Summary {
@@ -45,10 +50,7 @@ export default function AnalyticsPage() {
   useEffect(() => {
     fetch("/api/analytics")
       .then((r) => r.json())
-      .then((d) => {
-        setData(d);
-        setLoading(false);
-      });
+      .then((d) => { setData(d); setLoading(false); });
   }, []);
 
   if (loading) {
@@ -95,8 +97,7 @@ export default function AnalyticsPage() {
           <div key={label} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
             <p className="mb-1 text-xs text-zinc-500">{label}</p>
             <p className={`text-2xl font-bold ${color}`}>
-              {value}
-              <span className="ml-1 text-sm text-zinc-500">{unit}</span>
+              {value}<span className="ml-1 text-sm text-zinc-500">{unit}</span>
             </p>
             <p className="text-xs text-zinc-600">target: {target}{unit}</p>
           </div>
@@ -126,29 +127,55 @@ export default function AnalyticsPage() {
           {days.map((day) => (
             <div
               key={day.date}
-              className={`rounded-xl p-3 ${day.logged ? "bg-zinc-800" : "bg-zinc-800/40"}`}
+              className={`rounded-xl p-3 ${
+                day.isGymDay ? "bg-zinc-800 ring-1 ring-green-800"
+                : day.logged ? "bg-zinc-800"
+                : "bg-zinc-800/40"
+              }`}
             >
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm font-medium">{day.label}</span>
-                {!day.logged ? (
+              <div className="mb-1 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{day.label}</span>
+                  {day.isGymDay && day.gymSplit && (
+                    <span className="rounded-full bg-green-900 px-2 py-0.5 text-xs text-green-300">
+                      🏋️ {day.gymSplit}
+                    </span>
+                  )}
+                  {day.isGymDay && !day.gymSplit && (
+                    <span className="rounded-full bg-green-900 px-2 py-0.5 text-xs text-green-300">
+                      🏋️ Gym
+                    </span>
+                  )}
+                </div>
+                {!day.logged && !day.isGymDay ? (
                   <span className="text-xs text-zinc-600">Not logged</span>
-                ) : (
+                ) : day.logged ? (
                   <div className="flex gap-2">
                     <span className={`text-xs ${day.proteinHit ? "text-blue-400" : "text-zinc-500"}`}>
-                      {day.proteinHit ? "✓ Protein" : "✗ Protein"}
+                      {day.proteinHit ? "✓ P" : "✗ P"}
                     </span>
-                    <span className={`text-xs ${day.deficit > 0 ? "text-green-400" : "text-rose-400"}`}>
+                    <span className={`text-xs font-medium ${day.deficit > 0 ? "text-green-400" : "text-rose-400"}`}>
                       {day.deficit > 0
                         ? `−${Math.round(day.deficit)} deficit`
                         : `+${Math.round(Math.abs(day.deficit))} surplus`}
                     </span>
                   </div>
-                )}
+                ) : null}
               </div>
+
               {day.logged && (
-                <div className="flex gap-3 text-xs text-zinc-400">
-                  <span>{Math.round(day.calories)} kcal</span>
+                <div className="flex flex-wrap gap-3 text-xs text-zinc-400">
+                  <span>{Math.round(day.calories)} kcal eaten</span>
+                  {day.caloriesBurned > 0 && (
+                    <span className="text-orange-400">−{day.caloriesBurned} burned</span>
+                  )}
+                  {day.caloriesBurned > 0 && (
+                    <span className="text-zinc-300">= {Math.round(day.netCalories)} net</span>
+                  )}
                   <span>P: {Math.round(day.protein)}g</span>
+                  {day.steps > 0 && (
+                    <span className="text-purple-400">👟 {day.steps.toLocaleString()}</span>
+                  )}
                 </div>
               )}
             </div>

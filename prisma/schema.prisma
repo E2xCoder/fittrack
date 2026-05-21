@@ -175,6 +175,7 @@ model DailyLog {
   sleep         Float    @default(0)
   hadWorkShift  Boolean  @default(false)
   isGymDay      Boolean  @default(false)
+  gymSplit      String?
   createdAt     DateTime @default(now())
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)

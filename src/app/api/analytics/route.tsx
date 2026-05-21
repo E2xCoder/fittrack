@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getTodayInTimezone } from "@/lib/date";
 
 export async function GET() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -9,7 +10,6 @@ export async function GET() {
 
   const userId = session.user.id;
 
-  // Get user targets
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -17,6 +17,7 @@ export async function GET() {
       proteinTarget: true,
       carbTarget: true,
       fatTarget: true,
+      weight: true,
     },
   });
 
@@ -27,46 +28,47 @@ export async function GET() {
     fat: user?.fatTarget ?? 70,
   };
 
-  // Get last 7 days
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
+  const today = getTodayInTimezone();
   const sevenDaysAgo = new Date(today);
   sevenDaysAgo.setDate(today.getDate() - 6);
 
-  const logs = await prisma.dailyLog.findMany({
-    where: {
-      userId,
-      date: { gte: sevenDaysAgo, lte: today },
-    },
-    orderBy: { date: "asc" },
-  });
-
-  const workouts = await prisma.workout.findMany({
-    where: {
-      userId,
-      createdAt: { gte: sevenDaysAgo },
-    },
-  });
+  const [logs, bodyLogs] = await Promise.all([
+    prisma.dailyLog.findMany({
+      where: { userId, date: { gte: sevenDaysAgo, lte: today } },
+      orderBy: { date: "asc" },
+    }),
+    prisma.bodyLog.findMany({
+      where: { userId, date: { gte: sevenDaysAgo, lte: today } },
+      orderBy: { date: "asc" },
+    }),
+  ]);
 
   // Build daily breakdown
   const days = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(sevenDaysAgo);
     d.setDate(sevenDaysAgo.getDate() + i);
-    const dateStr = d.toISOString().split("T")[0];
+    const dateStr = d.toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
 
-    const log = logs.find(
-      (l) => new Date(l.date).toISOString().split("T")[0] === dateStr
+    const log = logs.find((l) =>
+      new Date(l.date).toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" }) === dateStr
+    );
+
+    const bodyLog = bodyLogs.find((b) =>
+      new Date(b.date).toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" }) === dateStr
     );
 
     const calories = log?.totalCalories ?? 0;
     const protein = log?.totalProtein ?? 0;
     const carbs = log?.totalCarbs ?? 0;
     const fat = log?.totalFat ?? 0;
+    const steps = bodyLog?.steps ?? 0;
+    const caloriesBurned = bodyLog?.caloriesBurned ?? 0;
 
-    const deficit = goals.calories - calories; // positive = deficit, negative = surplus
-    const proteinHit = protein >= goals.protein * 0.9; // within 10% counts
+    // Net calories = eaten - burned from steps
+    const netCalories = calories - caloriesBurned;
+    const deficit = goals.calories - netCalories;
+    const proteinHit = protein >= goals.protein * 0.9;
 
     days.push({
       date: dateStr,
@@ -75,37 +77,35 @@ export async function GET() {
       protein,
       carbs,
       fat,
+      steps,
+      caloriesBurned,
+      netCalories,
       deficit,
       proteinHit,
       logged: !!log,
+      isGymDay: log?.isGymDay ?? false,
+      gymSplit: log?.gymSplit ?? null,
     });
   }
 
-  // Weekly averages (only from logged days)
   const loggedDays = days.filter((d) => d.logged);
   const loggedCount = loggedDays.length;
 
   const avgCalories = loggedCount
-    ? Math.round(loggedDays.reduce((s, d) => s + d.calories, 0) / loggedCount)
-    : 0;
+    ? Math.round(loggedDays.reduce((s, d) => s + d.calories, 0) / loggedCount) : 0;
   const avgProtein = loggedCount
-    ? Math.round(loggedDays.reduce((s, d) => s + d.protein, 0) / loggedCount)
-    : 0;
+    ? Math.round(loggedDays.reduce((s, d) => s + d.protein, 0) / loggedCount) : 0;
   const avgCarbs = loggedCount
-    ? Math.round(loggedDays.reduce((s, d) => s + d.carbs, 0) / loggedCount)
-    : 0;
+    ? Math.round(loggedDays.reduce((s, d) => s + d.carbs, 0) / loggedCount) : 0;
   const avgFat = loggedCount
-    ? Math.round(loggedDays.reduce((s, d) => s + d.fat, 0) / loggedCount)
-    : 0;
+    ? Math.round(loggedDays.reduce((s, d) => s + d.fat, 0) / loggedCount) : 0;
 
   const deficitDays = days.filter((d) => d.logged && d.deficit > 0).length;
   const surplusDays = days.filter((d) => d.logged && d.deficit < 0).length;
   const proteinHitDays = days.filter((d) => d.logged && d.proteinHit).length;
-  const gymDays = workouts.length;
+  const gymDays = days.filter((d) => d.isGymDay).length;
 
-  // Weekly verdict
   const verdicts: string[] = [];
-
   if (loggedCount === 0) {
     verdicts.push("No data logged this week.");
   } else {
@@ -114,11 +114,11 @@ export async function GET() {
     else verdicts.push("〰️ Mixed calorie week — aim for more consistency.");
 
     if (proteinHitDays >= 5) verdicts.push("✅ Protein target hit consistently.");
-    else if (proteinHitDays >= 3) verdicts.push("⚠️ Protein was hit " + proteinHitDays + " out of " + loggedCount + " days.");
-    else verdicts.push("❌ Protein intake was low this week. Aim for " + goals.protein + "g daily.");
+    else if (proteinHitDays >= 3) verdicts.push("⚠️ Protein hit " + proteinHitDays + "/" + loggedCount + " days.");
+    else verdicts.push("❌ Low protein this week. Aim for " + goals.protein + "g daily.");
 
     if (gymDays >= 4) verdicts.push("✅ Great gym consistency — " + gymDays + " sessions.");
-    else if (gymDays >= 2) verdicts.push("〰️ " + gymDays + " gym sessions this week. Try for 4+.");
+    else if (gymDays >= 2) verdicts.push("〰️ " + gymDays + " gym sessions. Try for 4+.");
     else verdicts.push("❌ Only " + gymDays + " gym session(s) this week.");
 
     if (avgCalories > 0 && avgCalories < goals.calories - 500)

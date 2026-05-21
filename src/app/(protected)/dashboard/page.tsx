@@ -39,6 +39,12 @@ interface DashboardData {
   sleep: number;
 }
 
+interface UserSplit {
+  id: string;
+  name: string;
+  emoji: string;
+}
+
 function toDateString(date: Date) {
   return date.toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
 }
@@ -76,16 +82,53 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(toDateString(new Date()));
   const [adjusting, setAdjusting] = useState<Record<string, boolean>>({});
+  const [splits, setSplits] = useState<UserSplit[]>([]);
+  const [isGymDay, setIsGymDay] = useState(false);
+  const [gymSplit, setGymSplit] = useState<string | null>(null);
+  const [showGymPicker, setShowGymPicker] = useState(false);
+  const [savingGym, setSavingGym] = useState(false);
 
   async function fetchData(date: string) {
     setLoading(true);
-    const res = await fetch(`/api/dashboard?date=${date}`);
-    const json = await res.json();
+    const [dashRes, gymRes] = await Promise.all([
+      fetch(`/api/dashboard?date=${date}`),
+      fetch(`/api/daily-log?date=${date}`),
+    ]);
+    const json = await dashRes.json();
+    const gymJson = await gymRes.json();
     setData(json);
+    setIsGymDay(gymJson.dailyLog?.isGymDay ?? false);
+    setGymSplit(gymJson.dailyLog?.gymSplit ?? null);
     setLoading(false);
   }
 
-  useEffect(() => { fetchData(selectedDate); }, [selectedDate]);
+  async function fetchSplits() {
+    const res = await fetch("/api/splits");
+    const data = await res.json();
+    setSplits(data);
+  }
+
+  useEffect(() => {
+    fetchData(selectedDate);
+    fetchSplits();
+  }, [selectedDate]);
+
+  async function saveGymStatus(gymDay: boolean, split: string | null) {
+    setSavingGym(true);
+    await fetch("/api/daily-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        date: selectedDate,
+        isGymDay: gymDay,
+        gymSplit: split,
+      }),
+    });
+    setIsGymDay(gymDay);
+    setGymSplit(split);
+    setShowGymPicker(false);
+    setSavingGym(false);
+  }
 
   async function removeMeal(id: string) {
     await fetch(`/api/log-meal/${id}`, { method: "DELETE" });
@@ -97,10 +140,7 @@ export default function DashboardPage() {
     const deltaQuantity = label === "piece" ? delta : delta / log.meal.servingSize;
     const newQuantity = log.quantity + deltaQuantity;
 
-    if (newQuantity <= 0) {
-      await removeMeal(log.id);
-      return;
-    }
+    if (newQuantity <= 0) { await removeMeal(log.id); return; }
 
     setAdjusting((p) => ({ ...p, [log.id]: true }));
     await fetch(`/api/log-meal/${log.id}`, {
@@ -127,6 +167,7 @@ export default function DashboardPage() {
 
   return (
     <main className="mx-auto max-w-2xl p-4">
+      {/* Date navigator */}
       <div className="mb-6 flex items-center justify-between">
         <button onClick={() => changeDate(-1)} className="rounded-xl bg-zinc-800 px-4 py-2 text-sm hover:bg-zinc-700">
           ← Prev
@@ -160,11 +201,9 @@ export default function DashboardPage() {
           {/* Net calorie + steps */}
           {(data.steps > 0 || data.caloriesBurned > 0) && (
             <div className="mb-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-              <div className="flex items-center justify-between mb-3">
+              <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Net Calories</h2>
-                <Link href="/body" className="text-xs text-zinc-500 hover:text-zinc-300">
-                  Log Body →
-                </Link>
+                <Link href="/body" className="text-xs text-zinc-500 hover:text-zinc-300">Log Body →</Link>
               </div>
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div>
@@ -173,13 +212,12 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <p className="text-xs text-zinc-500">Burned</p>
-                  <p className="text-lg font-bold text-orange-400">-{data.caloriesBurned}</p>
+                  <p className="text-lg font-bold text-orange-400">−{data.caloriesBurned}</p>
                 </div>
                 <div>
                   <p className="text-xs text-zinc-500">Net</p>
                   <p className={`text-lg font-bold ${
-                    data.totalCalories - data.caloriesBurned < data.goals.calories
-                      ? "text-blue-400" : "text-rose-400"
+                    data.totalCalories - data.caloriesBurned < data.goals.calories ? "text-blue-400" : "text-rose-400"
                   }`}>
                     {Math.round(data.totalCalories - data.caloriesBurned)}
                   </p>
@@ -192,28 +230,70 @@ export default function DashboardPage() {
                     <span>/ {data.goals.steps.toLocaleString()}</span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
-                    <div
-                      className="h-full rounded-full bg-purple-500"
-                      style={{ width: `${Math.min((data.steps / data.goals.steps) * 100, 100)}%` }}
-                    />
+                    <div className="h-full rounded-full bg-purple-500"
+                      style={{ width: `${Math.min((data.steps / data.goals.steps) * 100, 100)}%` }} />
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* Add meal + body shortcuts */}
+          {/* Gym tracking */}
+          <div className="mb-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold">
+                  {isGymDay ? `🏋️ ${gymSplit ?? "Gym Day"}` : "😴 Rest Day"}
+                </p>
+                <p className="text-xs text-zinc-500">
+                  {isGymDay ? "Marked as gym day" : "Did you work out today?"}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowGymPicker(!showGymPicker)}
+                className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-zinc-700"
+              >
+                {isGymDay ? "Change" : "Mark Gym"}
+              </button>
+            </div>
+
+            {showGymPicker && (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs text-zinc-500">Select today's split:</p>
+                <button
+                  onClick={() => saveGymStatus(false, null)}
+                  className={`w-full rounded-xl px-3 py-2 text-left text-sm ${
+                    !isGymDay ? "bg-zinc-600 text-white" : "bg-zinc-800 hover:bg-zinc-700"
+                  }`}
+                >
+                  😴 Rest Day
+                </button>
+                {splits.filter(s => s.name !== "Rest Day").map((split) => (
+                  <button
+                    key={split.id}
+                    onClick={() => saveGymStatus(true, split.name)}
+                    disabled={savingGym}
+                    className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${
+                      isGymDay && gymSplit === split.name
+                        ? "bg-green-600 text-white"
+                        : "bg-zinc-800 hover:bg-zinc-700"
+                    }`}
+                  >
+                    {split.emoji} {split.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Quick actions */}
           <div className="mb-4 grid grid-cols-2 gap-3">
-            <Link
-              href={`/meals?date=${selectedDate}`}
-              className="flex items-center justify-center rounded-2xl border border-dashed border-zinc-700 py-3 text-sm text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
-            >
+            <Link href={`/meals?date=${selectedDate}`}
+              className="flex items-center justify-center rounded-2xl border border-dashed border-zinc-700 py-3 text-sm text-zinc-400 hover:border-zinc-500 hover:text-zinc-200">
               + Add meal
             </Link>
-            <Link
-              href="/body"
-              className="flex items-center justify-center rounded-2xl border border-dashed border-zinc-700 py-3 text-sm text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
-            >
+            <Link href="/body"
+              className="flex items-center justify-center rounded-2xl border border-dashed border-zinc-700 py-3 text-sm text-zinc-400 hover:border-zinc-500 hover:text-zinc-200">
               ⚖️ Log body
             </Link>
           </div>
@@ -244,25 +324,17 @@ export default function DashboardPage() {
                             C:{Math.round(log.carbs)}g · F:{Math.round(log.fat)}g
                           </p>
                         </div>
-                        <button
-                          onClick={() => removeMeal(log.id)}
-                          className="ml-3 rounded-lg bg-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:bg-red-900 hover:text-red-300"
-                        >✕</button>
+                        <button onClick={() => removeMeal(log.id)}
+                          className="ml-3 rounded-lg bg-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:bg-red-900 hover:text-red-300">
+                          ✕
+                        </button>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => adjustMeal(log, -step)}
-                          disabled={adjusting[log.id]}
-                          className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600 disabled:opacity-50"
-                        >−</button>
-                        <span className="min-w-16 text-center text-sm font-medium">
-                          {formatQuantity(log)}
-                        </span>
-                        <button
-                          onClick={() => adjustMeal(log, step)}
-                          disabled={adjusting[log.id]}
-                          className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600 disabled:opacity-50"
-                        >+</button>
+                        <button onClick={() => adjustMeal(log, -step)} disabled={adjusting[log.id]}
+                          className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600 disabled:opacity-50">−</button>
+                        <span className="min-w-16 text-center text-sm font-medium">{formatQuantity(log)}</span>
+                        <button onClick={() => adjustMeal(log, step)} disabled={adjusting[log.id]}
+                          className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600 disabled:opacity-50">+</button>
                         <span className="text-xs text-zinc-500">
                           {isPiece ? "pieces" : log.meal.servingLabel}
                         </span>
