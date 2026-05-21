@@ -82,7 +82,7 @@ export async function GET() {
       netCalories,
       deficit,
       proteinHit,
-      logged: !!log,
+      logged: !!log || !!bodyLog,
       isGymDay: log?.isGymDay ?? false,
       gymSplit: log?.gymSplit ?? null,
     });
