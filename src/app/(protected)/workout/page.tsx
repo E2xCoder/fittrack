@@ -49,22 +49,27 @@ export default function WorkoutPage() {
   const [newSplitName, setNewSplitName] = useState("");
   const [newSplitEmoji, setNewSplitEmoji] = useState("🏋️");
   const inputRef = useRef<HTMLInputElement>(null);
+  const initializedRef = useRef(false);
 
   useEffect(() => { fetchSplits(); }, []);
 
   useEffect(() => {
-    if (splits.length > 0) loadTodayWorkout();
-  }, [splits]);
+    if (splits.length > 0 && !initializedRef.current) {
+      initializedRef.current = true;
+      const firstSplit = splits[0].name;
+      setSelectedSplit(firstSplit);
+      loadTodayWorkout(firstSplit);
+    }
+  }, [splits.length]);
 
   async function fetchSplits() {
     const res = await fetch("/api/splits");
     const data = await res.json();
     setSplits(data);
-    if (data.length > 0) setSelectedSplit(data[0].name);
   }
 
-  async function loadTodayWorkout() {
-    const res = await fetch(`/api/workouts/today?split=${encodeURIComponent(selectedSplit)}`);
+  async function loadTodayWorkout(splitName: string) {
+    const res = await fetch(`/api/workouts/today?split=${encodeURIComponent(splitName)}`);
     const data = await res.json();
     if (data.workout) {
       setNotes(data.workout.notes ?? "");
@@ -82,6 +87,9 @@ export default function WorkoutPage() {
             : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
         }))
       );
+    } else {
+      setExercises([]);
+      setNotes("");
     }
   }
 
@@ -102,25 +110,7 @@ export default function WorkoutPage() {
     setSelectedSplit(splitName);
     setExercises([]);
     setNotes("");
-    const res = await fetch(`/api/workouts/today?split=${encodeURIComponent(splitName)}`);
-    const data = await res.json();
-    if (data.workout) {
-      setNotes(data.workout.notes ?? "");
-      setExercises(
-        data.workout.exercises.map((ex: any) => ({
-          name: ex.name,
-          sets: ex.sets.length > 0
-            ? ex.sets.map((s: any) => ({
-                setNumber: s.setNumber,
-                weight: s.weight ? String(s.weight) : "",
-                reps: s.reps ? String(s.reps) : "",
-                sets: s.sets ? String(s.sets) : "1",
-                rpe: s.rpe ? String(s.rpe) : "",
-              }))
-            : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
-        }))
-      );
-    }
+    await loadTodayWorkout(splitName);
   }
 
   async function deleteSplit(id: string) {
@@ -233,21 +223,17 @@ export default function WorkoutPage() {
 
   return (
     <main className="mx-auto max-w-2xl p-4">
-      {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Workout</h1>
           <p className="text-sm text-zinc-400">Log today's session</p>
         </div>
         <div className="flex gap-2">
-          <Link href="/workout/history"
-            className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-zinc-700">
+          <Link href="/workout/history" className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-zinc-700">
             📋 History
           </Link>
-          <button
-            onClick={() => setShowSplitManager(!showSplitManager)}
-            className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-zinc-700"
-          >
+          <button onClick={() => setShowSplitManager(!showSplitManager)}
+            className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-zinc-700">
             ⚙️ Splits
           </button>
         </div>
@@ -265,19 +251,13 @@ export default function WorkoutPage() {
             ))}
           </div>
           <div className="flex gap-2">
-            <input
-              placeholder="Emoji"
-              value={newSplitEmoji}
+            <input placeholder="Emoji" value={newSplitEmoji}
               onChange={(e) => setNewSplitEmoji(e.target.value)}
-              className="w-16 rounded-xl bg-zinc-800 p-2 text-center outline-none"
-            />
-            <input
-              placeholder="Split name (e.g. Push Day)"
-              value={newSplitName}
+              className="w-16 rounded-xl bg-zinc-800 p-2 text-center outline-none" />
+            <input placeholder="Split name (e.g. Push Day)" value={newSplitName}
               onChange={(e) => setNewSplitName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && createSplit()}
-              className="flex-1 rounded-xl bg-zinc-800 p-2 outline-none"
-            />
+              className="flex-1 rounded-xl bg-zinc-800 p-2 outline-none" />
             <button onClick={createSplit} className="rounded-xl bg-green-600 px-3 text-sm font-semibold hover:bg-green-700">
               + Add
             </button>
@@ -289,15 +269,10 @@ export default function WorkoutPage() {
         <p className="mb-3 text-sm font-medium text-zinc-400">Today's split</p>
         <div className="grid grid-cols-1 gap-2">
           {splits.map((split) => (
-            <button
-              key={split.id}
-              onClick={() => handleSplitSelect(split.name)}
+            <button key={split.id} onClick={() => handleSplitSelect(split.name)}
               className={`rounded-xl px-4 py-3 text-left text-sm font-medium transition ${
-                selectedSplit === split.name
-                  ? "bg-green-600 text-white"
-                  : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
-              }`}
-            >
+                selectedSplit === split.name ? "bg-green-600 text-white" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+              }`}>
               {split.emoji} {split.name}
             </button>
           ))}
@@ -308,17 +283,11 @@ export default function WorkoutPage() {
         <>
           <div className="relative mb-6">
             <div className="flex gap-3">
-              <input
-                ref={inputRef}
-                placeholder="Search exercise (e.g. Incline Bench)"
+              <input ref={inputRef} placeholder="Search exercise (e.g. Incline Bench)"
                 value={newExerciseName}
                 onChange={(e) => handleExerciseInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") addExercise();
-                  if (e.key === "Escape") setSuggestions([]);
-                }}
-                className="flex-1 rounded-xl bg-zinc-900 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
-              />
+                onKeyDown={(e) => { if (e.key === "Enter") addExercise(); if (e.key === "Escape") setSuggestions([]); }}
+                className="flex-1 rounded-xl bg-zinc-900 p-3 outline-none focus:ring-1 focus:ring-zinc-600" />
               <button onClick={() => addExercise()} className="rounded-xl bg-green-600 px-4 font-semibold hover:bg-green-700">
                 + Add
               </button>
@@ -327,19 +296,14 @@ export default function WorkoutPage() {
             {suggestions.length > 0 && (
               <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-xl">
                 {suggestions.map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    onClick={() => selectSuggestion(suggestion)}
-                    className="flex w-full items-center px-4 py-3 text-left text-sm hover:bg-zinc-800"
-                  >
+                  <button key={suggestion} onClick={() => selectSuggestion(suggestion)}
+                    className="flex w-full items-center px-4 py-3 text-left text-sm hover:bg-zinc-800">
                     {suggestion}
                   </button>
                 ))}
                 {newExerciseName && !suggestions.includes(newExerciseName) && (
-                  <button
-                    onClick={() => addExercise(newExerciseName)}
-                    className="flex w-full items-center px-4 py-3 text-left text-sm text-green-400 hover:bg-zinc-800"
-                  >
+                  <button onClick={() => addExercise(newExerciseName)}
+                    className="flex w-full items-center px-4 py-3 text-left text-sm text-green-400 hover:bg-zinc-800">
                     + Add "{newExerciseName}" as custom exercise
                   </button>
                 )}
@@ -376,10 +340,7 @@ export default function WorkoutPage() {
                   )}
 
                   <div className="mb-2 grid grid-cols-4 gap-2 px-1 text-xs text-zinc-500">
-                    <span>kg</span>
-                    <span>Reps</span>
-                    <span>Sets</span>
-                    <span>RPE</span>
+                    <span>kg</span><span>Reps</span><span>Sets</span><span>RPE</span>
                   </div>
 
                   <div className="space-y-2">
@@ -417,13 +378,10 @@ export default function WorkoutPage() {
           </div>
 
           {exercises.length > 0 && (
-            <textarea
-              placeholder="Workout notes (optional)"
-              value={notes}
+            <textarea placeholder="Workout notes (optional)" value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="mt-4 w-full rounded-xl bg-zinc-900 p-3 text-sm outline-none focus:ring-1 focus:ring-zinc-600"
-              rows={2}
-            />
+              rows={2} />
           )}
         </>
       )}
