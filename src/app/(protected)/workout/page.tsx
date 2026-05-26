@@ -311,27 +311,27 @@ export default function WorkoutPage() {
             )}
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             {exercises.map((exercise, exIdx) => {
               const prev = previousPerf[exercise.name];
               return (
-                <div key={exIdx} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h2 className="font-semibold">{exercise.name}</h2>
-                    <button onClick={() => removeExercise(exIdx)} className="text-xs text-zinc-500 hover:text-red-400">
-                      ✕ Remove
+                <div key={exIdx} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h2 className="text-sm font-semibold">{exercise.name}</h2>
+                    <button onClick={() => removeExercise(exIdx)} className="text-xs text-zinc-600 hover:text-red-400">
+                      ✕
                     </button>
                   </div>
 
                   {prev && (
-                    <div className="mb-3 rounded-xl bg-zinc-800 px-3 py-2">
-                      <p className="mb-1 text-xs text-zinc-500">
+                    <div className="mb-2 rounded-lg bg-zinc-800/60 px-2 py-1.5">
+                      <p className="mb-0.5 text-xs text-zinc-600">
                         Last · {new Date(prev.date).toLocaleDateString("en-GB")}
                       </p>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5">
                         {prev.sets.map((s, i) => (
-                          <span key={i} className="text-xs text-zinc-300">
-                            {s.weight ?? "?"}kg × {s.reps ?? "?"} reps × {s.sets ?? 1} sets
+                          <span key={i} className="text-xs text-zinc-400">
+                            {s.weight ?? "?"}kg×{s.reps ?? "?"}×{s.sets ?? 1}
                             {s.rpe && ` @${s.rpe}`}
                           </span>
                         ))}
@@ -339,29 +339,32 @@ export default function WorkoutPage() {
                     </div>
                   )}
 
-                  <div className="mb-2 grid grid-cols-4 gap-2 px-1 text-xs text-zinc-500">
-                    <span>kg</span><span>Reps</span><span>Sets</span><span>RPE</span>
+                  <div className="mb-1 grid grid-cols-4 gap-1.5 px-0.5 text-xs text-zinc-600">
+                    <span>kg</span>
+                    <span>Reps</span>
+                    <span>Sets</span>
+                    <span>RPE</span>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     {exercise.sets.map((set, setIdx) => (
-                      <div key={setIdx} className="grid grid-cols-4 gap-2 items-center">
+                      <div key={setIdx} className="grid grid-cols-4 gap-1.5 items-center">
                         <input type="number" placeholder="0" value={set.weight}
                           onChange={(e) => updateSet(exIdx, setIdx, "weight", e.target.value)}
-                          className="rounded-lg bg-zinc-800 p-2 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600" />
+                          className="rounded-lg bg-zinc-800 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600" />
                         <input type="number" placeholder="0" value={set.reps}
                           onChange={(e) => updateSet(exIdx, setIdx, "reps", e.target.value)}
-                          className="rounded-lg bg-zinc-800 p-2 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600" />
+                          className="rounded-lg bg-zinc-800 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600" />
                         <input type="number" placeholder="1" value={set.sets}
                           onChange={(e) => updateSet(exIdx, setIdx, "sets", e.target.value)}
-                          className="rounded-lg bg-zinc-800 p-2 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600" />
+                          className="rounded-lg bg-zinc-800 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600" />
                         <div className="flex gap-1">
                           <input type="number" placeholder="—" min="1" max="10" value={set.rpe}
                             onChange={(e) => updateSet(exIdx, setIdx, "rpe", e.target.value)}
-                            className="w-full rounded-lg bg-zinc-800 p-2 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600" />
+                            className="w-full rounded-lg bg-zinc-800 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600" />
                           {exercise.sets.length > 1 && (
                             <button onClick={() => removeSet(exIdx, setIdx)}
-                              className="px-1 text-xs text-zinc-600 hover:text-red-400">✕</button>
+                              className="px-1 text-xs text-zinc-700 hover:text-red-400">✕</button>
                           )}
                         </div>
                       </div>
@@ -369,7 +372,7 @@ export default function WorkoutPage() {
                   </div>
 
                   <button onClick={() => addSet(exIdx)}
-                    className="mt-3 w-full rounded-xl bg-zinc-800 py-2 text-sm text-zinc-400 hover:bg-zinc-700">
+                    className="mt-2 w-full rounded-lg bg-zinc-800/60 py-1.5 text-xs text-zinc-500 hover:bg-zinc-800">
                     + Add Variation
                   </button>
                 </div>
