@@ -26,6 +26,12 @@ interface Goals {
   steps: number;
 }
 
+interface UserSplit {
+  id: string;
+  name: string;
+  emoji: string;
+}
+
 interface DashboardData {
   totalCalories: number;
   totalProtein: number;
@@ -37,12 +43,9 @@ interface DashboardData {
   caloriesBurned: number;
   water: number;
   sleep: number;
-}
-
-interface UserSplit {
-  id: string;
-  name: string;
-  emoji: string;
+  isGymDay: boolean;
+  gymSplit: string | null;
+  splits: UserSplit[];
 }
 
 function toDateString(date: Date) {
@@ -82,35 +85,19 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(toDateString(new Date()));
   const [adjusting, setAdjusting] = useState<Record<string, boolean>>({});
-  const [splits, setSplits] = useState<UserSplit[]>([]);
-  const [isGymDay, setIsGymDay] = useState(false);
-  const [gymSplit, setGymSplit] = useState<string | null>(null);
   const [showGymPicker, setShowGymPicker] = useState(false);
   const [savingGym, setSavingGym] = useState(false);
 
   async function fetchData(date: string) {
     setLoading(true);
-    const [dashRes, gymRes] = await Promise.all([
-      fetch(`/api/dashboard?date=${date}`),
-      fetch(`/api/daily-log?date=${date}`),
-    ]);
-    const json = await dashRes.json();
-    const gymJson = await gymRes.json();
+    const res = await fetch(`/api/dashboard?date=${date}`);
+    const json = await res.json();
     setData(json);
-    setIsGymDay(gymJson.dailyLog?.isGymDay ?? false);
-    setGymSplit(gymJson.dailyLog?.gymSplit ?? null);
     setLoading(false);
-  }
-
-  async function fetchSplits() {
-    const res = await fetch("/api/splits");
-    const data = await res.json();
-    setSplits(data);
   }
 
   useEffect(() => {
     fetchData(selectedDate);
-    fetchSplits();
   }, [selectedDate]);
 
   async function saveGymStatus(gymDay: boolean, split: string | null) {
@@ -124,8 +111,7 @@ export default function DashboardPage() {
         gymSplit: split,
       }),
     });
-    setIsGymDay(gymDay);
-    setGymSplit(split);
+    setData(prev => prev ? { ...prev, isGymDay: gymDay, gymSplit: split } : prev);
     setShowGymPicker(false);
     setSavingGym(false);
   }
@@ -167,7 +153,6 @@ export default function DashboardPage() {
 
   return (
     <main className="mx-auto max-w-2xl p-4">
-      {/* Date navigator */}
       <div className="mb-6 flex items-center justify-between">
         <button onClick={() => changeDate(-1)} className="rounded-xl bg-zinc-800 px-4 py-2 text-sm hover:bg-zinc-700">
           ← Prev
@@ -190,7 +175,6 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          {/* Macro bars */}
           <div className="mb-4 grid grid-cols-2 gap-3">
             <MacroBar label="Calories" current={data.totalCalories} target={data.goals.calories} unit="kcal" color="bg-green-500" />
             <MacroBar label="Protein" current={data.totalProtein} target={data.goals.protein} unit="g" color="bg-blue-500" />
@@ -198,7 +182,6 @@ export default function DashboardPage() {
             <MacroBar label="Fat" current={data.totalFat} target={data.goals.fat} unit="g" color="bg-rose-500" />
           </div>
 
-          {/* Net calorie + steps */}
           {(data.steps > 0 || data.caloriesBurned > 0) && (
             <div className="mb-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
               <div className="mb-3 flex items-center justify-between">
@@ -238,22 +221,21 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Gym tracking */}
           <div className="mb-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold">
-                  {isGymDay ? `🏋️ ${gymSplit ?? "Gym Day"}` : "😴 Rest Day"}
+                  {data.isGymDay ? `🏋️ ${data.gymSplit ?? "Gym Day"}` : "😴 Rest Day"}
                 </p>
                 <p className="text-xs text-zinc-500">
-                  {isGymDay ? "Marked as gym day" : "Did you work out today?"}
+                  {data.isGymDay ? "Marked as gym day" : "Did you work out today?"}
                 </p>
               </div>
               <button
                 onClick={() => setShowGymPicker(!showGymPicker)}
                 className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-zinc-700"
               >
-                {isGymDay ? "Change" : "Mark Gym"}
+                {data.isGymDay ? "Change" : "Mark Gym"}
               </button>
             </div>
 
@@ -263,18 +245,18 @@ export default function DashboardPage() {
                 <button
                   onClick={() => saveGymStatus(false, null)}
                   className={`w-full rounded-xl px-3 py-2 text-left text-sm ${
-                    !isGymDay ? "bg-zinc-600 text-white" : "bg-zinc-800 hover:bg-zinc-700"
+                    !data.isGymDay ? "bg-zinc-600 text-white" : "bg-zinc-800 hover:bg-zinc-700"
                   }`}
                 >
                   😴 Rest Day
                 </button>
-                {splits.filter(s => s.name !== "Rest Day").map((split) => (
+                {data.splits.filter(s => s.name !== "Rest Day").map((split) => (
                   <button
                     key={split.id}
                     onClick={() => saveGymStatus(true, split.name)}
                     disabled={savingGym}
                     className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${
-                      isGymDay && gymSplit === split.name
+                      data.isGymDay && data.gymSplit === split.name
                         ? "bg-green-600 text-white"
                         : "bg-zinc-800 hover:bg-zinc-700"
                     }`}
@@ -286,7 +268,6 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Quick actions */}
           <div className="mb-4 grid grid-cols-2 gap-3">
             <Link href={`/meals?date=${selectedDate}`}
               className="flex items-center justify-center rounded-2xl border border-dashed border-zinc-700 py-3 text-sm text-zinc-400 hover:border-zinc-500 hover:text-zinc-200">
@@ -298,7 +279,6 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          {/* Meal log */}
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-semibold">
