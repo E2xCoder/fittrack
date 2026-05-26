@@ -245,18 +245,21 @@ export default function BodyPage() {
   const caloriesBurned = Math.round(steps * 0.04 * ((userProfile.weight ?? 70) / 70));
 
   const filteredHistory = useMemo(() => {
-  const now = new Date();
-  return history.filter(log => {
-    const logDate = new Date(log.date.includes("T") ? log.date : log.date + "T12:00:00");
-    if (period === "week") {
-      const weekAgo = new Date(now);
-      weekAgo.setDate(now.getDate() - 6);
-      weekAgo.setHours(0, 0, 0, 0);
-      return logDate >= weekAgo;
-    }
-    return true;
-  });
-}, [history, period]);
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - daysFromMonday);
+    monday.setHours(0, 0, 0, 0);
+
+    return history.filter(log => {
+      const logDate = new Date(log.date.includes("T") ? log.date : log.date + "T12:00:00");
+      if (period === "week") {
+        return logDate >= monday;
+      }
+      return true;
+    });
+  }, [history, period]);
 
   return (
     <main className="mx-auto max-w-2xl p-4">
