@@ -29,25 +29,31 @@ export async function GET() {
   };
 
   const today = getTodayInTimezone();
-  const sevenDaysAgo = new Date(today);
-  sevenDaysAgo.setDate(today.getDate() - 6);
+
+  const dayOfWeek = today.getDay();
+  const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - daysFromMonday);
+  monday.setHours(0, 0, 0, 0);
+
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
 
   const [logs, bodyLogs] = await Promise.all([
     prisma.dailyLog.findMany({
-      where: { userId, date: { gte: sevenDaysAgo, lte: today } },
+      where: { userId, date: { gte: monday, lte: sunday } },
       orderBy: { date: "asc" },
     }),
     prisma.bodyLog.findMany({
-      where: { userId, date: { gte: sevenDaysAgo, lte: today } },
+      where: { userId, date: { gte: monday, lte: sunday } },
       orderBy: { date: "asc" },
     }),
   ]);
 
-  // Build daily breakdown
   const days = [];
   for (let i = 0; i < 7; i++) {
-    const d = new Date(sevenDaysAgo);
-    d.setDate(sevenDaysAgo.getDate() + i);
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
     const dateStr = d.toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
 
     const log = logs.find((l) =>
@@ -65,7 +71,6 @@ export async function GET() {
     const steps = bodyLog?.steps ?? 0;
     const caloriesBurned = bodyLog?.caloriesBurned ?? 0;
 
-    // Net calories = eaten - burned from steps
     const netCalories = calories - caloriesBurned;
     const deficit = goals.calories - netCalories;
     const proteinHit = protein >= goals.protein * 0.9;
@@ -105,34 +110,75 @@ export async function GET() {
   const proteinHitDays = days.filter((d) => d.logged && d.proteinHit).length;
   const gymDays = days.filter((d) => d.isGymDay).length;
 
+  const avgSteps = days.filter(d => d.steps > 0).length > 0
+    ? Math.round(days.filter(d => d.steps > 0).reduce((s, d) => s + d.steps, 0) / days.filter(d => d.steps > 0).length)
+    : 0;
+
   const verdicts: string[] = [];
+
   if (loggedCount === 0) {
-    verdicts.push("No data logged this week.");
+    verdicts.push("📭 No data logged this week. Start tracking to see insights.");
   } else {
-    if (deficitDays >= 4) verdicts.push("✅ Good calorie deficit this week.");
-    else if (surplusDays >= 4) verdicts.push("⚠️ You were in surplus most days.");
+    // Kalori
+    if (deficitDays >= 5) verdicts.push("✅ Excellent calorie discipline — deficit " + deficitDays + "/7 days.");
+    else if (deficitDays >= 4) verdicts.push("✅ Good calorie deficit this week — " + deficitDays + " days.");
+    else if (surplusDays >= 5) verdicts.push("⚠️ Heavy surplus week — " + surplusDays + " days over target.");
+    else if (surplusDays >= 3) verdicts.push("⚠️ More surplus than deficit days this week.");
     else verdicts.push("〰️ Mixed calorie week — aim for more consistency.");
 
-    if (proteinHitDays >= 5) verdicts.push("✅ Protein target hit consistently.");
-    else if (proteinHitDays >= 3) verdicts.push("⚠️ Protein hit " + proteinHitDays + "/" + loggedCount + " days.");
-    else verdicts.push("❌ Low protein this week. Aim for " + goals.protein + "g daily.");
+    // Protein
+    if (proteinHitDays === loggedCount) verdicts.push("🔥 Perfect protein week — hit target every logged day!");
+    else if (proteinHitDays >= 5) verdicts.push("✅ Protein target hit consistently — " + proteinHitDays + " days.");
+    else if (proteinHitDays >= 3) verdicts.push("⚠️ Protein hit " + proteinHitDays + "/" + loggedCount + " days — push harder.");
+    else if (proteinHitDays === 0) verdicts.push("❌ Protein target missed all week. Aim for " + goals.protein + "g daily.");
+    else verdicts.push("❌ Low protein this week — only " + proteinHitDays + " days hit. Aim for " + goals.protein + "g.");
 
-    if (gymDays >= 4) verdicts.push("✅ Great gym consistency — " + gymDays + " sessions.");
+    // Gym
+    if (gymDays >= 5) verdicts.push("💪 Beast mode — " + gymDays + " gym sessions this week!");
+    else if (gymDays >= 4) verdicts.push("✅ Great gym consistency — " + gymDays + " sessions.");
+    else if (gymDays === 3) verdicts.push("〰️ 3 gym sessions — solid but room to improve.");
     else if (gymDays >= 2) verdicts.push("〰️ " + gymDays + " gym sessions. Try for 4+.");
-    else verdicts.push("❌ Only " + gymDays + " gym session(s) this week.");
+    else if (gymDays === 1) verdicts.push("❌ Only 1 gym session this week — get back on track.");
+    else verdicts.push("❌ No gym sessions logged this week.");
 
-    if (avgCalories > 0 && avgCalories < goals.calories - 500)
-      verdicts.push("⚠️ Average calories very low — make sure you're eating enough.");
+    // Kalori seviyesi
+    if (avgCalories > 0 && avgCalories < goals.calories - 700)
+      verdicts.push("⚠️ Average calories very low (" + avgCalories + " kcal) — risk of muscle loss.");
+    else if (avgCalories > goals.calories + 500)
+      verdicts.push("⚠️ Average calories high (" + avgCalories + " kcal) — " + (avgCalories - goals.calories) + " over target.");
+
+    // Adım
+    if (avgSteps >= 10000) verdicts.push("🚶 Amazing step count — averaging " + avgSteps.toLocaleString() + " steps/day!");
+    else if (avgSteps >= 7500) verdicts.push("🚶 Good step count — averaging " + avgSteps.toLocaleString() + " steps/day.");
+    else if (avgSteps >= 5000) verdicts.push("〰️ Average steps " + avgSteps.toLocaleString() + "/day — try to hit 7,500+.");
+    else if (avgSteps > 0) verdicts.push("⚠️ Low step count this week — averaging only " + avgSteps.toLocaleString() + "/day.");
+
+    // Kombinasyon
+    if (deficitDays >= 4 && proteinHitDays >= 4 && gymDays >= 3)
+      verdicts.push("🏆 Excellent week overall — great balance of diet and training!");
+    else if (deficitDays >= 4 && gymDays === 0)
+      verdicts.push("💡 Good diet but no gym — combine with training for best results.");
+    else if (gymDays >= 4 && proteinHitDays < 3)
+      verdicts.push("💡 Training hard but protein is low — recovery will suffer.");
+
+    // Logging streak
+    if (loggedCount === 7) verdicts.push("📊 Perfect logging week — all 7 days tracked!");
+    else if (loggedCount >= 5) verdicts.push("📊 " + loggedCount + "/7 days logged — good consistency.");
+    else verdicts.push("📊 Only " + loggedCount + "/7 days logged — try to track every day.");
   }
+
+  const weekLabel = `${monday.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${sunday.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
 
   return NextResponse.json({
     goals,
     days,
+    weekLabel,
     summary: {
       avgCalories,
       avgProtein,
       avgCarbs,
       avgFat,
+      avgSteps,
       deficitDays,
       surplusDays,
       proteinHitDays,
