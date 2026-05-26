@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 interface BodyLog {
   weight?: number;
@@ -244,17 +245,19 @@ export default function BodyPage() {
   const steps = Number(form.steps) || 0;
   const caloriesBurned = Math.round(steps * 0.04 * ((userProfile.weight ?? 70) / 70));
 
-  // Filter history by period
+  const filteredHistory = useMemo(() => {
   const now = new Date();
-  const filteredHistory = history.filter(log => {
-    const logDate = new Date(log.date + "T12:00:00");
+  return history.filter(log => {
+    const logDate = new Date(log.date.includes("T") ? log.date : log.date + "T12:00:00");
     if (period === "week") {
       const weekAgo = new Date(now);
       weekAgo.setDate(now.getDate() - 6);
+      weekAgo.setHours(0, 0, 0, 0);
       return logDate >= weekAgo;
     }
-    return true; // month = all 30 days
+    return true;
   });
+}, [history, period]);
 
   return (
     <main className="mx-auto max-w-2xl p-4">
