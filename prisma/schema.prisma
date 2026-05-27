@@ -7,15 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum MealCategory {
-  MEAL_1
-  MEAL_2
-  PRE_WORKOUT
-  POST_WORKOUT
-  SNACK
-  SHAKE
-}
-
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -32,14 +23,15 @@ model User {
   fatTarget     Int?
   height        Float?
   weight        Float?
-  stepTarget    Int?   @default(10000)
-  waterTarget   Float? @default(2.5)
-  sleepTarget   Float? @default(8)
+  stepTarget    Int?    @default(10000)
+  waterTarget   Float?  @default(2.5)
+  sleepTarget   Float?  @default(8)
   apiToken      String? @unique
 
   meals          Meal[]
   mealPacks      MealPack[]
   mealLogs       MealLog[]
+  mealCategories UserMealCategory[]
   dailyLogs      DailyLog[]
   workouts       Workout[]
   exercises      Exercise[]
@@ -51,6 +43,20 @@ model User {
   accounts       Account[]
 
   @@map("user")
+}
+
+model UserMealCategory {
+  id         String   @id @default(cuid())
+  userId     String
+  name       String
+  emoji      String   @default("🍽️")
+  orderIndex Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meals Meal[]
+
+  @@index([userId])
 }
 
 model BodyLog {
@@ -90,7 +96,7 @@ model UserSplit {
 }
 
 model Meal {
-  id           String       @id @default(cuid())
+  id           String  @id @default(cuid())
   userId       String
   name         String
   calories     Float
@@ -99,20 +105,22 @@ model Meal {
   fat          Float
   fiber        Float?
   sodium       Float?
-  servingSize  Float        @default(1)
-  servingLabel String       @default("piece")
+  servingSize  Float   @default(1)
+  servingLabel String  @default("piece")
   ingredients  String?
   imageUrl     String?
-  category     MealCategory @default(SNACK)
-  isFavorite   Boolean      @default(false)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  categoryId   String?
+  isFavorite   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category      UserMealCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   mealLogs      MealLog[]
   mealPackItems MealPackItem[]
 
   @@index([userId])
+  @@index([categoryId])
 }
 
 model MealPack {
@@ -142,17 +150,17 @@ model MealPackItem {
 }
 
 model MealLog {
-  id           String    @id @default(cuid())
-  userId       String
-  mealId       String?
-  dailyLogId   String?
-  quantity     Float     @default(1)
-  calories     Float
-  protein      Float
-  carbs        Float
-  fat          Float
+  id         String   @id @default(cuid())
+  userId     String
+  mealId     String?
+  dailyLogId String?
+  quantity   Float    @default(1)
+  calories   Float
+  protein    Float
+  carbs      Float
+  fat        Float
   mealSnapshot Json?
-  createdAt    DateTime  @default(now())
+  createdAt  DateTime @default(now())
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   meal     Meal?     @relation(fields: [mealId], references: [id], onDelete: SetNull)
