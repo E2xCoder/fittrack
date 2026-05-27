@@ -3,8 +3,12 @@
 import { useEffect, useMemo, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
-type MealCategory = "MEAL_1" | "MEAL_2" | "PRE_WORKOUT" | "POST_WORKOUT" | "SNACK" | "SHAKE";
-type ServingType = "piece" | "g" | "ml";
+interface UserMealCategory {
+  id: string;
+  name: string;
+  emoji: string;
+  orderIndex: number;
+}
 
 interface Meal {
   id: string;
@@ -17,7 +21,8 @@ interface Meal {
   sodium?: number;
   servingSize: number;
   servingLabel: string;
-  category: MealCategory;
+  categoryId: string | null;
+  category: UserMealCategory | null;
   isFavorite: boolean;
 }
 
@@ -34,14 +39,7 @@ interface MealPack {
   items: MealPackItem[];
 }
 
-const CATEGORY_LABELS: Record<MealCategory, string> = {
-  MEAL_1: "Meal 1",
-  MEAL_2: "Meal 2",
-  PRE_WORKOUT: "Pre-Workout",
-  POST_WORKOUT: "Post-Workout",
-  SNACK: "Snack",
-  SHAKE: "Shake",
-};
+type ServingType = "piece" | "g" | "ml";
 
 function MealsContent() {
   const searchParams = useSearchParams();
@@ -49,15 +47,21 @@ function MealsContent() {
 
   const [meals, setMeals] = useState<Meal[]>([]);
   const [packs, setPacks] = useState<MealPack[]>([]);
+  const [categories, setCategories] = useState<UserMealCategory[]>([]);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<MealCategory | "ALL">("ALL");
+  const [filter, setFilter] = useState<string>("ALL");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [added, setAdded] = useState<Record<string, boolean>>({});
-  const [activeTab, setActiveTab] = useState<"meals" | "packs">("meals");
+  const [activeTab, setActiveTab] = useState<"meals" | "packs" | "categories">("meals");
   const [newPackName, setNewPackName] = useState("");
   const [expandedPack, setExpandedPack] = useState<string | null>(null);
   const [loggedPack, setLoggedPack] = useState<Record<string, boolean>>({});
+
+  // Category manager state
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatEmoji, setNewCatEmoji] = useState("🍽️");
+  const [editingCat, setEditingCat] = useState<UserMealCategory | null>(null);
 
   const [form, setForm] = useState({
     name: "",
@@ -69,7 +73,7 @@ function MealsContent() {
     sodium: "",
     servingSize: "100",
     servingType: "g" as ServingType,
-    category: "SNACK" as MealCategory,
+    categoryId: "",
     isFavorite: false,
   });
 
@@ -78,15 +82,13 @@ function MealsContent() {
     const data = await res.json();
     setMeals(data.meals);
     setPacks(data.packs);
+    setCategories(data.categories);
   }
 
-  useEffect(() => {
-    fetchAll();
-  }, []);
+  useEffect(() => { fetchAll(); }, []);
 
   async function saveMeal() {
-    if (!form.name || form.calories === "") 
-      { alert("Fill name and calories"); return; }
+    if (!form.name || form.calories === "") { alert("Fill name and calories"); return; }
     const servingLabel = form.servingType;
     const servingSize = form.servingType === "piece" ? 1 : Number(form.servingSize) || 100;
     const payload = {
@@ -95,11 +97,11 @@ function MealsContent() {
       protein: Number(form.protein) || 0,
       carbs: Number(form.carbs) || 0,
       fat: Number(form.fat) || 0,
-      fiber: Number(form.fiber) || 0,
-      sodium: Number(form.sodium) || 0,
+      fiber: Number(form.fiber) || null,
+      sodium: Number(form.sodium) || null,
       servingSize,
       servingLabel,
-      category: form.category,
+      categoryId: form.categoryId || null,
       isFavorite: form.isFavorite,
     };
     const method = editingId ? "PUT" : "POST";
@@ -118,7 +120,7 @@ function MealsContent() {
     await fetch(`/api/meals/${meal.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...meal, isFavorite: !meal.isFavorite }),
+      body: JSON.stringify({ ...meal, categoryId: meal.categoryId, isFavorite: !meal.isFavorite }),
     });
     fetchAll();
   }
@@ -183,6 +185,34 @@ function MealsContent() {
     setTimeout(() => setLoggedPack((p) => ({ ...p, [packId]: false })), 2000);
   }
 
+  async function createCategory() {
+    if (!newCatName.trim()) return;
+    await fetch("/api/meal-categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newCatName, emoji: newCatEmoji }),
+    });
+    setNewCatName("");
+    setNewCatEmoji("🍽️");
+    fetchAll();
+  }
+
+  async function updateCategory() {
+    if (!editingCat) return;
+    await fetch(`/api/meal-categories/${editingCat.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: editingCat.name, emoji: editingCat.emoji }),
+    });
+    setEditingCat(null);
+    fetchAll();
+  }
+
+  async function deleteCategory(id: string) {
+    await fetch(`/api/meal-categories/${id}`, { method: "DELETE" });
+    fetchAll();
+  }
+
   function editMeal(meal: Meal) {
     setEditingId(meal.id);
     const servingType: ServingType =
@@ -197,7 +227,7 @@ function MealsContent() {
       sodium: String(meal.sodium ?? ""),
       servingSize: String(meal.servingSize),
       servingType,
-      category: meal.category,
+      categoryId: meal.categoryId ?? "",
       isFavorite: meal.isFavorite,
     });
     setActiveTab("meals");
@@ -207,17 +237,9 @@ function MealsContent() {
   function resetForm() {
     setEditingId(null);
     setForm({
-      name: "",
-      calories: "",
-      protein: "",
-      carbs: "",
-      fat: "",
-      fiber: "",
-      sodium: "",
-      servingSize: "100",
-      servingType: "g",
-      category: "SNACK",
-      isFavorite: false,
+      name: "", calories: "", protein: "", carbs: "", fat: "",
+      fiber: "", sodium: "", servingSize: "100", servingType: "g",
+      categoryId: "", isFavorite: false,
     });
   }
 
@@ -250,8 +272,8 @@ function MealsContent() {
   const filteredMeals = useMemo(() => {
     return meals.filter((meal) => {
       const matchesSearch = meal.name.toLowerCase().includes(search.toLowerCase());
-      const matchesType = filter === "ALL" || meal.category === filter;
-      return matchesSearch && matchesType;
+      const matchesFilter = filter === "ALL" || meal.categoryId === filter;
+      return matchesSearch && matchesFilter;
     });
   }, [meals, search, filter]);
 
@@ -272,34 +294,33 @@ function MealsContent() {
         )}
       </div>
 
+      {/* Tabs */}
       <div className="mb-6 flex rounded-xl bg-zinc-900 p-1">
-        <button
-          onClick={() => setActiveTab("meals")}
-          className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${activeTab === "meals" ? "bg-zinc-700 text-white" : "text-zinc-400"}`}
-        >Meals</button>
-        <button
-          onClick={() => setActiveTab("packs")}
-          className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${activeTab === "packs" ? "bg-zinc-700 text-white" : "text-zinc-400"}`}
-        >Packs 📦</button>
+        {(["meals", "packs", "categories"] as const).map((tab) => (
+          <button key={tab} onClick={() => setActiveTab(tab)}
+            className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${activeTab === tab ? "bg-zinc-700 text-white" : "text-zinc-400"}`}>
+            {tab === "meals" ? "Meals" : tab === "packs" ? "Packs 📦" : "Categories 🏷️"}
+          </button>
+        ))}
       </div>
 
+      {/* MEALS TAB */}
       {activeTab === "meals" && (
         <>
           <div className="mb-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
             <h2 className="mb-3 font-semibold">{editingId ? "Edit Meal" : "New Meal"}</h2>
             <div className="space-y-3">
-              <input
-                placeholder="Meal name"
-                value={form.name}
+              <input placeholder="Meal name" value={form.name}
                 onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
-              />
+                className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600" />
+
               <div className="grid grid-cols-2 gap-3">
-                <select value={form.category}
-                  onChange={(e) => setForm((p) => ({ ...p, category: e.target.value as MealCategory }))}
+                <select value={form.categoryId}
+                  onChange={(e) => setForm((p) => ({ ...p, categoryId: e.target.value }))}
                   className="rounded-xl bg-zinc-800 p-3">
-                  {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
+                  <option value="">No category</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.emoji} {cat.name}</option>
                   ))}
                 </select>
                 <select value={form.servingType}
@@ -356,11 +377,11 @@ function MealsContent() {
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1 rounded-xl bg-zinc-900 p-3 outline-none" />
             <select value={filter}
-              onChange={(e) => setFilter(e.target.value as MealCategory | "ALL")}
+              onChange={(e) => setFilter(e.target.value)}
               className="rounded-xl bg-zinc-900 px-4">
               <option value="ALL">All</option>
-              {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>{cat.emoji} {cat.name}</option>
               ))}
             </select>
           </div>
@@ -379,7 +400,11 @@ function MealsContent() {
                           {isPiece ? "per piece" : `per ${meal.servingSize}${meal.servingLabel}`}
                         </span>
                       </div>
-                      <p className="mt-0.5 text-xs text-zinc-500">{CATEGORY_LABELS[meal.category]}</p>
+                      {meal.category && (
+                        <p className="mt-0.5 text-xs text-zinc-500">
+                          {meal.category.emoji} {meal.category.name}
+                        </p>
+                      )}
                     </div>
                     <button onClick={() => toggleFavorite(meal)} className="text-lg">
                       {meal.isFavorite ? "⭐" : "☆"}
@@ -396,24 +421,19 @@ function MealsContent() {
                   <div className="mb-3">
                     {isPiece ? (
                       <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => setAmounts((p) => ({ ...p, [meal.id]: String(Math.max(1, Number(p[meal.id] || 1) - 1)) }))}
+                        <button onClick={() => setAmounts((p) => ({ ...p, [meal.id]: String(Math.max(1, Number(p[meal.id] || 1) - 1)) }))}
                           className="rounded-lg bg-zinc-800 px-4 py-2 hover:bg-zinc-700">−</button>
                         <span className="w-8 text-center font-semibold">{amounts[meal.id] || "1"}</span>
-                        <button
-                          onClick={() => setAmounts((p) => ({ ...p, [meal.id]: String(Number(p[meal.id] || 1) + 1) }))}
+                        <button onClick={() => setAmounts((p) => ({ ...p, [meal.id]: String(Number(p[meal.id] || 1) + 1) }))}
                           className="rounded-lg bg-zinc-800 px-4 py-2 hover:bg-zinc-700">+</button>
                         <span className="text-sm text-zinc-400">pieces</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          placeholder={`e.g. ${meal.servingSize}`}
+                        <input type="number" placeholder={`e.g. ${meal.servingSize}`}
                           value={amounts[meal.id] || ""}
                           onChange={(e) => setAmounts((p) => ({ ...p, [meal.id]: e.target.value }))}
-                          className="w-28 rounded-xl bg-zinc-800 p-2 text-center outline-none focus:ring-1 focus:ring-zinc-600"
-                        />
+                          className="w-28 rounded-xl bg-zinc-800 p-2 text-center outline-none focus:ring-1 focus:ring-zinc-600" />
                         <span className="text-sm text-zinc-400">{meal.servingLabel}</span>
                       </div>
                     )}
@@ -442,16 +462,14 @@ function MealsContent() {
         </>
       )}
 
+      {/* PACKS TAB */}
       {activeTab === "packs" && (
         <>
           <div className="mb-6 flex gap-3">
-            <input
-              placeholder="Pack name (e.g. Morning Pack)"
-              value={newPackName}
+            <input placeholder="Pack name (e.g. Morning Pack)" value={newPackName}
               onChange={(e) => setNewPackName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && createPack()}
-              className="flex-1 rounded-xl bg-zinc-900 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
-            />
+              className="flex-1 rounded-xl bg-zinc-900 p-3 outline-none focus:ring-1 focus:ring-zinc-600" />
             <button onClick={createPack} className="rounded-xl bg-green-600 px-4 font-semibold hover:bg-green-700">
               + Create
             </button>
@@ -472,13 +490,11 @@ function MealsContent() {
                       <p className="text-xs text-zinc-500">{pack.items.length} meals</p>
                     </div>
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => setExpandedPack(isExpanded ? null : pack.id)}
+                      <button onClick={() => setExpandedPack(isExpanded ? null : pack.id)}
                         className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-zinc-700">
                         {isExpanded ? "Close" : "Manage"}
                       </button>
-                      <button
-                        onClick={() => logPack(pack.id)}
+                      <button onClick={() => logPack(pack.id)}
                         className={`rounded-xl px-3 py-2 text-xs font-medium transition ${loggedPack[pack.id] ? "bg-green-800 text-green-300" : "bg-green-600 hover:bg-green-700"}`}>
                         {loggedPack[pack.id] ? "Logged ✓" : "Log All"}
                       </button>
@@ -501,40 +517,27 @@ function MealsContent() {
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-medium">{item.meal.name}</span>
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-zinc-400">
-                                {Math.round(item.meal.calories * item.quantity)} kcal
-                              </span>
+                              <span className="text-xs text-zinc-400">{Math.round(item.meal.calories * item.quantity)} kcal</span>
                               {isExpanded && (
-                                <button
-                                  onClick={() => removeMealFromPack(pack.id, item.id)}
+                                <button onClick={() => removeMealFromPack(pack.id, item.id)}
                                   className="text-xs text-zinc-500 hover:text-red-400">✕</button>
                               )}
                             </div>
                           </div>
                           <div className="mt-2 flex items-center gap-2">
-                            <button
-                              onClick={() => updatePackItemQuantity(
-                                pack.id, item.id,
-                                Math.max(
-                                  item.meal.servingLabel === "piece" ? 1 : 0.5,
-                                  item.quantity - (item.meal.servingLabel === "piece" ? 1 : 0.5)
-                                )
-                              )}
+                            <button onClick={() => updatePackItemQuantity(pack.id, item.id,
+                              Math.max(item.meal.servingLabel === "piece" ? 1 : 0.5,
+                                item.quantity - (item.meal.servingLabel === "piece" ? 1 : 0.5)))}
                               className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600">−</button>
                             <span className="min-w-16 text-center text-sm">
                               {item.meal.servingLabel === "piece"
                                 ? `${item.quantity} pc`
                                 : `${Math.round(item.quantity * item.meal.servingSize)}${item.meal.servingLabel}`}
                             </span>
-                            <button
-                              onClick={() => updatePackItemQuantity(
-                                pack.id, item.id,
-                                item.quantity + (item.meal.servingLabel === "piece" ? 1 : 0.5)
-                              )}
+                            <button onClick={() => updatePackItemQuantity(pack.id, item.id,
+                              item.quantity + (item.meal.servingLabel === "piece" ? 1 : 0.5))}
                               className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600">+</button>
-                            <span className="text-xs text-zinc-500">
-                              P:{Math.round(item.meal.protein * item.quantity)}g
-                            </span>
+                            <span className="text-xs text-zinc-500">P:{Math.round(item.meal.protein * item.quantity)}g</span>
                           </div>
                         </div>
                       ))}
@@ -545,20 +548,15 @@ function MealsContent() {
                     <div>
                       <p className="mb-2 text-xs text-zinc-500">Add meal to pack:</p>
                       <div className="max-h-48 space-y-1 overflow-y-auto">
-                        {meals
-                          .filter((m) => !pack.items.some((i) => i.mealId === m.id))
-                          .map((meal) => (
-                            <button
-                              key={meal.id}
-                              onClick={() => addMealToPack(pack.id, meal.id)}
-                              className="flex w-full items-center justify-between rounded-xl bg-zinc-800 px-3 py-2 hover:bg-zinc-700"
-                            >
-                              <span className="text-sm">{meal.name}</span>
-                              <span className="text-xs text-zinc-400">
-                                {meal.calories} kcal · {meal.servingLabel === "piece" ? "per piece" : `per ${meal.servingSize}${meal.servingLabel}`}
-                              </span>
-                            </button>
-                          ))}
+                        {meals.filter((m) => !pack.items.some((i) => i.mealId === m.id)).map((meal) => (
+                          <button key={meal.id} onClick={() => addMealToPack(pack.id, meal.id)}
+                            className="flex w-full items-center justify-between rounded-xl bg-zinc-800 px-3 py-2 hover:bg-zinc-700">
+                            <span className="text-sm">{meal.name}</span>
+                            <span className="text-xs text-zinc-400">
+                              {meal.calories} kcal · {meal.servingLabel === "piece" ? "per piece" : `per ${meal.servingSize}${meal.servingLabel}`}
+                            </span>
+                          </button>
+                        ))}
                       </div>
                     </div>
                   )}
@@ -567,6 +565,67 @@ function MealsContent() {
             })}
           </div>
         </>
+      )}
+
+      {/* CATEGORIES TAB */}
+      {activeTab === "categories" && (
+        <div className="space-y-4">
+          {/* Add new category */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+            <h2 className="mb-3 font-semibold">Add Category</h2>
+            <div className="flex gap-2">
+              <input placeholder="🍽️" value={newCatEmoji}
+                onChange={(e) => setNewCatEmoji(e.target.value)}
+                className="w-16 rounded-xl bg-zinc-800 p-2 text-center outline-none" />
+              <input placeholder="Category name" value={newCatName}
+                onChange={(e) => setNewCatName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && createCategory()}
+                className="flex-1 rounded-xl bg-zinc-800 p-2 outline-none" />
+              <button onClick={createCategory}
+                className="rounded-xl bg-green-600 px-3 text-sm font-semibold hover:bg-green-700">
+                + Add
+              </button>
+            </div>
+          </div>
+
+          {/* Category list */}
+          <div className="space-y-2">
+            {categories.map((cat) => (
+              <div key={cat.id} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
+                {editingCat?.id === cat.id ? (
+                  <div className="flex gap-2">
+                    <input value={editingCat.emoji}
+                      onChange={(e) => setEditingCat({ ...editingCat, emoji: e.target.value })}
+                      className="w-16 rounded-xl bg-zinc-800 p-2 text-center outline-none" />
+                    <input value={editingCat.name}
+                      onChange={(e) => setEditingCat({ ...editingCat, name: e.target.value })}
+                      className="flex-1 rounded-xl bg-zinc-800 p-2 outline-none" />
+                    <button onClick={updateCategory}
+                      className="rounded-xl bg-green-600 px-3 text-sm hover:bg-green-700">✓</button>
+                    <button onClick={() => setEditingCat(null)}
+                      className="rounded-xl bg-zinc-800 px-3 text-sm hover:bg-zinc-700">✕</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{cat.emoji}</span>
+                      <span className="font-medium">{cat.name}</span>
+                      <span className="text-xs text-zinc-500">
+                        {meals.filter(m => m.categoryId === cat.id).length} meals
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => setEditingCat(cat)}
+                        className="rounded-lg bg-zinc-800 px-2 py-1 text-xs hover:bg-zinc-700">✏</button>
+                      <button onClick={() => deleteCategory(cat.id)}
+                        className="rounded-lg bg-zinc-800 px-2 py-1 text-xs hover:bg-red-900">🗑</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </main>
   );
