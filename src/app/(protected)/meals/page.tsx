@@ -73,19 +73,15 @@ function MealsContent() {
     isFavorite: false,
   });
 
-  async function fetchMeals() {
-    const res = await fetch("/api/meals");
-    setMeals(await res.json());
-  }
-
-  async function fetchPacks() {
-    const res = await fetch("/api/meal-packs");
-    setPacks(await res.json());
+  async function fetchAll() {
+    const res = await fetch("/api/meals/all");
+    const data = await res.json();
+    setMeals(data.meals);
+    setPacks(data.packs);
   }
 
   useEffect(() => {
-    fetchMeals();
-    fetchPacks();
+    fetchAll();
   }, []);
 
   async function saveMeal() {
@@ -110,12 +106,12 @@ function MealsContent() {
     const url = editingId ? `/api/meals/${editingId}` : "/api/meals";
     await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     resetForm();
-    fetchMeals();
+    fetchAll();
   }
 
   async function deleteMeal(id: string) {
     await fetch(`/api/meals/${id}`, { method: "DELETE" });
-    fetchMeals();
+    fetchAll();
   }
 
   async function toggleFavorite(meal: Meal) {
@@ -124,7 +120,7 @@ function MealsContent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...meal, isFavorite: !meal.isFavorite }),
     });
-    fetchMeals();
+    fetchAll();
   }
 
   async function addMeal(meal: Meal) {
@@ -149,12 +145,12 @@ function MealsContent() {
       body: JSON.stringify({ name: newPackName }),
     });
     setNewPackName("");
-    fetchPacks();
+    fetchAll();
   }
 
   async function deletePack(id: string) {
     await fetch(`/api/meal-packs/${id}`, { method: "DELETE" });
-    fetchPacks();
+    fetchAll();
   }
 
   async function addMealToPack(packId: string, mealId: string) {
@@ -163,12 +159,12 @@ function MealsContent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mealId, quantity: 1 }),
     });
-    fetchPacks();
+    fetchAll();
   }
 
   async function removeMealFromPack(packId: string, itemId: string) {
     await fetch(`/api/meal-packs/${packId}/items?itemId=${itemId}`, { method: "DELETE" });
-    fetchPacks();
+    fetchAll();
   }
 
   async function updatePackItemQuantity(packId: string, itemId: string, quantity: number) {
@@ -178,7 +174,7 @@ function MealsContent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ itemId, quantity }),
     });
-    fetchPacks();
+    fetchAll();
   }
 
   async function logPack(packId: string) {

@@ -51,21 +51,40 @@ export default function WorkoutPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const initializedRef = useRef(false);
 
-  useEffect(() => { fetchSplits(); }, []);
-
   useEffect(() => {
-    if (splits.length > 0 && !initializedRef.current) {
+    async function init() {
+      const res = await fetch("/api/workouts/init");
+      const data = await res.json();
+      setSplits(data.splits);
+      if (data.splits.length > 0) {
+        const firstSplit = data.splits[0].name;
+        setSelectedSplit(firstSplit);
+        if (data.workout) {
+          setNotes(data.workout.notes ?? "");
+          setExercises(
+            data.workout.exercises.map((ex: any) => ({
+              name: ex.name,
+              sets: ex.sets.length > 0
+                ? ex.sets.map((s: any) => ({
+                    setNumber: s.setNumber,
+                    weight: s.weight ? String(s.weight) : "",
+                    reps: s.reps ? String(s.reps) : "",
+                    sets: s.sets ? String(s.sets) : "1",
+                    rpe: s.rpe ? String(s.rpe) : "",
+                  }))
+                : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
+            }))
+          );
+        }
+      }
       initializedRef.current = true;
-      const firstSplit = splits[0].name;
-      setSelectedSplit(firstSplit);
-      loadTodayWorkout(firstSplit);
     }
-  }, [splits.length]);
+    init();
+  }, []);
 
   async function fetchSplits() {
     const res = await fetch("/api/splits");
-    const data = await res.json();
-    setSplits(data);
+    setSplits(await res.json());
   }
 
   async function loadTodayWorkout(splitName: string) {
