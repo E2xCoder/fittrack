@@ -10,25 +10,14 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const split = searchParams.get("split");
 
-  const [splits, workout] = await Promise.all([
-    prisma.userSplit.findMany({
-      where: { userId: session.user.id },
-      orderBy: { orderIndex: "asc" },
-      select: { id: true, name: true, emoji: true },
-    }),
-    split ? prisma.workout.findFirst({
-      where: { userId: session.user.id, split },
-      include: {
-        exercises: {
-          orderBy: { orderIndex: "asc" },
-          include: { sets: { orderBy: { setNumber: "asc" } } },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    }) : null,
-  ]);
+  const splits = await prisma.userSplit.findMany({
+    where: { userId: session.user.id },
+    orderBy: { orderIndex: "asc" },
+    select: { id: true, name: true, emoji: true },
+  });
 
-  // Seed default splits if none
+  // Seed defaults if none
+  let finalSplits = splits;
   if (splits.length === 0) {
     const defaults = [
       { name: "Arms & Forearms", emoji: "💪" },
@@ -37,15 +26,29 @@ export async function GET(request: Request) {
       { name: "Legs & Abs", emoji: "🦵" },
       { name: "Rest Day", emoji: "😴" },
     ];
-    const created = await Promise.all(
+    finalSplits = await Promise.all(
       defaults.map((d, i) =>
         prisma.userSplit.create({
           data: { userId: session.user.id, name: d.name, emoji: d.emoji, orderIndex: i },
+          select: { id: true, name: true, emoji: true },
         })
       )
     );
-    return NextResponse.json({ splits: created, workout: null });
   }
 
-  return NextResponse.json({ splits, workout: workout ?? null });
+  // İlk split veya gönderilen split için workout getir
+  const targetSplit = split ?? (finalSplits[0]?.name ?? null);
+
+  const workout = targetSplit ? await prisma.workout.findFirst({
+    where: { userId: session.user.id, split: targetSplit },
+    include: {
+      exercises: {
+        orderBy: { orderIndex: "asc" },
+        include: { sets: { orderBy: { setNumber: "asc" } } },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  }) : null;
+
+  return NextResponse.json({ splits: finalSplits, workout: workout ?? null, activeSplit: targetSplit });
 }

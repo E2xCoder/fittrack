@@ -87,30 +87,7 @@ export default function WorkoutPage() {
     setSplits(await res.json());
   }
 
-  async function loadTodayWorkout(splitName: string) {
-    const res = await fetch(`/api/workouts/today?split=${encodeURIComponent(splitName)}`);
-    const data = await res.json();
-    if (data.workout) {
-      setNotes(data.workout.notes ?? "");
-      setExercises(
-        data.workout.exercises.map((ex: any) => ({
-          name: ex.name,
-          sets: ex.sets.length > 0
-            ? ex.sets.map((s: any) => ({
-                setNumber: s.setNumber,
-                weight: s.weight ? String(s.weight) : "",
-                reps: s.reps ? String(s.reps) : "",
-                sets: s.sets ? String(s.sets) : "1",
-                rpe: s.rpe ? String(s.rpe) : "",
-              }))
-            : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
-        }))
-      );
-    } else {
-      setExercises([]);
-      setNotes("");
-    }
-  }
+
 
   async function createSplit() {
     if (!newSplitName.trim()) return;
@@ -129,7 +106,25 @@ export default function WorkoutPage() {
     setSelectedSplit(splitName);
     setExercises([]);
     setNotes("");
-    await loadTodayWorkout(splitName);
+    const res = await fetch(`/api/workouts/init?split=${encodeURIComponent(splitName)}`);
+    const data = await res.json();
+    if (data.workout) {
+      setNotes(data.workout.notes ?? "");
+      setExercises(
+        data.workout.exercises.map((ex: any) => ({
+          name: ex.name,
+          sets: ex.sets.length > 0
+            ? ex.sets.map((s: any) => ({
+                setNumber: s.setNumber,
+                weight: s.weight ? String(s.weight) : "",
+                reps: s.reps ? String(s.reps) : "",
+                sets: s.sets ? String(s.sets) : "1",
+                rpe: s.rpe ? String(s.rpe) : "",
+              }))
+            : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
+        }))
+      );
+    }
   }
 
   async function deleteSplit(id: string) {
