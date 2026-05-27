@@ -5,11 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: "📊" },
+  { href: "/dashboard", label: "Home", icon: "📊" },
   { href: "/meals", label: "Meals", icon: "🍽️" },
-  { href: "/workout", label: "Workout", icon: "🏋️" },
+  { href: "/workout", label: "Train", icon: "🏋️" },
   { href: "/body", label: "Body", icon: "⚖️" },
-  { href: "/analytics", label: "Analytics", icon: "📈" },
+  { href: "/analytics", label: "Stats", icon: "📈" },
   { href: "/profile", label: "Profile", icon: "👤" },
 ];
 
@@ -65,17 +65,17 @@ export default function ProtectedLayout({
       </div>
 
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-zinc-950 md:hidden">
-        <div className="flex items-center justify-around py-2">
+        <div className="flex items-center justify-around py-1">
           {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center gap-1 px-3 py-2 text-xs transition ${
+              className={`flex flex-col items-center gap-0.5 px-1 py-2 transition ${
                 pathname === item.href ? "text-green-400" : "text-zinc-500"
               }`}
             >
               <span className="text-xl">{item.icon}</span>
-              {item.label}
+              <span className="text-[10px]">{item.label}</span>
             </Link>
           ))}
         </div>
