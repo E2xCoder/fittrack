@@ -56,10 +56,7 @@ function ProgressBar({ value, target, color, unit }: {
 }
 
 function WeightChart({ data }: { data: HistoryLog[] }) {
-  const weights = data.filter(d => d.weight).map(d => ({
-    date: d.date,
-    w: Number(d.weight),
-  }));
+  const weights = data.filter(d => d.weight).map(d => ({ date: d.date, w: Number(d.weight) }));
   if (weights.length < 2) return (
     <p className="text-center text-xs text-zinc-500 py-4">Need at least 2 entries for chart</p>
   );
@@ -67,14 +64,12 @@ function WeightChart({ data }: { data: HistoryLog[] }) {
   const min = Math.min(...weights.map(w => w.w)) - 0.5;
   const max = Math.max(...weights.map(w => w.w)) + 0.5;
   const range = max - min || 1;
-  const W = 300;
-  const H = 80;
+  const W = 300; const H = 80;
 
   const points = weights.map((w, i) => ({
     x: weights.length === 1 ? W / 2 : (i / (weights.length - 1)) * (W - 20) + 10,
     y: H - 10 - ((w.w - min) / range) * (H - 20),
-    weight: w.w,
-    date: w.date,
+    weight: w.w, date: w.date,
   }));
 
   const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
@@ -105,40 +100,174 @@ function WeightChart({ data }: { data: HistoryLog[] }) {
           </g>
         ))}
       </svg>
-      <div className="mt-1 flex justify-between text-xs text-zinc-600">
-        <span>{new Date(weights[0].date.includes("T") ? weights[0].date : weights[0].date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
-        <span>{new Date(weights[weights.length - 1].date.includes("T") ? weights[weights.length - 1].date : weights[weights.length - 1].date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
-      </div>
     </div>
   );
 }
 
-function StepsChart({ data, target }: { data: HistoryLog[]; target: number }) {
-  const maxSteps = Math.max(...data.map(h => Number(h.steps) || 0), target);
+function CalendarView({ history, stepTarget }: { history: HistoryLog[]; stepTarget: number }) {
+  const [selectedDay, setSelectedDay] = useState<HistoryLog | null>(null);
+  const [viewMonth, setViewMonth] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+
+  const historyMap = useMemo(() => {
+    const map: Record<string, HistoryLog> = {};
+    history.forEach(log => { map[log.date.slice(0, 10)] = log; });
+    return map;
+  }, [history]);
+
+  const firstDay = new Date(viewMonth.year, viewMonth.month, 1);
+  const lastDay = new Date(viewMonth.year, viewMonth.month + 1, 0);
+  const startOffset = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1; // Mon=0
+  const totalDays = lastDay.getDate();
+  const today = toDateString(new Date());
+
+  const monthName = firstDay.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+
+  function prevMonth() {
+    setViewMonth(prev => {
+      if (prev.month === 0) return { year: prev.year - 1, month: 11 };
+      return { year: prev.year, month: prev.month - 1 };
+    });
+    setSelectedDay(null);
+  }
+
+  function nextMonth() {
+    const now = new Date();
+    if (viewMonth.year === now.getFullYear() && viewMonth.month === now.getMonth()) return;
+    setViewMonth(prev => {
+      if (prev.month === 11) return { year: prev.year + 1, month: 0 };
+      return { year: prev.year, month: prev.month + 1 };
+    });
+    setSelectedDay(null);
+  }
+
+  const isCurrentMonth = viewMonth.year === new Date().getFullYear() && viewMonth.month === new Date().getMonth();
+
   return (
-    <div>
-      <div className="flex items-end gap-1 h-24 mb-2">
-        {data.map((log, i) => {
-          const steps = Number(log.steps) || 0;
-          const pct = steps > 0 ? (steps / maxSteps) * 100 : 0;
-          const hitTarget = steps >= target;
-          const dayLabel = new Date(log.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short" });
+    <div className="space-y-4">
+      {/* Month navigator */}
+      <div className="flex items-center justify-between">
+        <button onClick={prevMonth} className="rounded-xl bg-zinc-800 px-3 py-1.5 text-sm hover:bg-zinc-700">←</button>
+        <p className="font-semibold">{monthName}</p>
+        <button onClick={nextMonth} disabled={isCurrentMonth}
+          className="rounded-xl bg-zinc-800 px-3 py-1.5 text-sm hover:bg-zinc-700 disabled:opacity-30">→</button>
+      </div>
+
+      {/* Day headers */}
+      <div className="grid grid-cols-7 gap-1 text-center">
+        {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
+          <div key={i} className="text-xs text-zinc-600 py-1">{d}</div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7 gap-1">
+        {/* Empty cells */}
+        {Array.from({ length: startOffset }).map((_, i) => (
+          <div key={`empty-${i}`} />
+        ))}
+
+        {/* Day cells */}
+        {Array.from({ length: totalDays }).map((_, i) => {
+          const day = i + 1;
+          const dateStr = `${viewMonth.year}-${String(viewMonth.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          const log = historyMap[dateStr];
+          const isToday = dateStr === today;
+          const isFuture = dateStr > today;
+          const hasSteps = log?.steps && Number(log.steps) > 0;
+          const hitStepGoal = hasSteps && Number(log!.steps) >= stepTarget;
+          const hasWeight = !!log?.weight;
+          const isSelected = selectedDay?.date?.slice(0, 10) === dateStr;
+
           return (
-            <div key={i} className="flex-1 flex flex-col items-center gap-1">
-              <div className="w-full flex flex-col justify-end" style={{ height: "80px" }}>
-                <div className={`w-full rounded-t transition-all ${steps === 0 ? "bg-zinc-800" : hitTarget ? "bg-green-500" : "bg-purple-500"}`}
-                  style={{ height: `${Math.max(pct, steps > 0 ? 3 : 0)}%` }} />
+            <button
+              key={dateStr}
+              onClick={() => !isFuture && setSelectedDay(isSelected ? null : (log ?? { date: dateStr }))}
+              disabled={isFuture}
+              className={`relative flex flex-col items-center justify-center rounded-xl py-2 transition ${
+                isSelected ? "ring-2 ring-green-500 bg-zinc-800" :
+                isToday ? "bg-green-900/40 ring-1 ring-green-700" :
+                log ? "bg-zinc-800/60 hover:bg-zinc-800" :
+                "hover:bg-zinc-900"
+              } ${isFuture ? "opacity-20" : ""}`}
+            >
+              <span className={`text-xs font-medium ${isToday ? "text-green-400" : log ? "text-white" : "text-zinc-600"}`}>
+                {day}
+              </span>
+              {/* Dots */}
+              <div className="flex gap-0.5 mt-0.5">
+                {hasSteps && (
+                  <div className={`h-1 w-1 rounded-full ${hitStepGoal ? "bg-green-400" : "bg-purple-400"}`} />
+                )}
+                {hasWeight && (
+                  <div className="h-1 w-1 rounded-full bg-blue-400" />
+                )}
               </div>
-              <span className="text-zinc-600" style={{ fontSize: "6px" }}>{dayLabel.charAt(0)}</span>
-            </div>
+            </button>
           );
         })}
       </div>
-      <div className="flex items-center gap-3 text-xs text-zinc-500">
-        <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-full bg-green-500" /><span>Goal hit</span></div>
-        <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-full bg-purple-500" /><span>Below goal</span></div>
-        <span className="ml-auto">Goal: {target.toLocaleString()}</span>
+
+      {/* Legend */}
+      <div className="flex gap-4 text-xs text-zinc-500">
+        <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-full bg-green-400" /><span>Steps goal hit</span></div>
+        <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-full bg-purple-400" /><span>Steps logged</span></div>
+        <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-full bg-blue-400" /><span>Weight</span></div>
       </div>
+
+      {/* Selected day detail */}
+      {selectedDay && (
+        <div className="rounded-2xl border border-zinc-700 bg-zinc-900 p-4">
+          <p className="mb-3 font-semibold">
+            {new Date(selectedDay.date.slice(0, 10) + "T12:00:00").toLocaleDateString("en-GB", {
+              weekday: "long", day: "numeric", month: "long"
+            })}
+          </p>
+          {!selectedDay.steps && !selectedDay.weight && !selectedDay.water && !selectedDay.sleep ? (
+            <p className="text-sm text-zinc-500">No data logged</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {selectedDay.steps && (
+                <div className="rounded-xl bg-zinc-800 p-3">
+                  <p className="text-xs text-zinc-500">👟 Steps</p>
+                  <p className="text-lg font-bold">{Number(selectedDay.steps).toLocaleString()}</p>
+                  {selectedDay.caloriesBurned && (
+                    <p className="text-xs text-orange-400">🔥 {selectedDay.caloriesBurned} kcal</p>
+                  )}
+                </div>
+              )}
+              {selectedDay.weight && (
+                <div className="rounded-xl bg-zinc-800 p-3">
+                  <p className="text-xs text-zinc-500">⚖️ Weight</p>
+                  <p className="text-lg font-bold">{selectedDay.weight} kg</p>
+                </div>
+              )}
+              {selectedDay.water && (
+                <div className="rounded-xl bg-zinc-800 p-3">
+                  <p className="text-xs text-zinc-500">💧 Water</p>
+                  <p className="text-lg font-bold">{selectedDay.water}L</p>
+                </div>
+              )}
+              {selectedDay.sleep && (
+                <div className="rounded-xl bg-zinc-800 p-3">
+                  <p className="text-xs text-zinc-500">😴 Sleep</p>
+                  <p className="text-lg font-bold">{selectedDay.sleep}h</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Weight chart */}
+      {history.filter(h => h.weight).length >= 2 && (
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+          <h2 className="mb-3 font-semibold">⚖️ Weight trend</h2>
+          <WeightChart data={history} />
+        </div>
+      )}
     </div>
   );
 }
@@ -154,7 +283,6 @@ function BodyContent() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<"daily" | "measurements" | "history">("daily");
-  const [period, setPeriod] = useState<"week" | "month">("week");
 
   const [form, setForm] = useState({
     weight: "", steps: "", water: "", sleep: "",
@@ -186,7 +314,7 @@ function BodyContent() {
   }
 
   async function fetchHistory() {
-    const res = await fetch("/api/body/history?days=30");
+    const res = await fetch("/api/body/history?days=90");
     const data = await res.json();
     setHistory(data);
   }
@@ -230,20 +358,6 @@ function BodyContent() {
 
   const steps = Number(form.steps) || 0;
   const caloriesBurned = Math.round(steps * 0.04 * ((userProfile.weight ?? 70) / 70));
-
-  const filteredHistory = useMemo(() => {
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - daysFromMonday);
-    monday.setHours(0, 0, 0, 0);
-    return history.filter(log => {
-      const logDate = new Date(log.date.includes("T") ? log.date : log.date + "T12:00:00");
-      if (period === "week") return logDate >= monday;
-      return true;
-    });
-  }, [history, period]);
 
   return (
     <main className="mx-auto max-w-2xl p-4">
@@ -356,66 +470,7 @@ function BodyContent() {
       )}
 
       {activeTab === "history" && (
-        <div className="space-y-4">
-          {history.length === 0 ? (
-            <p className="text-center text-sm text-zinc-500">No history yet. Start logging daily!</p>
-          ) : (
-            <>
-              <div className="flex rounded-xl bg-zinc-900 p-1">
-                {(["week", "month"] as const).map((p) => (
-                  <button key={p} onClick={() => setPeriod(p)}
-                    className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${period === p ? "bg-zinc-700 text-white" : "text-zinc-400"}`}>
-                    {p === "week" ? "This Week" : "This Month"}
-                  </button>
-                ))}
-              </div>
-
-              {filteredHistory.some(h => h.weight) && (
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-                  <h2 className="mb-1 font-semibold">⚖️ Weight</h2>
-                  <p className="mb-3 text-xs text-zinc-500">{filteredHistory.filter(h => h.weight).length} entries</p>
-                  <WeightChart data={filteredHistory} />
-                </div>
-              )}
-
-              {filteredHistory.some(h => h.steps) && (
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-                  <h2 className="mb-1 font-semibold">👟 Steps</h2>
-                  <p className="mb-3 text-xs text-zinc-500">
-                    Avg: {Math.round(
-                      filteredHistory.filter(h => h.steps).reduce((s, h) => s + Number(h.steps ?? 0), 0) /
-                      Math.max(filteredHistory.filter(h => h.steps).length, 1)
-                    ).toLocaleString()} steps/day
-                  </p>
-                  <StepsChart data={filteredHistory} target={userProfile.stepTarget ?? 10000} />
-                </div>
-              )}
-
-              <div className="space-y-2">
-                {filteredHistory.slice().reverse().map((log, i) => (
-                  <div key={i} className="rounded-xl border border-zinc-800 bg-zinc-900 p-3">
-                    <div className="mb-1 flex items-center justify-between">
-                      <p className="text-sm font-medium">
-                        {(() => {
-                          const d = new Date(log.date);
-                          d.setDate(d.getDate() + 1);
-                          return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
-                        })()}
-                      </p>
-                      {log.weight && <span className="text-sm font-bold text-green-400">{log.weight} kg</span>}
-                    </div>
-                    <div className="flex flex-wrap gap-3 text-xs text-zinc-400">
-                      {log.steps && <span>👟 {Number(log.steps).toLocaleString()}</span>}
-                      {log.caloriesBurned && <span>🔥 {log.caloriesBurned} kcal</span>}
-                      {log.water && <span>💧 {log.water}L</span>}
-                      {log.sleep && <span>😴 {log.sleep}h</span>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        <CalendarView history={history} stepTarget={userProfile.stepTarget ?? 10000} />
       )}
 
       {activeTab !== "history" && (
