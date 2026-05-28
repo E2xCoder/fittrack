@@ -186,7 +186,7 @@ export default function DashboardPage() {
             <div className="mb-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Net Calories</h2>
-                <Link href="/body" className="text-xs text-zinc-500 hover:text-zinc-300">Log Body →</Link>
+                <Link href={`/body?date=${selectedDate}`} className="text-xs text-zinc-500 hover:text-zinc-300">Log Body →</Link>
               </div>
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div>
@@ -273,7 +273,7 @@ export default function DashboardPage() {
               className="flex items-center justify-center rounded-2xl border border-dashed border-zinc-700 py-3 text-sm text-zinc-400 hover:border-zinc-500 hover:text-zinc-200">
               + Add meal
             </Link>
-            <Link href="/body"
+            <Link href={`/body?date=${selectedDate}`}
               className="flex items-center justify-center rounded-2xl border border-dashed border-zinc-700 py-3 text-sm text-zinc-400 hover:border-zinc-500 hover:text-zinc-200">
               ⚖️ Log body
             </Link>

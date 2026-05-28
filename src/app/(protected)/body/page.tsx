@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 
 interface BodyLog {
   weight?: number;
@@ -78,15 +79,12 @@ function WeightChart({ data }: { data: HistoryLog[] }) {
 
   const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
   const areaD = `${pathD} L ${points[points.length - 1].x} ${H} L ${points[0].x} ${H} Z`;
-
   const change = weights[weights.length - 1].w - weights[0].w;
 
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs text-zinc-500">
-          {weights[0].w} → {weights[weights.length - 1].w} kg
-        </span>
+        <span className="text-xs text-zinc-500">{weights[0].w} → {weights[weights.length - 1].w} kg</span>
         <span className={`text-xs font-medium ${change < 0 ? "text-green-400" : change > 0 ? "text-rose-400" : "text-zinc-400"}`}>
           {change > 0 ? "+" : ""}{change.toFixed(1)} kg
         </span>
@@ -117,7 +115,6 @@ function WeightChart({ data }: { data: HistoryLog[] }) {
 
 function StepsChart({ data, target }: { data: HistoryLog[]; target: number }) {
   const maxSteps = Math.max(...data.map(h => Number(h.steps) || 0), target);
-
   return (
     <div>
       <div className="flex items-end gap-1 h-24 mb-2">
@@ -126,41 +123,31 @@ function StepsChart({ data, target }: { data: HistoryLog[]; target: number }) {
           const pct = steps > 0 ? (steps / maxSteps) * 100 : 0;
           const hitTarget = steps >= target;
           const dayLabel = new Date(log.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short" });
-
           return (
             <div key={i} className="flex-1 flex flex-col items-center gap-1">
               <div className="w-full flex flex-col justify-end" style={{ height: "80px" }}>
-                <div
-                  className={`w-full rounded-t transition-all ${
-                    steps === 0 ? "bg-zinc-800" : hitTarget ? "bg-green-500" : "bg-purple-500"
-                  }`}
-                  style={{ height: `${Math.max(pct, steps > 0 ? 3 : 0)}%` }}
-                />
+                <div className={`w-full rounded-t transition-all ${steps === 0 ? "bg-zinc-800" : hitTarget ? "bg-green-500" : "bg-purple-500"}`}
+                  style={{ height: `${Math.max(pct, steps > 0 ? 3 : 0)}%` }} />
               </div>
-              <span className="text-zinc-600" style={{ fontSize: "6px" }}>
-                {dayLabel.charAt(0)}
-              </span>
+              <span className="text-zinc-600" style={{ fontSize: "6px" }}>{dayLabel.charAt(0)}</span>
             </div>
           );
         })}
       </div>
       <div className="flex items-center gap-3 text-xs text-zinc-500">
-        <div className="flex items-center gap-1">
-          <div className="h-2 w-2 rounded-full bg-green-500" />
-          <span>Goal hit</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="h-2 w-2 rounded-full bg-purple-500" />
-          <span>Below goal</span>
-        </div>
+        <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-full bg-green-500" /><span>Goal hit</span></div>
+        <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-full bg-purple-500" /><span>Below goal</span></div>
         <span className="ml-auto">Goal: {target.toLocaleString()}</span>
       </div>
     </div>
   );
 }
 
-export default function BodyPage() {
-  const [selectedDate, setSelectedDate] = useState(toDateString(new Date()));
+function BodyContent() {
+  const searchParams = useSearchParams();
+  const dateParam = searchParams.get("date");
+
+  const [selectedDate, setSelectedDate] = useState(() => dateParam ?? toDateString(new Date()));
   const [bodyLog, setBodyLog] = useState<BodyLog>({});
   const [userProfile, setUserProfile] = useState<UserProfile>({});
   const [history, setHistory] = useState<HistoryLog[]>([]);
@@ -251,12 +238,9 @@ export default function BodyPage() {
     const monday = new Date(now);
     monday.setDate(now.getDate() - daysFromMonday);
     monday.setHours(0, 0, 0, 0);
-
     return history.filter(log => {
       const logDate = new Date(log.date.includes("T") ? log.date : log.date + "T12:00:00");
-      if (period === "week") {
-        return logDate >= monday;
-      }
+      if (period === "week") return logDate >= monday;
       return true;
     });
   }, [history, period]);
@@ -389,9 +373,7 @@ export default function BodyPage() {
               {filteredHistory.some(h => h.weight) && (
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
                   <h2 className="mb-1 font-semibold">⚖️ Weight</h2>
-                  <p className="mb-3 text-xs text-zinc-500">
-                    {filteredHistory.filter(h => h.weight).length} entries
-                  </p>
+                  <p className="mb-3 text-xs text-zinc-500">{filteredHistory.filter(h => h.weight).length} entries</p>
                   <WeightChart data={filteredHistory} />
                 </div>
               )}
@@ -415,11 +397,9 @@ export default function BodyPage() {
                     <div className="mb-1 flex items-center justify-between">
                       <p className="text-sm font-medium">
                         {(() => {
-                        const d = new Date(log.date);
-                        d.setDate(d.getDate() + 1); // UTC offset fix
-                        return d.toLocaleDateString("en-GB", {
-                        weekday: "short", day: "numeric", month: "short"
-                        });
+                          const d = new Date(log.date);
+                          d.setDate(d.getDate() + 1);
+                          return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
                         })()}
                       </p>
                       {log.weight && <span className="text-sm font-bold text-green-400">{log.weight} kg</span>}
@@ -447,5 +427,13 @@ export default function BodyPage() {
         </button>
       )}
     </main>
+  );
+}
+
+export default function BodyPage() {
+  return (
+    <Suspense fallback={<main className="p-4 text-zinc-400">Loading...</main>}>
+      <BodyContent />
+    </Suspense>
   );
 }
