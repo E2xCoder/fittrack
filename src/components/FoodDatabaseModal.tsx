@@ -323,31 +323,44 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
 
   return (
     <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center" onClick={onClose}>
+      {/* Backdrop — full-screen on mobile, centred sheet on sm+ */}
+      <div
+        className="fixed inset-0 z-50 flex flex-col bg-zinc-950 sm:items-center sm:justify-center sm:bg-black/70 sm:backdrop-blur-sm"
+        onClick={onClose}
+      >
         <div
-          className="flex max-h-[92vh] w-full max-w-lg flex-col rounded-t-3xl border border-zinc-700 bg-zinc-950 shadow-2xl sm:rounded-3xl"
+          className="
+            flex flex-col
+            w-full h-full
+            sm:h-auto sm:max-h-[88vh] sm:max-w-lg sm:rounded-3xl sm:border sm:border-zinc-700 sm:shadow-2xl
+            bg-zinc-950
+          "
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
+          <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-4 py-3">
             <div>
-              <h2 className="font-black text-white">🔍 Food Database</h2>
-              <p className="text-xs text-zinc-500">Powered by Open Food Facts</p>
+              <h2 className="text-base font-black text-white leading-tight">🔍 Food Database</h2>
+              <p className="text-[11px] text-zinc-500">Open Food Facts</p>
             </div>
-            <button onClick={onClose} className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition-colors">
-              Kapat
+            <button
+              onClick={onClose}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white transition-colors"
+            >
+              ✕
             </button>
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1 border-b border-zinc-800 px-5 pt-3 pb-0">
+          <div className="flex shrink-0 border-b border-zinc-800 px-4">
             {(["search", "barcode"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`rounded-t-lg px-4 py-2 text-sm font-semibold transition-colors ${
-                  tab === t ? "border-b-2 border-green-500 text-green-400" : "text-zinc-500 hover:text-zinc-300"
+                className={`flex-1 py-3 text-sm font-semibold transition-colors ${
+                  tab === t
+                    ? "border-b-2 border-green-500 text-green-400"
+                    : "text-zinc-500"
                 }`}
               >
                 {t === "search" ? "🔎 Ara" : "📷 Barkod"}
@@ -355,18 +368,18 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
             ))}
           </div>
 
-          {/* Scrollable body */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+          {/* Scrollable body — min-h-0 is critical for flex overflow */}
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 space-y-3 pb-safe">
 
             {/* ── Search Tab ── */}
             {tab === "search" && (
               <>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">🔍</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">🔍</span>
                   <input
                     autoFocus
                     type="text"
-                    placeholder="Ürün adı yaz (örn. yoğurt, tavuk göğsü)…"
+                    placeholder="Ürün adı yaz…"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     className="w-full rounded-xl border border-zinc-800 bg-zinc-900 py-3 pl-9 pr-4 text-sm text-white outline-none focus:border-green-600 placeholder:text-zinc-600"
@@ -378,15 +391,12 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                     <div className="h-7 w-7 animate-spin rounded-full border-2 border-zinc-700 border-t-green-500" />
                   </div>
                 )}
-
                 {!searching && noResults && query.trim() && (
                   <p className="py-6 text-center text-sm text-zinc-500">"{query}" için sonuç bulunamadı.</p>
                 )}
-
                 {!searching && results.length === 0 && !noResults && (
                   <p className="py-10 text-center text-sm text-zinc-600">Aramak istediğin ürünü yaz…</p>
                 )}
-
                 <div className="space-y-2">
                   {results.map((p) => <ProductCard key={p.code} product={p} />)}
                 </div>
@@ -396,11 +406,12 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
             {/* ── Barcode Tab ── */}
             {tab === "barcode" && (
               <>
+                {/* Manual input */}
                 <div className="flex gap-2">
                   <input
                     type="text"
                     inputMode="numeric"
-                    placeholder="Barkod numarası (örn. 8690526040818)"
+                    placeholder="Barkod numarası…"
                     value={barcodeInput}
                     onChange={(e) => setBarcodeInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && fetchBarcode(barcodeInput)}
@@ -408,31 +419,34 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                   />
                   <button
                     onClick={() => fetchBarcode(barcodeInput)}
-                    className="rounded-xl bg-green-600 px-4 text-sm font-bold text-white hover:bg-green-500 transition-colors"
+                    className="rounded-xl bg-green-600 px-5 text-sm font-bold text-white hover:bg-green-500 transition-colors"
                   >
                     Ara
                   </button>
                 </div>
 
-                {/* Camera scan button */}
+                {/* Camera button — big and easy to tap */}
                 {!scanningCam ? (
                   <button
                     onClick={startCamera}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 py-3 text-sm font-semibold text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors"
+                    className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-700 bg-zinc-900 py-8 text-zinc-300 hover:border-green-600 hover:text-green-400 transition-colors active:scale-95"
                   >
-                    📷 Kamerayla Tara
+                    <span className="text-5xl">📷</span>
+                    <span className="text-base font-bold">Kamerayla Tara</span>
+                    <span className="text-xs text-zinc-500">Barkodu kameraya göster</span>
                   </button>
                 ) : (
-                  <div className="relative overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900">
-                    <video ref={videoRef} className="w-full rounded-2xl" muted playsInline />
+                  <div className="relative overflow-hidden rounded-2xl border border-zinc-700 bg-black">
+                    <video ref={videoRef} className="w-full" muted playsInline />
+                    {/* targeting overlay */}
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                      <div className="h-36 w-36 rounded-xl border-2 border-green-400 opacity-70" />
+                      <div className="h-40 w-64 rounded-2xl border-2 border-green-400 opacity-80 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
                     </div>
                     <button
                       onClick={stopCamera}
-                      className="absolute right-2 top-2 rounded-lg bg-black/60 px-3 py-1 text-xs text-white hover:bg-black/80"
+                      className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-5 py-2 text-sm font-semibold text-white backdrop-blur hover:bg-black/90"
                     >
-                      Durdur
+                      ✕ Durdur
                     </button>
                   </div>
                 )}
@@ -442,11 +456,9 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                     <div className="h-7 w-7 animate-spin rounded-full border-2 border-zinc-700 border-t-green-500" />
                   </div>
                 )}
-
                 {barcodeError && (
                   <p className="rounded-xl bg-red-950/40 px-4 py-3 text-sm text-red-400">{barcodeError}</p>
                 )}
-
                 {barcodeProduct && !searching && (
                   <ProductCard product={barcodeProduct} />
                 )}

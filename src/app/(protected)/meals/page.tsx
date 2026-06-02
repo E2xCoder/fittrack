@@ -380,23 +380,30 @@ function MealsContent() {
             </div>
           </div>
 
-          <div className="mb-4 flex gap-2">
-            <input placeholder="Search meals..." value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 rounded-xl bg-zinc-900 p-3 outline-none" />
-            <select value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="rounded-xl bg-zinc-900 px-3">
-              <option value="ALL">All</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>{cat.emoji} {cat.name}</option>
-              ))}
-            </select>
+          <div className="mb-4 space-y-2">
+            <div className="flex gap-2">
+              <input
+                placeholder="Search meals..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1 rounded-xl bg-zinc-900 p-3 outline-none"
+              />
+              <select
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                className="rounded-xl bg-zinc-900 px-3 text-sm"
+              >
+                <option value="ALL">All</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>{cat.emoji} {cat.name}</option>
+                ))}
+              </select>
+            </div>
             <button
               onClick={() => setShowFoodDB(true)}
-              className="shrink-0 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-md shadow-blue-900/30 hover:bg-blue-500 transition-colors whitespace-nowrap"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-800 bg-blue-950/40 py-2.5 text-sm font-bold text-blue-400 hover:bg-blue-900/40 transition-colors"
             >
-              🔍 Food DB
+              🔍 Food Database ile Ara
             </button>
           </div>
 
