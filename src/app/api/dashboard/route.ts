@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     date = getTodayInTimezone();
   }
 
-  const [dailyLog, user, bodyLog] = await Promise.all([
+  const [dailyLog, user, bodyLog, splits] = await Promise.all([
     prisma.dailyLog.findFirst({
       where: { userId: session.user.id, date },
       include: {
@@ -43,6 +43,10 @@ export async function GET(request: Request) {
     prisma.bodyLog.findFirst({
       where: { userId: session.user.id, date },
     }),
+    prisma.userSplit.findMany({       // <-- EKLENDİ
+      where: { userId: session.user.id },
+      orderBy: { createdAt: "asc" },
+    }),
   ]);
 
   return NextResponse.json({
@@ -62,5 +66,8 @@ export async function GET(request: Request) {
     caloriesBurned: bodyLog?.caloriesBurned ?? 0,
     water: bodyLog?.water ?? 0,
     sleep: bodyLog?.sleep ?? 0,
+    isGymDay: dailyLog?.isGymDay ?? false,    // <-- EKLENDİ
+    gymSplit: dailyLog?.gymSplit ?? null,      // <-- EKLENDİ
+    splits: splits ?? [],                      // <-- EKLENDİ
   });
 }

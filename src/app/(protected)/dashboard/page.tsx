@@ -250,7 +250,7 @@ export default function DashboardPage() {
                 >
                   😴 Rest Day
                 </button>
-                {data.splits.filter(s => s.name !== "Rest Day").map((split) => (
+                {(data.splits ?? []).filter(s => s.name !== "Rest Day").map((split) => (
                   <button
                     key={split.id}
                     onClick={() => saveGymStatus(true, split.name)}
