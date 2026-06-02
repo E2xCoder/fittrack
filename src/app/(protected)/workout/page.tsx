@@ -163,6 +163,26 @@ function ExerciseCard({
   );
 }
 
+// ─── Skeleton Card ───────────────────────────────────────────────────────────
+
+function SkeletonCard() {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-2 animate-pulse">
+      <div className="mb-2 h-3 w-2/3 rounded bg-zinc-800" />
+      <div className="space-y-1">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="grid grid-cols-4 gap-0.5">
+            {[1, 2, 3, 4].map((j) => (
+              <div key={j} className="h-6 rounded-md bg-zinc-800" />
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 h-5 rounded-b bg-zinc-800/60" />
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function WorkoutPage() {
@@ -171,6 +191,7 @@ export default function WorkoutPage() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [newExerciseName, setNewExerciseName] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [splitLoading, setSplitLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [notes, setNotes] = useState("");
@@ -233,9 +254,11 @@ export default function WorkoutPage() {
 
   async function handleSplitSelect(splitName: string) {
     if (splitName === selectedSplit) return;
+    // Optimistic: switch pill + show skeleton immediately
     setSelectedSplit(splitName);
     setExercises([]);
     setNotes("");
+    setSplitLoading(true);
     const res = await fetch(`/api/workouts/init?split=${encodeURIComponent(splitName)}`);
     const data = await res.json();
     if (data.workout) {
@@ -257,6 +280,7 @@ export default function WorkoutPage() {
         }))
       );
     }
+    setSplitLoading(false);
   }
 
   async function deleteSplit(id: string) {
@@ -523,18 +547,21 @@ export default function WorkoutPage() {
 
           {/* Exercise cards — 2-column grid */}
           <div className="grid grid-cols-2 gap-2">
-            {exercises.map((exercise, exIdx) => (
-              <ExerciseCard
-                key={exIdx}
-                exercise={exercise}
-                exIdx={exIdx}
-                prev={previousPerf[exercise.name]}
-                onRemove={() => removeExercise(exIdx)}
-                onAddSet={() => addSet(exIdx)}
-                onRemoveSet={(setIdx) => removeSet(exIdx, setIdx)}
-                onUpdateSet={(setIdx, field, value) => updateSet(exIdx, setIdx, field, value)}
-              />
-            ))}
+            {splitLoading
+              ? [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)
+              : exercises.map((exercise, exIdx) => (
+                  <ExerciseCard
+                    key={exIdx}
+                    exercise={exercise}
+                    exIdx={exIdx}
+                    prev={previousPerf[exercise.name]}
+                    onRemove={() => removeExercise(exIdx)}
+                    onAddSet={() => addSet(exIdx)}
+                    onRemoveSet={(setIdx) => removeSet(exIdx, setIdx)}
+                    onUpdateSet={(setIdx, field, value) => updateSet(exIdx, setIdx, field, value)}
+                  />
+                ))
+            }
           </div>
 
           {/* Notes */}
