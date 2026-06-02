@@ -176,13 +176,17 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Barcode state
-  const [barcodeInput, setBarcodeInput] = useState("");
+  const [barcodeInput, setBarcodeInput]     = useState("");
   const [barcodeProduct, setBarcodeProduct] = useState<NormalizedProduct | null>(null);
   const [barcodeError, setBarcodeError]     = useState("");
+  const [barcodeLoading, setBarcodeLoading] = useState(false);
   const [scanningCam, setScanningCam]       = useState(false);
-  const videoRef    = useRef<HTMLVideoElement>(null);
-  const readerRef   = useRef<import("@zxing/browser").BrowserMultiFormatReader | null>(null);
-  const streamRef   = useRef<MediaStream | null>(null);
+  const videoRef        = useRef<HTMLVideoElement>(null);
+  const readerRef       = useRef<import("@zxing/browser").BrowserMultiFormatReader | null>(null);
+  const streamRef       = useRef<MediaStream | null>(null);
+  // Guards against duplicate in-flight barcode fetches and camera multi-fire
+  const fetchingRef     = useRef(false);
+  const scannedRef      = useRef(false);
 
   // Add quantity
   const [addingProduct, setAddingProduct] = useState<NormalizedProduct | null>(null);
@@ -219,33 +223,40 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
-  // ── Barcode text search ───────────────────────────────────────────────
+  // ── Barcode fetch — stable ref, guarded against duplicate calls ──────
 
-  async function fetchBarcode(code: string) {
+  const fetchBarcode = useCallback(async (code: string) => {
+    const trimmed = code.trim();
+    if (!trimmed) return;
+    // Prevent concurrent fetches for the same or different code
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+
     setBarcodeError("");
-    setBarcodeProduct(null);
-    if (!code.trim()) return;
-    setSearching(true);
+    setBarcodeProduct(null);   // clear previous result only once, here
+    setBarcodeLoading(true);
     try {
-      const res  = await fetch(`/api/food-barcode?code=${encodeURIComponent(code.trim())}`);
+      const res  = await fetch(`/api/food-barcode?code=${encodeURIComponent(trimmed)}`);
       const data = await res.json();
       if (data.status !== 1 || !data.product) {
         setBarcodeError("Ürün bulunamadı.");
         return;
       }
-      const p = normalize({ code, ...data.product });
+      const p = normalize({ code: trimmed, ...data.product });
       if (!p) { setBarcodeError("Ürün bilgileri eksik."); return; }
-      setBarcodeProduct(p);
+      setBarcodeProduct(p);      // set once, never cleared again until next manual search
     } catch {
       setBarcodeError("Bağlantı hatası.");
     } finally {
-      setSearching(false);
+      setBarcodeLoading(false);
+      fetchingRef.current = false;
     }
-  }
+  }, []);  // stable — no captured state, only refs + setters
 
   // ── Camera scanning ───────────────────────────────────────────────────
 
   async function startCamera() {
+    scannedRef.current = false;   // reset for new scan session
     setScanningCam(true);
     setBarcodeError("");
     try {
@@ -260,7 +271,9 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
         videoRef.current.srcObject = stream;
         videoRef.current.play();
         reader.decodeFromStream(stream, videoRef.current, (result) => {
-          if (result) {
+          // decodeFromStream fires on every frame — only process the FIRST hit
+          if (result && !scannedRef.current) {
+            scannedRef.current = true;
             const code = result.getText();
             stopCamera();
             setBarcodeInput(code);
@@ -415,12 +428,16 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                     inputMode="numeric"
                     placeholder="Barkod numarası…"
                     value={barcodeInput}
-                    onChange={(e) => setBarcodeInput(e.target.value)}
+                    onChange={(e) => {
+                      setBarcodeInput(e.target.value);
+                      // reset guard so a new manual entry can trigger a fresh fetch
+                      fetchingRef.current = false;
+                    }}
                     onKeyDown={(e) => e.key === "Enter" && fetchBarcode(barcodeInput)}
                     className="flex-1 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-white outline-none focus:border-green-600 placeholder:text-zinc-600"
                   />
                   <button
-                    onClick={() => fetchBarcode(barcodeInput)}
+                    onClick={() => { fetchingRef.current = false; fetchBarcode(barcodeInput); }}
                     className="rounded-xl bg-green-600 px-5 text-sm font-bold text-white hover:bg-green-500 transition-colors"
                   >
                     Ara
@@ -453,7 +470,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                   </div>
                 )}
 
-                {searching && (
+                {barcodeLoading && (
                   <div className="flex justify-center py-6">
                     <div className="h-7 w-7 animate-spin rounded-full border-2 border-zinc-700 border-t-green-500" />
                   </div>
@@ -461,7 +478,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                 {barcodeError && (
                   <p className="rounded-xl bg-red-950/40 px-4 py-3 text-sm text-red-400">{barcodeError}</p>
                 )}
-                {barcodeProduct && !searching && (
+                {barcodeProduct && !barcodeLoading && (
                   <ProductCard product={barcodeProduct} />
                 )}
               </>
