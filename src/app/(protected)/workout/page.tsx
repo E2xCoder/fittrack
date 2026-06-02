@@ -428,29 +428,24 @@ export default function WorkoutPage() {
       )}
 
       {/* ── Split pills ── */}
-      <div className="mb-4">
-        <div
-          style={{ overflowX: "scroll", display: "flex", flexWrap: "nowrap", gap: "8px", paddingBottom: "4px", minWidth: 0 }}
-          className="[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
-          {splits.map((split) => {
-            const active = selectedSplit === split.name;
-            return (
-              <button
-                key={split.id}
-                onClick={() => handleSplitSelect(split.name)}
-                style={{ flexShrink: 0, whiteSpace: "nowrap" }}
-                className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-200 ${
-                  active
-                    ? "bg-green-500 text-black shadow-lg shadow-green-500/30"
-                    : "border border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
-                }`}
-              >
-                {split.emoji} {split.name}
-              </button>
-            );
-          })}
-        </div>
+      <div style={{ display: "flex", flexWrap: "nowrap", overflowX: "auto", gap: "8px", paddingBottom: "4px", WebkitOverflowScrolling: "touch" }} className="mb-4">
+        {splits.map((split) => {
+          const active = selectedSplit === split.name;
+          return (
+            <button
+              key={split.id}
+              onClick={() => handleSplitSelect(split.name)}
+              style={{ flexShrink: 0, whiteSpace: "nowrap" }}
+              className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-200 ${
+                active
+                  ? "bg-green-500 text-black shadow-lg shadow-green-500/30"
+                  : "border border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+              }`}
+            >
+              {split.emoji} {split.name}
+            </button>
+          );
+        })}
       </div>
 
       {/* ── Active split banner ── */}
