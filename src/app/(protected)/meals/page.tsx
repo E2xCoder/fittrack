@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
+
+const FoodDatabaseModal = dynamic(() => import("@/components/FoodDatabaseModal"), { ssr: false });
 
 interface UserMealCategory {
   id: string;
@@ -57,6 +60,7 @@ function MealsContent() {
   const [newPackName, setNewPackName] = useState("");
   const [expandedPack, setExpandedPack] = useState<string | null>(null);
   const [loggedPack, setLoggedPack] = useState<Record<string, boolean>>({});
+  const [showFoodDB, setShowFoodDB] = useState(false);
 
   // Category manager state
   const [newCatName, setNewCatName] = useState("");
@@ -376,19 +380,33 @@ function MealsContent() {
             </div>
           </div>
 
-          <div className="mb-4 flex gap-3">
+          <div className="mb-4 flex gap-2">
             <input placeholder="Search meals..." value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1 rounded-xl bg-zinc-900 p-3 outline-none" />
             <select value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              className="rounded-xl bg-zinc-900 px-4">
+              className="rounded-xl bg-zinc-900 px-3">
               <option value="ALL">All</option>
               {categories.map((cat) => (
                 <option key={cat.id} value={cat.id}>{cat.emoji} {cat.name}</option>
               ))}
             </select>
+            <button
+              onClick={() => setShowFoodDB(true)}
+              className="shrink-0 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-md shadow-blue-900/30 hover:bg-blue-500 transition-colors whitespace-nowrap"
+            >
+              🔍 Food DB
+            </button>
           </div>
+
+          {showFoodDB && (
+            <FoodDatabaseModal
+              dateParam={dateParam}
+              onClose={() => setShowFoodDB(false)}
+              onAdded={fetchAll}
+            />
+          )}
 
           <div className="space-y-3">
             {filteredMeals.map((meal) => {
