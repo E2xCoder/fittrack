@@ -430,7 +430,7 @@ export default function WorkoutPage() {
       {/* ── Split pills ── */}
       <div className="mb-4">
         <div
-          style={{ overflowX: "scroll", display: "flex", gap: "8px", paddingBottom: "4px" }}
+          style={{ overflowX: "scroll", display: "flex", flexWrap: "nowrap", gap: "8px", paddingBottom: "4px", minWidth: 0 }}
           className="[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {splits.map((split) => {
