@@ -120,6 +120,70 @@ export async function GET(req: NextRequest) {
   const loggingRate = Math.round((loggedCount / clampedDays) * 100);
   const gymFrequency = clampedDays >= 7 ? Math.round((gymDays / (clampedDays / 7)) * 10) / 10 : gymDays;
 
+  // ── Streak calculation (uses full history, independent of period) ──
+  const allLogs = await prisma.dailyLog.findMany({
+    where: { userId },
+    select: { date: true },
+    orderBy: { date: "desc" },
+  });
+
+  const allBodyLogs = await prisma.bodyLog.findMany({
+    where: { userId },
+    select: { date: true },
+    orderBy: { date: "desc" },
+  });
+
+  // Collect all distinct logged dates
+  const loggedDateSet = new Set<string>();
+  for (const l of allLogs)
+    loggedDateSet.add(new Date(l.date).toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" }));
+  for (const b of allBodyLogs)
+    loggedDateSet.add(new Date(b.date).toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" }));
+
+  const todayStr = today.toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
+
+  // Current streak — walk back from today
+  let currentStreak = 0;
+  {
+    const cur = new Date(today);
+    while (true) {
+      const ds = cur.toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
+      if (loggedDateSet.has(ds)) {
+        currentStreak++;
+        cur.setDate(cur.getDate() - 1);
+      } else {
+        // Allow today to be unlogged (don't break streak if today hasn't been logged yet)
+        if (ds === todayStr) {
+          cur.setDate(cur.getDate() - 1);
+          continue;
+        }
+        break;
+      }
+    }
+  }
+
+  // Longest streak — iterate sorted dates
+  const sortedDates = [...loggedDateSet].sort();
+  let longestStreak = 0;
+  let runStreak = 0;
+  let prevDate: Date | null = null;
+  for (const ds of sortedDates) {
+    const d = new Date(ds);
+    if (prevDate) {
+      const diff = Math.round((d.getTime() - prevDate.getTime()) / 86400000);
+      if (diff === 1) {
+        runStreak++;
+      } else {
+        longestStreak = Math.max(longestStreak, runStreak);
+        runStreak = 1;
+      }
+    } else {
+      runStreak = 1;
+    }
+    prevDate = d;
+  }
+  longestStreak = Math.max(longestStreak, runStreak);
+
   // Verdicts
   const verdicts: string[] = [];
   if (loggedCount === 0) {
@@ -174,6 +238,8 @@ export async function GET(req: NextRequest) {
       proteinAchievementRate,
       loggingRate,
       gymFrequency,
+      currentStreak,
+      longestStreak,
     },
     verdicts,
   });

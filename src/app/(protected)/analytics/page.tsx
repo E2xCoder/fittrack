@@ -51,6 +51,8 @@ interface Summary {
   proteinAchievementRate: number;
   loggingRate: number;
   gymFrequency: number;
+  currentStreak: number;
+  longestStreak: number;
 }
 
 interface Goals {
@@ -247,6 +249,36 @@ function OverviewTab({ data }: { data: AnalyticsData }) {
             <p className="mt-0.5 text-center text-[10px] text-zinc-600">{a.sub}</p>
           </div>
         ))}
+      </div>
+
+      {/* Streak card */}
+      <div
+        className="relative overflow-hidden rounded-2xl border border-amber-900/40 bg-gradient-to-br from-amber-950/40 to-zinc-900 p-4"
+        style={{ boxShadow: "0 0 40px -12px #f59e0b40" }}
+      >
+        <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full opacity-10"
+          style={{ background: "radial-gradient(circle, #f59e0b, transparent 70%)" }} />
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-medium text-amber-600">Current Streak</p>
+            <div className="flex items-end gap-2">
+              <p className="text-5xl font-black text-amber-400">{summary.currentStreak}</p>
+              <p className="mb-1 text-sm text-amber-600">days 🔥</p>
+            </div>
+            <p className="mt-1 text-xs text-zinc-500">consecutive days logged</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-zinc-500">Best streak</p>
+            <p className="text-3xl font-black text-zinc-300">{summary.longestStreak}</p>
+            <p className="text-xs text-zinc-600">days all-time</p>
+          </div>
+        </div>
+        {summary.currentStreak > 0 && summary.currentStreak >= summary.longestStreak && (
+          <p className="mt-3 text-xs font-semibold text-amber-500">🏆 This is your longest streak ever!</p>
+        )}
+        {summary.currentStreak === 0 && (
+          <p className="mt-3 text-xs text-zinc-600">Log today to start a new streak!</p>
+        )}
       </div>
 
       {/* Key stats */}
@@ -613,7 +645,6 @@ export default function AnalyticsPage() {
 
   const handlePeriod = (p: Period) => {
     setPeriod(p);
-    setTab("overview");
   };
 
   const periodLabel = period === 7 ? "Last 7 days" : period === 30 ? "Last 30 days" : "Last year";
