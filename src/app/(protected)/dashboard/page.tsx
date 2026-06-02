@@ -84,7 +84,6 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(toDateString(new Date()));
-  const [adjusting, setAdjusting] = useState<Record<string, boolean>>({});
   const [showGymPicker, setShowGymPicker] = useState(false);
   const [savingGym, setSavingGym] = useState(false);
 
@@ -117,8 +116,29 @@ export default function DashboardPage() {
   }
 
   async function removeMeal(id: string) {
-    await fetch(`/api/log-meal/${id}`, { method: "DELETE" });
-    fetchData(selectedDate);
+    const log = data?.mealLogs.find(l => l.id === id);
+    if (!log) return;
+
+    setData(prev => prev ? {
+      ...prev,
+      mealLogs: prev.mealLogs.filter(l => l.id !== id),
+      totalCalories: prev.totalCalories - log.calories,
+      totalProtein: prev.totalProtein - log.protein,
+      totalCarbs: prev.totalCarbs - log.carbs,
+      totalFat: prev.totalFat - log.fat,
+    } : prev);
+
+    const res = await fetch(`/api/log-meal/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      setData(prev => prev ? {
+        ...prev,
+        mealLogs: [...prev.mealLogs, log],
+        totalCalories: prev.totalCalories + log.calories,
+        totalProtein: prev.totalProtein + log.protein,
+        totalCarbs: prev.totalCarbs + log.carbs,
+        totalFat: prev.totalFat + log.fat,
+      } : prev);
+    }
   }
 
   async function adjustMeal(log: MealLog, delta: number) {
@@ -128,14 +148,40 @@ export default function DashboardPage() {
 
     if (newQuantity <= 0) { await removeMeal(log.id); return; }
 
-    setAdjusting((p) => ({ ...p, [log.id]: true }));
-    await fetch(`/api/log-meal/${log.id}`, {
+    const ratio = newQuantity / log.quantity;
+    const newCalories = log.calories * ratio;
+    const newProtein = log.protein * ratio;
+    const newCarbs = log.carbs * ratio;
+    const newFat = log.fat * ratio;
+
+    setData(prev => prev ? {
+      ...prev,
+      mealLogs: prev.mealLogs.map(l => l.id !== log.id ? l : {
+        ...l, quantity: newQuantity,
+        calories: newCalories, protein: newProtein,
+        carbs: newCarbs, fat: newFat,
+      }),
+      totalCalories: prev.totalCalories - log.calories + newCalories,
+      totalProtein: prev.totalProtein - log.protein + newProtein,
+      totalCarbs: prev.totalCarbs - log.carbs + newCarbs,
+      totalFat: prev.totalFat - log.fat + newFat,
+    } : prev);
+
+    const res = await fetch(`/api/log-meal/${log.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ quantity: newQuantity }),
     });
-    setAdjusting((p) => ({ ...p, [log.id]: false }));
-    fetchData(selectedDate);
+    if (!res.ok) {
+      setData(prev => prev ? {
+        ...prev,
+        mealLogs: prev.mealLogs.map(l => l.id !== log.id ? l : log),
+        totalCalories: prev.totalCalories - newCalories + log.calories,
+        totalProtein: prev.totalProtein - newProtein + log.protein,
+        totalCarbs: prev.totalCarbs - newCarbs + log.carbs,
+        totalFat: prev.totalFat - newFat + log.fat,
+      } : prev);
+    }
   }
 
   function changeDate(offset: number) {
@@ -310,11 +356,11 @@ export default function DashboardPage() {
                         </button>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button onClick={() => adjustMeal(log, -step)} disabled={adjusting[log.id]}
-                          className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600 disabled:opacity-50">−</button>
+                        <button onClick={() => adjustMeal(log, -step)}
+                          className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600">−</button>
                         <span className="min-w-16 text-center text-sm font-medium">{formatQuantity(log)}</span>
-                        <button onClick={() => adjustMeal(log, step)} disabled={adjusting[log.id]}
-                          className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600 disabled:opacity-50">+</button>
+                        <button onClick={() => adjustMeal(log, step)}
+                          className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600">+</button>
                         <span className="text-xs text-zinc-500">
                           {isPiece ? "pieces" : log.meal.servingLabel}
                         </span>
