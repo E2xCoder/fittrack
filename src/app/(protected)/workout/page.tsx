@@ -68,7 +68,7 @@ function SetInput({
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={`w-full rounded-md bg-zinc-800/80 py-1 text-center text-xs font-semibold text-white outline-none focus:ring-1 ${ringClass} placeholder:text-zinc-600`}
+      className={`h-6 w-full rounded-md bg-zinc-800/80 text-center text-xs font-semibold text-white outline-none focus:ring-1 ${ringClass} placeholder:text-zinc-600`}
     />
   );
 }
@@ -130,7 +130,7 @@ function ExerciseCard({
       )}
 
       {/* Column headers */}
-      <div className="grid grid-cols-[1fr_1fr_1fr_1fr_18px] gap-1 px-3 pb-0.5">
+      <div className="grid grid-cols-[1fr_1fr_1fr_1fr_18px] gap-1 px-3 pt-0.5 pb-0.5">
         {["kg", "Reps", "Sets", "RPE", ""].map((h, i) => (
           <span key={i} className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
             {h}
@@ -434,7 +434,7 @@ export default function WorkoutPage() {
       )}
 
       {/* ── Split pills ── */}
-      <div className="mb-4 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="mb-4 -mx-4 px-4 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {splits.map((split) => {
           const active = selectedSplit === split.name;
           return (
