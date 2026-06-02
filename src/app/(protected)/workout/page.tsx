@@ -434,23 +434,30 @@ export default function WorkoutPage() {
       )}
 
       {/* ── Split pills ── */}
-      <div className="mb-4 -mx-4 px-4 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {splits.map((split) => {
-          const active = selectedSplit === split.name;
-          return (
-            <button
-              key={split.id}
-              onClick={() => handleSplitSelect(split.name)}
-              className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-200 ${
-                active
-                  ? "bg-green-500 text-black shadow-lg shadow-green-500/30"
-                  : "border border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
-              }`}
-            >
-              {split.emoji} {split.name}
-            </button>
-          );
-        })}
+      {/* Split pill scroll — bleed past page padding so overflow-hidden on parent doesn't clip */}
+      <div className="relative mb-4 -mx-4">
+        {/* right fade hint */}
+        <div className="pointer-events-none absolute right-0 top-0 z-10 h-full w-10 bg-gradient-to-l from-black to-transparent" />
+        <div className="flex gap-2 overflow-x-scroll px-4 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {splits.map((split) => {
+            const active = selectedSplit === split.name;
+            return (
+              <button
+                key={split.id}
+                onClick={() => handleSplitSelect(split.name)}
+                className={`shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-200 ${
+                  active
+                    ? "bg-green-500 text-black shadow-lg shadow-green-500/30"
+                    : "border border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+                }`}
+              >
+                {split.emoji} {split.name}
+              </button>
+            );
+          })}
+          {/* spacer so last pill clears the fade */}
+          <div className="shrink-0 w-6" />
+        </div>
       </div>
 
       {/* ── Active split banner ── */}
