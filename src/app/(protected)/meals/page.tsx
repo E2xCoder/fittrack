@@ -180,7 +180,11 @@ function MealsContent() {
   }
 
   async function logPack(packId: string) {
-    await fetch(`/api/meal-packs/${packId}/log`, { method: "POST" });
+    await fetch(`/api/meal-packs/${packId}/log`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: dateParam }),
+    });
     setLoggedPack((p) => ({ ...p, [packId]: true }));
     setTimeout(() => setLoggedPack((p) => ({ ...p, [packId]: false })), 2000);
   }
