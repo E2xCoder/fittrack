@@ -100,14 +100,14 @@ function ExerciseCard({
       style={{ boxShadow: `0 0 24px -8px ${acc.border}30`, borderLeftColor: acc.border, borderLeftWidth: 3 }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-3 pt-2.5 pb-1">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className={`text-xs font-bold ${acc.text}`}>#{exIdx + 1}</span>
-          <span className="truncate text-sm font-bold text-white">{exercise.name}</span>
+      <div className="flex items-center justify-between px-2 pt-2 pb-0.5">
+        <div className="flex items-center gap-1 min-w-0">
+          <span className={`text-[10px] font-bold ${acc.text}`}>#{exIdx + 1}</span>
+          <span className="truncate text-xs font-bold text-white leading-tight">{exercise.name}</span>
         </div>
         <button
           onClick={onRemove}
-          className="ml-2 shrink-0 rounded-md px-1.5 py-0.5 text-xs text-zinc-600 hover:bg-red-950 hover:text-red-400 transition-colors"
+          className="ml-1 shrink-0 text-[10px] text-zinc-600 hover:text-red-400 transition-colors"
         >
           ✕
         </button>
@@ -115,33 +115,27 @@ function ExerciseCard({
 
       {/* Previous perf */}
       {prev && (
-        <div className="mx-3 mb-1.5 rounded-lg bg-zinc-800/50 px-2.5 py-1.5">
-          <span className="text-[10px] text-zinc-600 mr-2">
-            Last · {new Date(prev.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+        <div className="mx-2 mb-1 rounded bg-zinc-800/50 px-1.5 py-0.5">
+          <span className="text-[9px] text-zinc-500">
+            Last: {prev.sets.slice(0,2).map((s, i) => `${s.weight ?? "?"}×${s.reps ?? "?"}`).join("  ")}
+            {prev.sets.length > 2 ? "…" : ""}
           </span>
-          {prev.sets.map((s, i) => (
-            <span key={i} className="mr-2 text-[10px] text-zinc-400">
-              {s.weight ?? "?"}×{s.reps ?? "?"}
-              {s.sets && s.sets > 1 ? `×${s.sets}` : ""}
-              {s.rpe ? ` @${s.rpe}` : ""}
-            </span>
-          ))}
         </div>
       )}
 
       {/* Column headers */}
-      <div className="grid grid-cols-[64px_64px_52px_52px_16px] gap-1 px-3 pt-0.5 pb-0.5">
-        {["kg", "Reps", "Sets", "RPE", ""].map((h, i) => (
-          <span key={i} className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+      <div className="grid grid-cols-[1fr_1fr_1fr_1fr_14px] gap-0.5 px-2 pb-0.5">
+        {["kg", "Rep", "Set", "RPE", ""].map((h, i) => (
+          <span key={i} className="text-[9px] font-semibold uppercase tracking-wider text-zinc-600">
             {h}
           </span>
         ))}
       </div>
 
       {/* Set rows */}
-      <div className="space-y-0.5 px-3 pb-2">
+      <div className="space-y-0.5 px-2 pb-1.5">
         {exercise.sets.map((set, setIdx) => (
-          <div key={setIdx} className="grid grid-cols-[64px_64px_52px_52px_16px] items-center gap-1">
+          <div key={setIdx} className="grid grid-cols-[1fr_1fr_1fr_1fr_14px] items-center gap-0.5">
             <SetInput value={set.weight} placeholder="—" onChange={(v) => onUpdateSet(setIdx, "weight", v)} ringClass={acc.ring} />
             <SetInput value={set.reps}   placeholder="—" onChange={(v) => onUpdateSet(setIdx, "reps",   v)} ringClass={acc.ring} />
             <SetInput value={set.sets}   placeholder="1" onChange={(v) => onUpdateSet(setIdx, "sets",   v)} ringClass={acc.ring} />
@@ -434,18 +428,19 @@ export default function WorkoutPage() {
       )}
 
       {/* ── Split pills ── */}
-      {/* Split pill scroll — bleed past page padding so overflow-hidden on parent doesn't clip */}
-      <div className="relative mb-4 -mx-4">
-        {/* right fade hint */}
-        <div className="pointer-events-none absolute right-0 top-0 z-10 h-full w-10 bg-gradient-to-l from-black to-transparent" />
-        <div className="flex gap-2 overflow-x-scroll px-4 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="mb-4">
+        <div
+          style={{ overflowX: "scroll", display: "flex", gap: "8px", paddingBottom: "4px" }}
+          className="[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
           {splits.map((split) => {
             const active = selectedSplit === split.name;
             return (
               <button
                 key={split.id}
                 onClick={() => handleSplitSelect(split.name)}
-                className={`shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-200 ${
+                style={{ flexShrink: 0, whiteSpace: "nowrap" }}
+                className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-all duration-200 ${
                   active
                     ? "bg-green-500 text-black shadow-lg shadow-green-500/30"
                     : "border border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
@@ -455,8 +450,6 @@ export default function WorkoutPage() {
               </button>
             );
           })}
-          {/* spacer so last pill clears the fade */}
-          <div className="shrink-0 w-6" />
         </div>
       </div>
 
@@ -533,8 +526,8 @@ export default function WorkoutPage() {
             )}
           </div>
 
-          {/* Exercise cards */}
-          <div className="space-y-2.5">
+          {/* Exercise cards — 2-column grid */}
+          <div className="grid grid-cols-2 gap-2">
             {exercises.map((exercise, exIdx) => (
               <ExerciseCard
                 key={exIdx}
