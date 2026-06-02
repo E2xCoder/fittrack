@@ -68,7 +68,7 @@ function SetInput({
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={`h-6 w-full rounded-md bg-zinc-800/80 text-center text-xs font-semibold text-white outline-none focus:ring-1 ${ringClass} placeholder:text-zinc-600`}
+      className={`h-7 w-full rounded-md border border-zinc-700 bg-zinc-800 text-center text-xs font-semibold text-white outline-none focus:ring-1 ${ringClass} placeholder:text-zinc-600`}
     />
   );
 }
