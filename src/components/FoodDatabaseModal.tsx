@@ -51,8 +51,6 @@ function normalize(p: OFFProduct): NormalizedProduct | null {
   };
 }
 
-const FIELDS = "product_name,brands,nutriments,image_thumb_url,code";
-
 // ─── Macro Badge ──────────────────────────────────────────────────────────────
 
 function MacroBadge({ label, value, unit, color }: { label: string; value: number; unit: string; color: string }) {
@@ -196,8 +194,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
     setSearching(true);
     setNoResults(false);
     try {
-      const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&json=1&page_size=12&fields=${FIELDS}`;
-      const res = await fetch(url);
+      const res = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`);
       const data = await res.json();
       const products: NormalizedProduct[] = (data.products ?? [])
         .map((p: OFFProduct) => normalize(p))
@@ -209,13 +206,18 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
     } finally {
       setSearching(false);
     }
+  // doSearch never changes — no external deps needed
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Debounce: only re-run when query text changes
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => doSearch(query), 500);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [query, doSearch]);
+  // doSearch is stable (empty deps), safe to omit from array
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
   // ── Barcode text search ───────────────────────────────────────────────
 
@@ -225,7 +227,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
     if (!code.trim()) return;
     setSearching(true);
     try {
-      const res  = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code.trim()}.json`);
+      const res  = await fetch(`/api/food-barcode?code=${encodeURIComponent(code.trim())}`);
       const data = await res.json();
       if (data.status !== 1 || !data.product) {
         setBarcodeError("Ürün bulunamadı.");
