@@ -9,6 +9,17 @@ export async function POST(req: NextRequest) {
 
   const userId = session.user.id;
 
+  const body = await req.json();
+
+  // Skip-only: just mark onboarding as completed
+  if (body.skipOnly) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { onboardingCompleted: true },
+    });
+    return NextResponse.json({ ok: true });
+  }
+
   const {
     name,
     goal,
@@ -25,7 +36,7 @@ export async function POST(req: NextRequest) {
     fatTarget,
     gymDays,
     splits,
-  } = await req.json();
+  } = body;
 
   // Update user profile
   await prisma.user.update({

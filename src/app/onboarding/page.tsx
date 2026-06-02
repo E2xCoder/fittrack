@@ -765,7 +765,15 @@ export default function OnboardingPage() {
         {/* Skip */}
         {step === 1 && (
           <button
-            onClick={() => router.replace("/dashboard")}
+            onClick={async () => {
+              // Mark onboarding completed so the redirect never fires again
+              await fetch("/api/onboarding", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ skipOnly: true }),
+              }).catch(() => {});
+              router.replace("/dashboard");
+            }}
             className="mt-4 w-full text-center text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
           >
             Şimdilik atla

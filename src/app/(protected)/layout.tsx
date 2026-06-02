@@ -27,7 +27,10 @@ export default function ProtectedLayout({
     fetch("/api/user/me")
       .then((r) => r.json())
       .then((user) => {
-        if (user && user.onboardingCompleted === false) {
+        if (!user) return;
+        // Only redirect truly new users: onboarding not done AND no profile data yet
+        const hasProfileData = user.calorieTarget || user.weight || user.height;
+        if (user.onboardingCompleted === false && !hasProfileData) {
           router.replace("/onboarding");
         }
       })
