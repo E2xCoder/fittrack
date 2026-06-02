@@ -28,6 +28,14 @@ model User {
   sleepTarget   Float?  @default(8)
   apiToken      String? @unique
 
+  onboardingCompleted Boolean  @default(false)
+  age                 Int?
+  gender              String?
+  activityLevel       String?
+  goal                String?
+  dietaryPreferences  String[]
+  mealsPerDay         Int?     @default(3)
+
   meals          Meal[]
   mealPacks      MealPack[]
   mealLogs       MealLog[]

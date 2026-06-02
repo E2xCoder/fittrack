@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 
@@ -20,6 +21,18 @@ export default function ProtectedLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Redirect to onboarding if not completed
+  useEffect(() => {
+    fetch("/api/user/me")
+      .then((r) => r.json())
+      .then((user) => {
+        if (user && user.onboardingCompleted === false) {
+          router.replace("/onboarding");
+        }
+      })
+      .catch(() => {});
+  }, [router]);
 
   async function handleLogout() {
     await authClient.signOut();
