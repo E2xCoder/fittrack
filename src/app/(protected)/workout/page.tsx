@@ -68,7 +68,7 @@ function SetInput({
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={`w-full rounded-lg bg-zinc-800/80 py-1.5 text-center text-sm font-semibold text-white outline-none focus:ring-1 ${ringClass} placeholder:text-zinc-600`}
+      className={`w-full rounded-md bg-zinc-800/80 py-1 text-center text-xs font-semibold text-white outline-none focus:ring-1 ${ringClass} placeholder:text-zinc-600`}
     />
   );
 }
@@ -139,7 +139,7 @@ function ExerciseCard({
       </div>
 
       {/* Set rows */}
-      <div className="space-y-1 px-3 pb-2">
+      <div className="space-y-0.5 px-3 pb-2">
         {exercise.sets.map((set, setIdx) => (
           <div key={setIdx} className="grid grid-cols-[1fr_1fr_1fr_1fr_18px] items-center gap-1">
             <SetInput value={set.weight} placeholder="—" onChange={(v) => onUpdateSet(setIdx, "weight", v)} ringClass={acc.ring} />
@@ -434,7 +434,7 @@ export default function WorkoutPage() {
       )}
 
       {/* ── Split pills ── */}
-      <div className="mb-4 flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+      <div className="mb-4 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {splits.map((split) => {
           const active = selectedSplit === split.name;
           return (
