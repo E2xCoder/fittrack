@@ -130,7 +130,7 @@ function ExerciseCard({
       )}
 
       {/* Column headers */}
-      <div className="grid grid-cols-[1fr_1fr_1fr_1fr_18px] gap-1 px-3 pt-0.5 pb-0.5">
+      <div className="grid grid-cols-[64px_64px_52px_52px_16px] gap-1 px-3 pt-0.5 pb-0.5">
         {["kg", "Reps", "Sets", "RPE", ""].map((h, i) => (
           <span key={i} className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
             {h}
@@ -141,7 +141,7 @@ function ExerciseCard({
       {/* Set rows */}
       <div className="space-y-0.5 px-3 pb-2">
         {exercise.sets.map((set, setIdx) => (
-          <div key={setIdx} className="grid grid-cols-[1fr_1fr_1fr_1fr_18px] items-center gap-1">
+          <div key={setIdx} className="grid grid-cols-[64px_64px_52px_52px_16px] items-center gap-1">
             <SetInput value={set.weight} placeholder="—" onChange={(v) => onUpdateSet(setIdx, "weight", v)} ringClass={acc.ring} />
             <SetInput value={set.reps}   placeholder="—" onChange={(v) => onUpdateSet(setIdx, "reps",   v)} ringClass={acc.ring} />
             <SetInput value={set.sets}   placeholder="1" onChange={(v) => onUpdateSet(setIdx, "sets",   v)} ringClass={acc.ring} />
