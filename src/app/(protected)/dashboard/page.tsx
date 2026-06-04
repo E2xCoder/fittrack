@@ -3,6 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+interface MealInfo {
+  name: string;
+  servingLabel: string;
+  servingSize: number;
+}
+
 interface MealLog {
   id: string;
   quantity: number;
@@ -10,12 +16,10 @@ interface MealLog {
   protein: number;
   carbs: number;
   fat: number;
-  meal: {
-    id: string;
-    name: string;
-    servingLabel: string;
-    servingSize: number;
-  };
+  // null for ad-hoc logs (logged without saving to the library) or if the
+  // library meal was later deleted — fall back to mealSnapshot in that case.
+  meal: ({ id: string } & MealInfo) | null;
+  mealSnapshot: MealInfo | null;
 }
 
 interface Goals {
@@ -74,10 +78,20 @@ function MacroBar({ label, current, target, unit, color }: {
   );
 }
 
+/** Resolve display info from the library meal, falling back to the snapshot. */
+function mealInfo(log: MealLog): MealInfo {
+  if (log.meal) return log.meal;
+  return {
+    name: log.mealSnapshot?.name ?? "Bilinmeyen ürün",
+    servingLabel: log.mealSnapshot?.servingLabel ?? "g",
+    servingSize: log.mealSnapshot?.servingSize ?? 100,
+  };
+}
+
 function formatQuantity(log: MealLog): string {
-  const label = log.meal.servingLabel;
-  if (label === "piece") return `x${log.quantity}`;
-  return `${Math.round(log.quantity * log.meal.servingSize)}${label}`;
+  const { servingLabel, servingSize } = mealInfo(log);
+  if (servingLabel === "piece") return `x${log.quantity}`;
+  return `${Math.round(log.quantity * servingSize)}${servingLabel}`;
 }
 
 export default function DashboardPage() {
@@ -142,8 +156,8 @@ export default function DashboardPage() {
   }
 
   async function adjustMeal(log: MealLog, delta: number) {
-    const label = log.meal.servingLabel;
-    const deltaQuantity = label === "piece" ? delta : delta / log.meal.servingSize;
+    const { servingLabel, servingSize } = mealInfo(log);
+    const deltaQuantity = servingLabel === "piece" ? delta : delta / servingSize;
     const newQuantity = log.quantity + deltaQuantity;
 
     if (newQuantity <= 0) { await removeMeal(log.id); return; }
@@ -338,13 +352,14 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 {data.mealLogs.map((log) => {
-                  const isPiece = log.meal.servingLabel === "piece";
+                  const info = mealInfo(log);
+                  const isPiece = info.servingLabel === "piece";
                   const step = isPiece ? 1 : 0.5;
                   return (
                     <div key={log.id} className="rounded-xl bg-zinc-800 p-3">
                       <div className="mb-2 flex items-start justify-between">
                         <div>
-                          <p className="font-medium">{log.meal.name}</p>
+                          <p className="font-medium">{info.name}</p>
                           <p className="text-xs text-zinc-400">
                             {Math.round(log.calories)} kcal · P:{Math.round(log.protein)}g ·
                             C:{Math.round(log.carbs)}g · F:{Math.round(log.fat)}g
@@ -362,7 +377,7 @@ export default function DashboardPage() {
                         <button onClick={() => adjustMeal(log, step)}
                           className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600">+</button>
                         <span className="text-xs text-zinc-500">
-                          {isPiece ? "pieces" : log.meal.servingLabel}
+                          {isPiece ? "pieces" : info.servingLabel}
                         </span>
                       </div>
                     </div>

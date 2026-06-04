@@ -79,7 +79,9 @@ function AddQuantityModal({
   onCancel: () => void;
 }) {
   const [grams, setGrams] = useState("100");
-  const [saving, setSaving] = useState(false);
+  // null = idle, "today" = log only, "library" = save to library + log
+  const [savingMode, setSavingMode] = useState<null | "today" | "library">(null);
+  const saving = savingMode !== null;
 
   const g = Math.max(1, Number(grams) || 100);
   const mult = g / 100;
@@ -90,36 +92,61 @@ function AddQuantityModal({
     fat:      Math.round(product.per100.fat      * mult * 10) / 10,
   };
 
-  async function handleSave() {
-    setSaving(true);
-    // 1. Save to meal library (base: per 100g)
-    const mealRes = await fetch("/api/meals", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: product.name + (product.brand ? ` (${product.brand})` : ""),
-        calories: product.per100.calories,
-        protein:  product.per100.protein,
-        carbs:    product.per100.carbs,
-        fat:      product.per100.fat,
-        servingSize: 100,
-        servingLabel: "g",
-        isFavorite: false,
-      }),
-    });
-    const mealData = await mealRes.json();
-    const mealId = mealData.id ?? mealData.meal?.id;
+  const fullName = product.name + (product.brand ? ` (${product.brand})` : "");
 
-    // 2. Log to today / dateParam
-    if (mealId) {
-      await fetch("/api/log-meal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mealId, quantity: mult, date: dateParam }),
-      });
+  async function handleSave(mode: "today" | "library") {
+    if (saving) return;
+    setSavingMode(mode);
+    try {
+      if (mode === "library") {
+        // 1. Save to meal library (base: per 100g) …
+        const mealRes = await fetch("/api/meals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: fullName,
+            calories: product.per100.calories,
+            protein:  product.per100.protein,
+            carbs:    product.per100.carbs,
+            fat:      product.per100.fat,
+            servingSize: 100,
+            servingLabel: "g",
+            isFavorite: false,
+          }),
+        });
+        const mealData = await mealRes.json();
+        const mealId = mealData.id ?? mealData.meal?.id;
+        // 2. … then log the chosen amount to the day via that meal
+        if (mealId) {
+          await fetch("/api/log-meal", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mealId, quantity: mult, date: dateParam }),
+          });
+        }
+      } else {
+        // Ad-hoc: log straight to the day, no permanent library entry
+        await fetch("/api/log-meal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: fullName,
+            calories: product.per100.calories,
+            protein:  product.per100.protein,
+            carbs:    product.per100.carbs,
+            fat:      product.per100.fat,
+            servingSize: 100,
+            servingLabel: "g",
+            quantity: mult,
+            date: dateParam,
+          }),
+        });
+      }
+      onDone();
+    } catch {
+      // Re-enable buttons so the user can retry
+      setSavingMode(null);
     }
-    setSaving(false);
-    onDone();
   }
 
   return (
@@ -155,13 +182,25 @@ function AddQuantityModal({
           </div>
         </div>
 
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white shadow-lg shadow-green-900/30 hover:bg-green-500 transition-colors disabled:opacity-50"
-        >
-          {saving ? "Kaydediliyor…" : "✓ Ekle ve Logla"}
-        </button>
+        <div className="space-y-2">
+          <button
+            onClick={() => handleSave("today")}
+            disabled={saving}
+            className="w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white shadow-lg shadow-green-900/30 hover:bg-green-500 transition-colors disabled:opacity-50"
+          >
+            {savingMode === "today" ? "Ekleniyor…" : "✓ Sadece bugün ekle"}
+          </button>
+          <button
+            onClick={() => handleSave("library")}
+            disabled={saving}
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-3 text-sm font-semibold text-zinc-200 hover:border-green-600 hover:text-green-400 transition-colors disabled:opacity-50"
+          >
+            {savingMode === "library" ? "Kaydediliyor…" : "📚 Kütüphaneye de kaydet"}
+          </button>
+          <p className="px-1 text-center text-[11px] leading-snug text-zinc-600">
+            “Sadece bugün ekle” ürünü kütüphaneye kaydetmez, yalnızca güne loglar.
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -261,6 +300,15 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
 
   // ── Camera scanning ───────────────────────────────────────────────────
 
+  /** Reset all barcode/scan state + in-flight guards back to a clean slate */
+  function resetAll() {
+    scannedRef.current  = false;
+    fetchingRef.current = false;
+    setBarcodeProduct(null);
+    setBarcodeError("");
+    setBarcodeInput("");
+  }
+
   function stopCamera() {
     setScanningCam(false);
     setTorchOn(false);
@@ -271,18 +319,10 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
   }
 
   async function startCamera() {
-    // Clear previous scan result, error, and guards before opening new stream
-    scannedRef.current  = false;
-    fetchingRef.current = false;
-    setBarcodeProduct(null);
-    setBarcodeError("");
-
-    // Stop any lingering stream (safe to call even if already stopped)
+    // Defensive: tear down any lingering stream before opening a new one
     streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current  = null;
-    readerRef.current  = null;
-    setTorchOn(false);
-    setTorchSupported(false);
+    streamRef.current = null;
+    readerRef.current = null;
 
     setScanningCam(true);
     try {
@@ -321,27 +361,13 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
     }
   }
 
-  /** Full reset: stop stream, clear all state, then re-open camera sequentially */
+  /** Wipe old state, wait for React to flush, then open a fresh camera stream.
+   *  Wired to BOTH "Kamerayla Tara" and "Tekrar Tara". */
   async function resetAndRescan() {
-    // 1. Hard-stop current stream and clear refs immediately
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current  = null;
-    readerRef.current  = null;
-    scannedRef.current  = false;
-    fetchingRef.current = false;
-
-    // 2. Clear all visible state including input; scanningCam → false unmounts video element
-    setBarcodeProduct(null);
-    setBarcodeError("");
-    setBarcodeInput("");
-    setTorchOn(false);
-    setTorchSupported(false);
-    setScanningCam(false);
-
-    // 3. Yield one animation frame so React unmounts the video element before re-mounting
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-    // 4. Start fresh — startCamera clears state again and opens new stream
+    resetAll();
+    // Wait for the reset to flush so the previous product/error are cleared
+    // before we re-open — prevents the old result lingering over the camera view.
+    await new Promise((resolve) => setTimeout(resolve, 50));
     await startCamera();
   }
 
@@ -515,7 +541,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                 {/* Camera button — big and easy to tap */}
                 {!scanningCam ? (
                   <button
-                    onClick={startCamera}
+                    onClick={resetAndRescan}
                     className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-700 bg-zinc-900 py-8 text-zinc-300 hover:border-green-600 hover:text-green-400 transition-colors active:scale-95"
                   >
                     <span className="text-5xl">📷</span>
