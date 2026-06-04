@@ -223,15 +223,12 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
   const [barcodeProduct, setBarcodeProduct] = useState<NormalizedProduct | null>(null);
   const [barcodeError, setBarcodeError]     = useState("");
   const [barcodeLoading, setBarcodeLoading] = useState(false);
-  const [scanningCam, setScanningCam]       = useState(false);
+  const [isScanning, setIsScanning]         = useState(false); // decode loop actively running
   const [torchOn, setTorchOn]               = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
-  const videoRef        = useRef<HTMLVideoElement>(null);
-  const readerRef       = useRef<import("@zxing/browser").BrowserMultiFormatReader | null>(null);
-  const streamRef       = useRef<MediaStream | null>(null);
-  // Guards against duplicate in-flight barcode fetches and camera multi-fire
-  const fetchingRef     = useRef(false);
-  const scannedRef      = useRef(false);
+  const videoRef  = useRef<HTMLVideoElement>(null);
+  const readerRef = useRef<import("@zxing/browser").BrowserMultiFormatReader | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   // Add quantity
   const [addingProduct, setAddingProduct] = useState<NormalizedProduct | null>(null);
@@ -268,17 +265,13 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
-  // ── Barcode fetch — stable ref, guarded against duplicate calls ──────
+  // ── Barcode lookup (manual entry or a scanned code) ───────────────────
 
-  const fetchBarcode = useCallback(async (code: string) => {
+  async function fetchBarcode(code: string) {
     const trimmed = code.trim();
     if (!trimmed) return;
-    // Prevent concurrent fetches for the same or different code
-    if (fetchingRef.current) return;
-    fetchingRef.current = true;
-
     setBarcodeError("");
-    setBarcodeProduct(null);   // clear previous result only once, here
+    setBarcodeProduct(null);
     setBarcodeLoading(true);
     try {
       const res  = await fetch(`/api/food-barcode?code=${encodeURIComponent(trimmed)}`);
@@ -289,86 +282,86 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
       }
       const p = normalize({ code: trimmed, ...data.product });
       if (!p) { setBarcodeError("Ürün bilgileri eksik."); return; }
-      setBarcodeProduct(p);      // set once, never cleared again until next manual search
+      setBarcodeProduct(p);
     } catch {
       setBarcodeError("Bağlantı hatası.");
     } finally {
       setBarcodeLoading(false);
-      fetchingRef.current = false;
     }
-  }, []);  // stable — no captured state, only refs + setters
+  }
 
   // ── Camera scanning ───────────────────────────────────────────────────
-
-  /** Reset all barcode/scan state + in-flight guards back to a clean slate */
-  function resetAll() {
-    scannedRef.current  = false;
-    fetchingRef.current = false;
-    setBarcodeProduct(null);
-    setBarcodeError("");
-    setBarcodeInput("");
-  }
+  // The stream is opened ONCE while the barcode tab is active and stays open
+  // until the tab changes / the modal closes. To rescan we only restart ZXing's
+  // one-shot decode (decodeOnceFromStream) — the stream is never torn down and
+  // rebuilt, which is what used to cause the open/close race.
 
   function stopCamera() {
-    setScanningCam(false);
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    readerRef.current = null;
+    // Detaching the source makes any in-flight decode loop bail out on its own.
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setIsScanning(false);
     setTorchOn(false);
     setTorchSupported(false);
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    readerRef.current = null;
   }
 
-  async function startCamera() {
-    // Defensive: tear down any lingering stream before opening a new one
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    readerRef.current = null;
+  /** One-shot decode against the already-open stream. */
+  async function scan() {
+    const reader = readerRef.current;
+    const stream = streamRef.current;
+    const video  = videoRef.current;
+    if (!reader || !stream || !video) return;
 
-    setScanningCam(true);
+    setBarcodeProduct(null);
+    setBarcodeError("");
+    setIsScanning(true);
     try {
-      const { BrowserMultiFormatReader } = await import("@zxing/browser");
-      const reader = new BrowserMultiFormatReader();
-      readerRef.current = reader;
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      });
-      streamRef.current = stream;
-
-      const track = stream.getVideoTracks()[0];
-      if (track) {
-        const caps = track.getCapabilities() as MediaTrackCapabilities & { torch?: boolean };
-        if (caps.torch) setTorchSupported(true);
-      }
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-        reader.decodeFromStream(stream, videoRef.current, (result) => {
-          // decodeFromStream fires on every frame — only process the FIRST hit
-          if (result && !scannedRef.current) {
-            scannedRef.current = true;
-            const code = result.getText();
-            stopCamera();
-            setBarcodeInput(code);
-            fetchBarcode(code);
-          }
-        });
-      }
+      // Resolves on the first barcode read; stops only the decode loop, NOT the
+      // stream, so the live preview keeps running afterwards.
+      const result = await reader.decodeOnceFromStream(stream, video);
+      if (streamRef.current !== stream) return; // camera was torn down meanwhile
+      setIsScanning(false);
+      const code = result.getText();
+      setBarcodeInput(code);
+      fetchBarcode(code);
     } catch {
-      setBarcodeError("Kamera erişimi reddedildi.");
-      setScanningCam(false);
+      // No barcode / stream ended — drop back to idle if still the same stream.
+      if (streamRef.current === stream) setIsScanning(false);
     }
   }
 
-  /** Wipe old state, wait for React to flush, then open a fresh camera stream.
-   *  Wired to BOTH "Kamerayla Tara" and "Tekrar Tara". */
-  async function resetAndRescan() {
-    resetAll();
-    // Wait for the reset to flush so the previous product/error are cleared
-    // before we re-open — prevents the old result lingering over the camera view.
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    await startCamera();
+  /** Open the stream once (lazy-loading ZXing) and kick off the first scan.
+   *  `isActive` lets the lifecycle effect abort if the tab changed mid-await.
+   *  The dynamic import runs first so nothing is set synchronously from the effect;
+   *  scan() (called after the awaits) owns the product/error/isScanning reset. */
+  async function openCamera(isActive: () => boolean = () => true) {
+    try {
+      const { BrowserMultiFormatReader } = await import("@zxing/browser");
+      if (!isActive()) return;
+      if (!readerRef.current) readerRef.current = new BrowserMultiFormatReader();
+
+      if (!streamRef.current) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+        });
+        if (!isActive()) { stream.getTracks().forEach((t) => t.stop()); return; }
+        streamRef.current = stream;
+        const track = stream.getVideoTracks()[0];
+        const caps = track?.getCapabilities?.() as (MediaTrackCapabilities & { torch?: boolean }) | undefined;
+        setTorchSupported(Boolean(caps?.torch));
+      }
+      if (isActive()) scan();
+    } catch {
+      if (isActive()) { setBarcodeError("Kamera erişimi reddedildi."); setIsScanning(false); }
+    }
+  }
+
+  /** "Tekrar Tara": decode again on the open stream (or reopen if it failed). */
+  function rescan() {
+    if (streamRef.current) scan();
+    else openCamera();
   }
 
   async function toggleTorch() {
@@ -381,8 +374,18 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
     } catch { /* device doesn't support applyConstraints for torch */ }
   }
 
-  // Stop camera on unmount
-  useEffect(() => () => stopCamera(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Camera lifecycle is driven solely by the barcode tab being active.
+  useEffect(() => {
+    if (tab !== "barcode") return;
+    let active = true;
+    // openCamera only updates state asynchronously (after its awaits), so the
+    // "synchronous setState in effect" concern does not apply here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    openCamera(() => active);
+    return () => { active = false; stopCamera(); };
+  // openCamera/stopCamera are stable for this lifecycle effect
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   // ── Render ────────────────────────────────────────────────────────────
 
@@ -522,59 +525,49 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                     inputMode="numeric"
                     placeholder="Barkod numarası…"
                     value={barcodeInput}
-                    onChange={(e) => {
-                      setBarcodeInput(e.target.value);
-                      // reset guard so a new manual entry can trigger a fresh fetch
-                      fetchingRef.current = false;
-                    }}
+                    onChange={(e) => setBarcodeInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && fetchBarcode(barcodeInput)}
                     className="flex-1 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-white outline-none focus:border-green-600 placeholder:text-zinc-600"
                   />
                   <button
-                    onClick={() => { fetchingRef.current = false; fetchBarcode(barcodeInput); }}
+                    onClick={() => fetchBarcode(barcodeInput)}
                     className="rounded-xl bg-green-600 px-5 text-sm font-bold text-white hover:bg-green-500 transition-colors"
                   >
                     Ara
                   </button>
                 </div>
 
-                {/* Camera button — big and easy to tap */}
-                {!scanningCam ? (
-                  <button
-                    onClick={resetAndRescan}
-                    className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-700 bg-zinc-900 py-8 text-zinc-300 hover:border-green-600 hover:text-green-400 transition-colors active:scale-95"
-                  >
-                    <span className="text-5xl">📷</span>
-                    <span className="text-base font-bold">Kamerayla Tara</span>
-                    <span className="text-xs text-zinc-500">Barkodu kameraya göster</span>
-                  </button>
-                ) : (
-                  <div className="relative overflow-hidden rounded-2xl border border-zinc-700 bg-black">
-                    <video ref={videoRef} className="w-full" muted playsInline />
-                    {/* targeting overlay */}
+                {/* Live camera — opened once, stays open the whole time this tab is active */}
+                <div className="relative overflow-hidden rounded-2xl border border-zinc-700 bg-black">
+                  <video ref={videoRef} className="w-full" muted playsInline />
+
+                  {/* targeting frame — only while actively scanning */}
+                  {isScanning && (
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                       <div className="h-40 w-64 rounded-2xl border-2 border-green-400 opacity-80 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
                     </div>
-                    {/* Torch toggle — only when device supports it */}
-                    {torchSupported && (
-                      <button
-                        onClick={toggleTorch}
-                        className={`absolute right-2 top-2 rounded-full p-2.5 text-xl backdrop-blur transition-colors ${
-                          torchOn ? "bg-yellow-400/90 text-black" : "bg-black/60 text-white hover:bg-black/80"
-                        }`}
-                        title={torchOn ? "Flaşı Kapat" : "Flaşı Aç"}
-                      >
-                        🔦
-                      </button>
-                    )}
+                  )}
+
+                  {/* Torch toggle — only when the device supports it */}
+                  {torchSupported && (
                     <button
-                      onClick={stopCamera}
-                      className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-5 py-2 text-sm font-semibold text-white backdrop-blur hover:bg-black/90"
+                      onClick={toggleTorch}
+                      className={`absolute right-2 top-2 rounded-full p-2.5 text-xl backdrop-blur transition-colors ${
+                        torchOn ? "bg-yellow-400/90 text-black" : "bg-black/60 text-white hover:bg-black/80"
+                      }`}
+                      title={torchOn ? "Flaşı Kapat" : "Flaşı Aç"}
                     >
-                      ✕ Durdur
+                      🔦
                     </button>
-                  </div>
-                )}
+                  )}
+
+                  {/* status hint while scanning */}
+                  {isScanning && (
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-4 py-1.5 text-xs font-semibold text-white backdrop-blur">
+                      Barkodu çerçeveye getir…
+                    </div>
+                  )}
+                </div>
 
                 {barcodeLoading && (
                   <div className="flex justify-center py-6">
@@ -582,12 +575,12 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                   </div>
                 )}
 
-                {/* Error + Tekrar Tara */}
+                {/* Error — camera stays open, offer a rescan */}
                 {barcodeError && !barcodeLoading && (
                   <div className="space-y-2">
                     <p className="rounded-xl bg-red-950/40 px-4 py-3 text-sm text-red-400">{barcodeError}</p>
                     <button
-                      onClick={resetAndRescan}
+                      onClick={rescan}
                       className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 py-3 text-sm font-semibold text-zinc-300 hover:border-green-600 hover:text-green-400 transition-colors"
                     >
                       🔄 Tekrar Tara
@@ -595,8 +588,17 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                   </div>
                 )}
 
+                {/* Result — camera is NOT closed; just show it and offer a rescan */}
                 {barcodeProduct && !barcodeLoading && (
-                  <ProductCard product={barcodeProduct} />
+                  <div className="space-y-2">
+                    <ProductCard product={barcodeProduct} />
+                    <button
+                      onClick={rescan}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 py-3 text-sm font-semibold text-zinc-300 hover:border-green-600 hover:text-green-400 transition-colors"
+                    >
+                      🔄 Tekrar Tara
+                    </button>
+                  </div>
                 )}
               </>
             )}
