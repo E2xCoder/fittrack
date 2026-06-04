@@ -270,22 +270,21 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
     readerRef.current = null;
   }
 
-  /** Full reset: clear all barcode state and re-open camera */
-  function resetAndRescan() {
+  async function startCamera() {
+    // Clear previous scan result, error, and guards before opening new stream
     scannedRef.current  = false;
     fetchingRef.current = false;
-    setBarcodeError("");
     setBarcodeProduct(null);
-    setBarcodeInput("");
-    stopCamera();
-    // Small timeout so stop completes before restarting
-    setTimeout(() => startCamera(), 150);
-  }
-
-  async function startCamera() {
-    scannedRef.current = false;
-    setScanningCam(true);
     setBarcodeError("");
+
+    // Stop any lingering stream (safe to call even if already stopped)
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current  = null;
+    readerRef.current  = null;
+    setTorchOn(false);
+    setTorchSupported(false);
+
+    setScanningCam(true);
     try {
       const { BrowserMultiFormatReader } = await import("@zxing/browser");
       const reader = new BrowserMultiFormatReader();
@@ -296,7 +295,6 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
       });
       streamRef.current = stream;
 
-      // Detect torch support
       const track = stream.getVideoTracks()[0];
       if (track) {
         const caps = track.getCapabilities() as MediaTrackCapabilities & { torch?: boolean };
@@ -321,6 +319,30 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
       setBarcodeError("Kamera erişimi reddedildi.");
       setScanningCam(false);
     }
+  }
+
+  /** Full reset: stop stream, clear all state, then re-open camera sequentially */
+  async function resetAndRescan() {
+    // 1. Hard-stop current stream and clear refs immediately
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current  = null;
+    readerRef.current  = null;
+    scannedRef.current  = false;
+    fetchingRef.current = false;
+
+    // 2. Clear all visible state including input; scanningCam → false unmounts video element
+    setBarcodeProduct(null);
+    setBarcodeError("");
+    setBarcodeInput("");
+    setTorchOn(false);
+    setTorchSupported(false);
+    setScanningCam(false);
+
+    // 3. Yield one animation frame so React unmounts the video element before re-mounting
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    // 4. Start fresh — startCamera clears state again and opens new stream
+    await startCamera();
   }
 
   async function toggleTorch() {
