@@ -19,41 +19,52 @@ async function fetchOFFBarcode(code: string) {
   }
 }
 
-// ── Nutritionix ────────────────────────────────────────────────────────────
+// ── USDA FoodData Central ─────────────────────────────────────────────────
 
-async function fetchNixBarcode(code: string) {
-  const appId  = process.env.NUTRITIONIX_APP_ID;
-  const appKey = process.env.NUTRITIONIX_APP_KEY;
-  if (!appId || !appKey) return null;
+interface FDCFood {
+  fdcId: number;
+  description: string;
+  brandOwner?: string;
+  brandName?: string;
+  gtinUpc?: string;
+  foodNutrients?: { nutrientId: number; value: number }[];
+}
 
+function fdcNutrient(food: FDCFood, id: number): number {
+  return food.foodNutrients?.find((n) => n.nutrientId === id)?.value ?? 0;
+}
+
+async function fetchUSDABarcode(code: string) {
+  const key = process.env.FDC_API_KEY;
+  if (!key) return null;
   try {
-    const res = await fetch(
-      `https://trackapi.nutritionix.com/v2/search/item?upc=${encodeURIComponent(code)}`,
-      {
-        headers: { "x-app-id": appId, "x-app-key": appKey },
-        next: { revalidate: 300 },
-      }
-    );
+    // USDA lets you search by GTIN/UPC via the query parameter
+    const url = new URL("https://api.nal.usda.gov/fdc/v1/foods/search");
+    url.searchParams.set("query", code);
+    url.searchParams.set("api_key", key);
+    url.searchParams.set("dataType", "Branded");
+    url.searchParams.set("pageSize", "5");
+    const res = await fetch(url.toString(), { next: { revalidate: 300 } });
     if (!res.ok) return null;
     const data = await res.json();
-    const item = data.foods?.[0];
-    if (!item) return null;
 
-    const swg = item.serving_weight_grams || 100;
-    const f   = 100 / swg;
+    // Find the item whose gtinUpc matches the scanned code
+    const match: FDCFood | undefined = (data.foods ?? []).find(
+      (f: FDCFood) => f.gtinUpc === code || f.gtinUpc === code.replace(/^0+/, "")
+    ) ?? data.foods?.[0];
+    if (!match) return null;
 
-    // Return in an OFF-compatible shape so the modal normalize() works
     return {
-      source: "Nutritionix" as const,
+      source: "USDA" as const,
       product: {
-        product_name: item.food_name ?? "",
-        brands: item.brand_name ?? "",
-        image_thumb_url: item.photo?.thumb ?? null,
+        product_name: match.description ?? "",
+        brands: match.brandOwner ?? match.brandName ?? "",
+        image_thumb_url: null,
         nutriments: {
-          "energy-kcal_100g": Math.round((item.nf_calories ?? 0) * f),
-          "proteins_100g":  Math.round((item.nf_protein ?? 0) * f * 10) / 10,
-          "carbohydrates_100g": Math.round((item.nf_total_carbohydrate ?? 0) * f * 10) / 10,
-          "fat_100g": Math.round((item.nf_total_fat ?? 0) * f * 10) / 10,
+          "energy-kcal_100g": Math.round(fdcNutrient(match, 1008)),
+          "proteins_100g":    Math.round(fdcNutrient(match, 1003) * 10) / 10,
+          "carbohydrates_100g": Math.round(fdcNutrient(match, 1005) * 10) / 10,
+          "fat_100g":         Math.round(fdcNutrient(match, 1004) * 10) / 10,
         },
       },
     };
@@ -68,12 +79,12 @@ export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code")?.trim();
   if (!code) return NextResponse.json({ status: 0, error: "Missing code" }, { status: 400 });
 
-  // Try OFF first (faster), then Nutritionix as fallback
+  // Try OFF first (has richer product data), then USDA as fallback
   const off = await fetchOFFBarcode(code);
   if (off) return NextResponse.json({ status: 1, source: off.source, product: off.product });
 
-  const nix = await fetchNixBarcode(code);
-  if (nix) return NextResponse.json({ status: 1, source: nix.source, product: nix.product });
+  const usda = await fetchUSDABarcode(code);
+  if (usda) return NextResponse.json({ status: 1, source: usda.source, product: usda.product });
 
   return NextResponse.json({ status: 0 });
 }

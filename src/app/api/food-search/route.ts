@@ -3,63 +3,57 @@ import { NextRequest, NextResponse } from "next/server";
 const OFF_FIELDS = "product_name,brands,nutriments,image_thumb_url,code";
 const UA = "FitTrack/1.0 (fitness tracking app)";
 
-// ── Nutritionix helpers ────────────────────────────────────────────────────
+// ── USDA FoodData Central ─────────────────────────────────────────────────
 
-interface NixBranded {
-  food_name: string;
-  brand_name?: string;
-  serving_weight_grams?: number;
-  nf_calories?: number;
-  nf_total_fat?: number;
-  nf_total_carbohydrate?: number;
-  nf_protein?: number;
-  photo?: { thumb?: string };
-  nix_item_id?: string;
+interface FDCFood {
+  fdcId: number;
+  description: string;
+  brandOwner?: string;
+  brandName?: string;
+  gtinUpc?: string;
+  foodNutrients?: { nutrientId: number; value: number }[];
 }
 
-function nixToUnified(item: NixBranded, idx: number) {
-  const swg = item.serving_weight_grams || 100;
-  const factor = 100 / swg;
+/** nutrientId reference: 1008=Energy(kcal) 1003=Protein 1005=Carbs 1004=Fat */
+function fdcNutrient(food: FDCFood, id: number): number {
+  return food.foodNutrients?.find((n) => n.nutrientId === id)?.value ?? 0;
+}
+
+function fdcToUnified(food: FDCFood) {
   return {
-    code: item.nix_item_id ?? `nix_${idx}`,
-    product_name: item.food_name ?? "",
-    brands: item.brand_name ?? "",
-    image_thumb_url: item.photo?.thumb ?? null,
-    source: "Nutritionix" as const,
+    code: food.gtinUpc ?? `fdc_${food.fdcId}`,
+    product_name: food.description ?? "",
+    brands: food.brandOwner ?? food.brandName ?? "",
+    image_thumb_url: null,
+    source: "USDA" as const,
     nutriments: {
-      "energy-kcal_100g": Math.round((item.nf_calories ?? 0) * factor),
-      "proteins_100g":  Math.round((item.nf_protein ?? 0) * factor * 10) / 10,
-      "carbohydrates_100g": Math.round((item.nf_total_carbohydrate ?? 0) * factor * 10) / 10,
-      "fat_100g": Math.round((item.nf_total_fat ?? 0) * factor * 10) / 10,
+      "energy-kcal_100g": Math.round(fdcNutrient(food, 1008)),
+      "proteins_100g":    Math.round(fdcNutrient(food, 1003) * 10) / 10,
+      "carbohydrates_100g": Math.round(fdcNutrient(food, 1005) * 10) / 10,
+      "fat_100g":         Math.round(fdcNutrient(food, 1004) * 10) / 10,
     },
   };
 }
 
-async function fetchNutritonix(q: string) {
-  const appId  = process.env.NUTRITIONIX_APP_ID;
-  const appKey = process.env.NUTRITIONIX_APP_KEY;
-  if (!appId || !appKey) return [];
-
+async function fetchUSDA(q: string) {
+  const key = process.env.FDC_API_KEY;
+  if (!key) return [];
   try {
-    const res = await fetch("https://trackapi.nutritionix.com/v2/search/instant", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-app-id": appId,
-        "x-app-key": appKey,
-      },
-      body: JSON.stringify({ query: q, branded: true, common: false }),
-      next: { revalidate: 60 },
-    });
+    const url = new URL("https://api.nal.usda.gov/fdc/v1/foods/search");
+    url.searchParams.set("query", q);
+    url.searchParams.set("api_key", key);
+    url.searchParams.set("dataType", "Branded");
+    url.searchParams.set("pageSize", "8");
+    const res = await fetch(url.toString(), { next: { revalidate: 60 } });
     if (!res.ok) return [];
     const data = await res.json();
-    return (data.branded ?? []).slice(0, 8).map((item: NixBranded, i: number) => nixToUnified(item, i));
+    return (data.foods ?? []).map(fdcToUnified);
   } catch {
     return [];
   }
 }
 
-// ── OFF helper ─────────────────────────────────────────────────────────────
+// ── Open Food Facts ────────────────────────────────────────────────────────
 
 async function fetchOFF(q: string) {
   try {
@@ -79,12 +73,12 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim();
   if (!q) return NextResponse.json({ products: [] });
 
-  const [offProducts, nixProducts] = await Promise.all([fetchOFF(q), fetchNutritonix(q)]);
+  const [offProducts, usdaProducts] = await Promise.all([fetchOFF(q), fetchUSDA(q)]);
 
-  // Interleave: OFF first, then Nix (deduplicate by name)
+  // Interleave & deduplicate by lowercased name prefix
   const seen = new Set<string>();
-  const merged = [...offProducts, ...nixProducts].filter((p) => {
-    const key = (p.product_name ?? "").toLowerCase().slice(0, 30);
+  const merged = [...offProducts, ...usdaProducts].filter((p) => {
+    const key = ((p as { product_name?: string }).product_name ?? "").toLowerCase().slice(0, 30);
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;

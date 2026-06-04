@@ -17,7 +17,7 @@ interface OFFProduct {
   };
 }
 
-type FoodSource = "OFF" | "Nutritionix";
+type FoodSource = "OFF" | "USDA";
 
 interface NormalizedProduct {
   code: string;
@@ -356,9 +356,9 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
           <div className="mb-0.5 flex items-center gap-1.5 min-w-0">
             <p className="truncate text-sm font-bold text-white leading-tight">{product.name}</p>
             <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
-              product.source === "Nutritionix" ? "bg-orange-950 text-orange-400" : "bg-zinc-800 text-zinc-500"
+              product.source === "USDA" ? "bg-blue-950 text-blue-400" : "bg-zinc-800 text-zinc-500"
             }`}>
-              {product.source === "Nutritionix" ? "NIX" : "OFF"}
+              {product.source === "USDA" ? "USDA" : "OFF"}
             </span>
           </div>
           {product.brand && <p className="mb-1.5 text-[11px] text-zinc-500">{product.brand}</p>}
