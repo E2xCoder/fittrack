@@ -17,12 +17,15 @@ interface OFFProduct {
   };
 }
 
+type FoodSource = "OFF" | "Nutritionix";
+
 interface NormalizedProduct {
   code: string;
   name: string;
   brand: string;
   imageUrl: string | null;
   per100: { calories: number; protein: number; carbs: number; fat: number };
+  source: FoodSource;
 }
 
 interface Props {
@@ -33,7 +36,7 @@ interface Props {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function normalize(p: OFFProduct): NormalizedProduct | null {
+function normalize(p: OFFProduct & { source?: FoodSource }): NormalizedProduct | null {
   const name = p.product_name?.trim();
   if (!name) return null;
   const n = p.nutriments ?? {};
@@ -42,6 +45,7 @@ function normalize(p: OFFProduct): NormalizedProduct | null {
     name,
     brand: p.brands?.split(",")[0]?.trim() ?? "",
     imageUrl: p.image_thumb_url ?? null,
+    source: p.source ?? "OFF",
     per100: {
       calories: Math.round(n["energy-kcal_100g"] ?? 0),
       protein:  Math.round((n["proteins_100g"] ?? 0) * 10) / 10,
@@ -181,6 +185,8 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
   const [barcodeError, setBarcodeError]     = useState("");
   const [barcodeLoading, setBarcodeLoading] = useState(false);
   const [scanningCam, setScanningCam]       = useState(false);
+  const [torchOn, setTorchOn]               = useState(false);
+  const [torchSupported, setTorchSupported] = useState(false);
   const videoRef        = useRef<HTMLVideoElement>(null);
   const readerRef       = useRef<import("@zxing/browser").BrowserMultiFormatReader | null>(null);
   const streamRef       = useRef<MediaStream | null>(null);
@@ -255,8 +261,29 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
 
   // ── Camera scanning ───────────────────────────────────────────────────
 
+  function stopCamera() {
+    setScanningCam(false);
+    setTorchOn(false);
+    setTorchSupported(false);
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    readerRef.current = null;
+  }
+
+  /** Full reset: clear all barcode state and re-open camera */
+  function resetAndRescan() {
+    scannedRef.current  = false;
+    fetchingRef.current = false;
+    setBarcodeError("");
+    setBarcodeProduct(null);
+    setBarcodeInput("");
+    stopCamera();
+    // Small timeout so stop completes before restarting
+    setTimeout(() => startCamera(), 150);
+  }
+
   async function startCamera() {
-    scannedRef.current = false;   // reset for new scan session
+    scannedRef.current = false;
     setScanningCam(true);
     setBarcodeError("");
     try {
@@ -264,8 +291,17 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
       const reader = new BrowserMultiFormatReader();
       readerRef.current = reader;
 
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      });
       streamRef.current = stream;
+
+      // Detect torch support
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        const caps = track.getCapabilities() as MediaTrackCapabilities & { torch?: boolean };
+        if (caps.torch) setTorchSupported(true);
+      }
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -287,11 +323,14 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
     }
   }
 
-  function stopCamera() {
-    setScanningCam(false);
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    readerRef.current = null;
+  async function toggleTorch() {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+    const next = !torchOn;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: next } as MediaTrackConstraintSet] });
+      setTorchOn(next);
+    } catch { /* device doesn't support applyConstraints for torch */ }
   }
 
   // Stop camera on unmount
@@ -314,7 +353,14 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
 
         {/* Info */}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-bold text-white leading-tight">{product.name}</p>
+          <div className="mb-0.5 flex items-center gap-1.5 min-w-0">
+            <p className="truncate text-sm font-bold text-white leading-tight">{product.name}</p>
+            <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+              product.source === "Nutritionix" ? "bg-orange-950 text-orange-400" : "bg-zinc-800 text-zinc-500"
+            }`}>
+              {product.source === "Nutritionix" ? "NIX" : "OFF"}
+            </span>
+          </div>
           {product.brand && <p className="mb-1.5 text-[11px] text-zinc-500">{product.brand}</p>}
           <div className="flex flex-wrap gap-1">
             <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[11px] font-bold text-white">{product.per100.calories} kcal</span>
@@ -461,6 +507,18 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                     <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                       <div className="h-40 w-64 rounded-2xl border-2 border-green-400 opacity-80 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
                     </div>
+                    {/* Torch toggle — only when device supports it */}
+                    {torchSupported && (
+                      <button
+                        onClick={toggleTorch}
+                        className={`absolute right-2 top-2 rounded-full p-2.5 text-xl backdrop-blur transition-colors ${
+                          torchOn ? "bg-yellow-400/90 text-black" : "bg-black/60 text-white hover:bg-black/80"
+                        }`}
+                        title={torchOn ? "Flaşı Kapat" : "Flaşı Aç"}
+                      >
+                        🔦
+                      </button>
+                    )}
                     <button
                       onClick={stopCamera}
                       className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-5 py-2 text-sm font-semibold text-white backdrop-blur hover:bg-black/90"
@@ -475,9 +533,20 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                     <div className="h-7 w-7 animate-spin rounded-full border-2 border-zinc-700 border-t-green-500" />
                   </div>
                 )}
-                {barcodeError && (
-                  <p className="rounded-xl bg-red-950/40 px-4 py-3 text-sm text-red-400">{barcodeError}</p>
+
+                {/* Error + Tekrar Tara */}
+                {barcodeError && !barcodeLoading && (
+                  <div className="space-y-2">
+                    <p className="rounded-xl bg-red-950/40 px-4 py-3 text-sm text-red-400">{barcodeError}</p>
+                    <button
+                      onClick={resetAndRescan}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 py-3 text-sm font-semibold text-zinc-300 hover:border-green-600 hover:text-green-400 transition-colors"
+                    >
+                      🔄 Tekrar Tara
+                    </button>
+                  </div>
                 )}
+
                 {barcodeProduct && !barcodeLoading && (
                   <ProductCard product={barcodeProduct} />
                 )}
