@@ -15,15 +15,15 @@ export async function GET(request: Request) {
   const today = getTodayInTimezone();
   const oneWeekAgo = new Date(today);
   oneWeekAgo.setDate(today.getDate() - 7);
-  const twoWeeksAgo = new Date(today);
-  twoWeeksAgo.setDate(today.getDate() - 14);
+  const sixtyDaysAgo = new Date(today);
+  sixtyDaysAgo.setDate(today.getDate() - 60);
 
   const [lastWeekExs, thisWeekExs] = await Promise.all([
     prisma.exercise.findMany({
       where: {
         userId: session.user.id,
         name: exerciseName,
-        workout: { date: { gte: twoWeeksAgo, lt: oneWeekAgo } },
+        workout: { date: { gte: sixtyDaysAgo, lt: oneWeekAgo } },
       },
       include: { sets: true },
     }),
