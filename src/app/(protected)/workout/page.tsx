@@ -250,27 +250,28 @@ export default function WorkoutPage() {
         setSelectedSplit(firstSplit);
         if (data.workout) {
           setNotes(data.workout.notes ?? "");
-          setExercises(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            data.workout.exercises.map((ex: any) => ({
-              name: ex.name,
-              sets: ex.sets.length > 0
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                ? ex.sets.map((s: any) => ({
-                    setNumber: s.setNumber,
-                    weight: s.weight ? String(s.weight) : "",
-                    reps: s.reps ? String(s.reps) : "",
-                    sets: s.sets ? String(s.sets) : "1",
-                    rpe: s.rpe ? String(s.rpe) : "",
-                  }))
-                : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
-            }))
-          );
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const loaded = data.workout.exercises.map((ex: any) => ({
+            name: ex.name,
+            sets: ex.sets.length > 0
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              ? ex.sets.map((s: any) => ({
+                  setNumber: s.setNumber,
+                  weight: s.weight ? String(s.weight) : "",
+                  reps: s.reps ? String(s.reps) : "",
+                  sets: s.sets ? String(s.sets) : "1",
+                  rpe: s.rpe ? String(s.rpe) : "",
+                }))
+              : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
+          }));
+          setExercises(loaded);
+          loaded.forEach((ex: Exercise) => fetchOverload(ex.name));
         }
       }
       initializedRef.current = true;
     }
     init();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchSplits() {
@@ -295,28 +296,29 @@ export default function WorkoutPage() {
     // Optimistic: switch pill + show skeleton immediately
     setSelectedSplit(splitName);
     setExercises([]);
+    setOverloadData({});
     setNotes("");
     setSplitLoading(true);
     const res = await fetch(`/api/workouts/init?split=${encodeURIComponent(splitName)}`);
     const data = await res.json();
     if (data.workout) {
       setNotes(data.workout.notes ?? "");
-      setExercises(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        data.workout.exercises.map((ex: any) => ({
-          name: ex.name,
-          sets: ex.sets.length > 0
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ? ex.sets.map((s: any) => ({
-                setNumber: s.setNumber,
-                weight: s.weight ? String(s.weight) : "",
-                reps: s.reps ? String(s.reps) : "",
-                sets: s.sets ? String(s.sets) : "1",
-                rpe: s.rpe ? String(s.rpe) : "",
-              }))
-            : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
-        }))
-      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const loaded = data.workout.exercises.map((ex: any) => ({
+        name: ex.name,
+        sets: ex.sets.length > 0
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ? ex.sets.map((s: any) => ({
+              setNumber: s.setNumber,
+              weight: s.weight ? String(s.weight) : "",
+              reps: s.reps ? String(s.reps) : "",
+              sets: s.sets ? String(s.sets) : "1",
+              rpe: s.rpe ? String(s.rpe) : "",
+            }))
+          : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
+      }));
+      setExercises(loaded);
+      loaded.forEach((ex: Exercise) => fetchOverload(ex.name));
     }
     setSplitLoading(false);
   }
