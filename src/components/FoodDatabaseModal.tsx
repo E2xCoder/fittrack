@@ -358,8 +358,15 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
     }
   }
 
-  /** "Tekrar Tara": decode again on the open stream (or reopen if it failed). */
-  function rescan() {
+  /** "Tekrar Tara": clear results, create a fresh reader, restart decode on
+   *  the already-open stream (or reopen if it was lost). */
+  async function rescan() {
+    setBarcodeProduct(null);
+    setBarcodeError("");
+    setBarcodeInput("");
+    // Fresh reader instance discards any lingering decode state.
+    const { BrowserMultiFormatReader } = await import("@zxing/browser");
+    readerRef.current = new BrowserMultiFormatReader();
     if (streamRef.current) scan();
     else openCamera();
   }
@@ -537,8 +544,10 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                   </button>
                 </div>
 
-                {/* Live camera — opened once, stays open the whole time this tab is active */}
-                <div className="relative overflow-hidden rounded-2xl border border-zinc-700 bg-black">
+                {/* Live camera — hidden when a result or error fills the screen so
+                    Tekrar Tara is always visible without scrolling.
+                    The <video> stays in the DOM so the stream keeps running. */}
+                <div className={`relative overflow-hidden rounded-2xl border border-zinc-700 bg-black${(barcodeProduct || barcodeError) ? " hidden" : ""}`}>
                   <video ref={videoRef} className="w-full" muted playsInline />
 
                   {/* targeting frame — only while actively scanning */}
