@@ -14,6 +14,7 @@ export async function GET() {
       name: true,
       email: true,
       image: true,
+      role: true,
       onboardingCompleted: true,
       calorieTarget: true,
       proteinTarget: true,

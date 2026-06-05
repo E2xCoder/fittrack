@@ -21,6 +21,9 @@ export default function ProfilePage() {
   const [tokenCopied, setTokenCopied] = useState(false);
   const [generatingToken, setGeneratingToken] = useState(false);
 
+  // ── Role ────────────────────────────────────────────────────────────
+  const [isAdmin, setIsAdmin] = useState(false);
+
   // ── Push notifications ──────────────────────────────────────────────
   type NotifState = "unsupported" | "denied" | "subscribed" | "unsubscribed" | "loading";
   const [notifState, setNotifState] = useState<NotifState>("loading");
@@ -68,6 +71,10 @@ export default function ProfilePage() {
     fetch("/api/user/token")
       .then((r) => r.json())
       .then((data) => setApiToken(data.token));
+
+    fetch("/api/user/me")
+      .then((r) => r.json())
+      .then((data) => setIsAdmin(data?.role === "ADMIN"));
 
     refreshNotifState();
   }, [refreshNotifState]);
@@ -312,6 +319,8 @@ export default function ProfilePage() {
 
               {notifState === "subscribed" && (
                 <div className="space-y-1">
+                  {isAdmin && (
+                    <>
                   <button
                     onClick={sendTestNotification}
                     disabled={testSending}
@@ -321,6 +330,8 @@ export default function ProfilePage() {
                   </button>
                   {testResult && (
                     <p className="text-center text-xs text-green-400">{testResult}</p>
+                  )}
+                    </>
                   )}
                 </div>
               )}

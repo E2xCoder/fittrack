@@ -28,6 +28,8 @@ model User {
   sleepTarget   Float?  @default(8)
   apiToken      String? @unique
 
+  role                String   @default("USER")
+
   onboardingCompleted Boolean  @default(false)
   age                 Int?
   gender              String?
