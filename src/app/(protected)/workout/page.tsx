@@ -37,6 +37,17 @@ interface PreviousPerformance {
   sets: PreviousSet[];
 }
 
+interface OverloadBest {
+  weight: number;
+  reps: number;
+  volume: number;
+}
+
+interface OverloadData {
+  lastWeekBest: OverloadBest | null;
+  thisWeekBest: OverloadBest | null;
+}
+
 // ─── Colour palette per exercise index ───────────────────────────────────────
 
 const ACCENT_COLORS = [
@@ -75,10 +86,17 @@ function SetInput({
 
 // ─── Exercise Card ────────────────────────────────────────────────────────────
 
+function suggestWeight(w: number): number {
+  if (w <= 10) return Math.round((w + 1) * 2) / 2;
+  if (w <= 30) return Math.round((w + 2.5) * 2) / 2;
+  return Math.round((w + 5) * 2) / 2;
+}
+
 function ExerciseCard({
   exercise,
   exIdx,
   prev,
+  overload,
   onRemove,
   onAddSet,
   onRemoveSet,
@@ -87,12 +105,18 @@ function ExerciseCard({
   exercise: Exercise;
   exIdx: number;
   prev?: PreviousPerformance;
+  overload?: OverloadData;
   onRemove: () => void;
   onAddSet: () => void;
   onRemoveSet: (setIdx: number) => void;
   onUpdateSet: (setIdx: number, field: keyof ExerciseSet, value: string) => void;
 }) {
   const acc = accentFor(exIdx);
+
+  const isPR =
+    overload?.thisWeekBest &&
+    overload?.lastWeekBest &&
+    overload.thisWeekBest.volume > overload.lastWeekBest.volume;
 
   return (
     <div
@@ -113,8 +137,21 @@ function ExerciseCard({
         </button>
       </div>
 
+      {/* Progressive overload suggestion */}
+      {isPR ? (
+        <div className="mx-2 mb-1 rounded bg-green-950/60 px-1.5 py-0.5 border border-green-900/40">
+          <span className="text-[9px] font-semibold text-green-400">PR! 🏆 {overload!.thisWeekBest!.weight}kg × {overload!.thisWeekBest!.reps}</span>
+        </div>
+      ) : overload?.lastWeekBest ? (
+        <div className="mx-2 mb-1 rounded bg-zinc-800/50 px-1.5 py-0.5">
+          <span className="text-[9px] text-zinc-400">
+            Geçen: {overload.lastWeekBest.weight}kg×{overload.lastWeekBest.reps} → <span className="text-blue-400 font-semibold">{suggestWeight(overload.lastWeekBest.weight)}kg dene 💪</span>
+          </span>
+        </div>
+      ) : null}
+
       {/* Previous perf */}
-      {prev && (
+      {prev && !overload?.lastWeekBest && (
         <div className="mx-2 mb-1 rounded bg-zinc-800/50 px-1.5 py-0.5">
           <span className="text-[9px] text-zinc-500">
             Last: {prev.sets.slice(0,2).map((s, i) => `${s.weight ?? "?"}×${s.reps ?? "?"}`).join("  ")}
@@ -196,6 +233,7 @@ export default function WorkoutPage() {
   const [saved, setSaved] = useState(false);
   const [notes, setNotes] = useState("");
   const [previousPerf, setPreviousPerf] = useState<Record<string, PreviousPerformance>>({});
+  const [overloadData, setOverloadData] = useState<Record<string, OverloadData>>({});
   const [showSplitManager, setShowSplitManager] = useState(false);
   const [newSplitName, setNewSplitName] = useState("");
   const [newSplitEmoji, setNewSplitEmoji] = useState("🏋️");
@@ -307,6 +345,7 @@ export default function WorkoutPage() {
       { name: exerciseName, sets: [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }] },
     ]);
     fetchPrevious(exerciseName);
+    fetchOverload(exerciseName);
     setNewExerciseName("");
     setSuggestions([]);
   }
@@ -317,6 +356,12 @@ export default function WorkoutPage() {
     if (data.previous) {
       setPreviousPerf((prev) => ({ ...prev, [exerciseName]: data.previous }));
     }
+  }
+
+  async function fetchOverload(exerciseName: string) {
+    const res = await fetch(`/api/workout/previous?exerciseName=${encodeURIComponent(exerciseName)}`);
+    const data = await res.json();
+    setOverloadData((prev) => ({ ...prev, [exerciseName]: data }));
   }
 
   function removeExercise(index: number) {
@@ -555,6 +600,7 @@ export default function WorkoutPage() {
                     exercise={exercise}
                     exIdx={exIdx}
                     prev={previousPerf[exercise.name]}
+                    overload={overloadData[exercise.name]}
                     onRemove={() => removeExercise(exIdx)}
                     onAddSet={() => addSet(exIdx)}
                     onRemoveSet={(setIdx) => removeSet(exIdx, setIdx)}
