@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 export default function ProfilePage() {
   const [form, setForm] = useState({
@@ -20,6 +20,31 @@ export default function ProfilePage() {
   const [apiToken, setApiToken] = useState<string | null>(null);
   const [tokenCopied, setTokenCopied] = useState(false);
   const [generatingToken, setGeneratingToken] = useState(false);
+
+  // ── Push notifications ──────────────────────────────────────────────
+  type NotifState = "unsupported" | "denied" | "subscribed" | "unsubscribed" | "loading";
+  const [notifState, setNotifState] = useState<NotifState>("loading");
+  const [testSending, setTestSending] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
+
+  // Detect current notification state (supported / denied / subscribed / unsubscribed)
+  const refreshNotifState = useCallback(async () => {
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+      setNotifState("unsupported");
+      return;
+    }
+    if (Notification.permission === "denied") {
+      setNotifState("denied");
+      return;
+    }
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      setNotifState(sub ? "subscribed" : "unsubscribed");
+    } catch {
+      setNotifState("unsubscribed");
+    }
+  }, []);
 
   useEffect(() => {
     fetch("/api/user/goals")
@@ -43,7 +68,9 @@ export default function ProfilePage() {
     fetch("/api/user/token")
       .then((r) => r.json())
       .then((data) => setApiToken(data.token));
-  }, []);
+
+    refreshNotifState();
+  }, [refreshNotifState]);
 
   async function save() {
     await fetch("/api/user/goals", {
@@ -61,6 +88,82 @@ export default function ProfilePage() {
     const data = await res.json();
     setApiToken(data.token);
     setGeneratingToken(false);
+  }
+
+  async function enableNotifications() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    setNotifState("loading");
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setNotifState(permission === "denied" ? "denied" : "unsubscribed");
+        return;
+      }
+      const reg = await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+      if (existing) await existing.unsubscribe();
+
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(
+          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
+        ),
+      });
+
+      await fetch("/api/notifications/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sub.toJSON()),
+      });
+      setNotifState("subscribed");
+    } catch (err) {
+      console.error("[push] subscribe failed", err);
+      setNotifState("unsubscribed");
+    }
+  }
+
+  async function disableNotifications() {
+    setNotifState("loading");
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await fetch("/api/notifications/subscribe", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: sub.endpoint }),
+        });
+        await sub.unsubscribe();
+      }
+      setNotifState("unsubscribed");
+    } catch {
+      setNotifState("unsubscribed");
+    }
+  }
+
+  async function sendTestNotification() {
+    setTestSending(true);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/notifications/test", { method: "POST" });
+      const data = await res.json();
+      setTestResult(data.sent > 0 ? "✓ Test bildirimi gönderildi!" : "Bildirim gönderilemedi.");
+    } catch {
+      setTestResult("Hata oluştu.");
+    } finally {
+      setTestSending(false);
+      setTimeout(() => setTestResult(null), 4000);
+    }
+  }
+
+  function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const rawData = atob(base64);
+    const buffer = new ArrayBuffer(rawData.length);
+    const view = new Uint8Array(buffer);
+    for (let i = 0; i < rawData.length; i++) view[i] = rawData.charCodeAt(i);
+    return buffer;
   }
 
   async function copyToken() {
@@ -155,6 +258,97 @@ export default function ProfilePage() {
           className="w-full rounded-xl bg-green-600 py-3 font-semibold hover:bg-green-700">
           {saved ? "Saved ✓" : "Save Profile"}
         </button>
+
+        {/* Push Notifications */}
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+          <h2 className="mb-1 text-sm font-semibold text-zinc-300">🔔 Bildirimler</h2>
+          <p className="mb-3 text-xs text-zinc-500">
+            Günlük hatırlatıcılar: öğün logu ve antrenman takibi
+          </p>
+
+          {notifState === "unsupported" && (
+            <p className="rounded-xl bg-zinc-800 px-3 py-2 text-xs text-zinc-500">
+              Bu tarayıcı push bildirimlerini desteklemiyor.
+            </p>
+          )}
+
+          {notifState === "denied" && (
+            <div className="rounded-xl bg-red-950/40 px-3 py-2 text-xs text-red-400">
+              Bildirim izni engellendi. Tarayıcı ayarlarından fittrack için izin ver.
+            </div>
+          )}
+
+          {notifState === "loading" && (
+            <div className="flex items-center gap-2 text-xs text-zinc-500">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-700 border-t-green-500" />
+              Kontrol ediliyor…
+            </div>
+          )}
+
+          {(notifState === "unsubscribed" || notifState === "subscribed") && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-zinc-200">
+                    {notifState === "subscribed" ? "✅ Bildirimler açık" : "Bildirimler kapalı"}
+                  </p>
+                  <p className="text-[11px] text-zinc-500">
+                    {notifState === "subscribed"
+                      ? "Her gün 20:00'de öğün & antrenman hatırlatıcısı"
+                      : "Aç ve günlük hatırlatıcılar al"}
+                  </p>
+                </div>
+                <button
+                  onClick={notifState === "subscribed" ? disableNotifications : enableNotifications}
+                  className={`rounded-xl px-4 py-2 text-xs font-semibold transition-colors ${
+                    notifState === "subscribed"
+                      ? "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
+                      : "bg-green-600 text-white hover:bg-green-500"
+                  }`}
+                >
+                  {notifState === "subscribed" ? "Kapat" : "Bildirimleri Aç"}
+                </button>
+              </div>
+
+              {notifState === "subscribed" && (
+                <div className="space-y-1">
+                  <button
+                    onClick={sendTestNotification}
+                    disabled={testSending}
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-700 disabled:opacity-50 transition-colors"
+                  >
+                    {testSending ? "Gönderiliyor…" : "🔔 Test Bildirimi Gönder"}
+                  </button>
+                  {testResult && (
+                    <p className="text-center text-xs text-green-400">{testResult}</p>
+                  )}
+                </div>
+              )}
+
+              {notifState === "unsubscribed" && (
+                <div className="rounded-xl bg-zinc-800/50 px-3 py-2">
+                  <p className="mb-1.5 text-[11px] font-medium text-zinc-300">Günlük hatırlatıcılar:</p>
+                  <ul className="space-y-0.5 text-[11px] text-zinc-500">
+                    <li>🍽️ Öğün logu olmayan günler saat 20:00&apos;de</li>
+                    <li>💪 3 gündür antrenman logu yoksa</li>
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="mt-3 rounded-xl bg-zinc-800/30 px-3 py-2">
+            <p className="text-[11px] font-medium text-zinc-400 mb-1">Vercel&apos;e VAPID key ekleme:</p>
+            <ol className="space-y-0.5 text-[11px] text-zinc-500">
+              <li>1. Vercel Dashboard → Project → Settings → Environment Variables</li>
+              <li>2. <code className="text-zinc-300">NEXT_PUBLIC_VAPID_PUBLIC_KEY</code> ekle</li>
+              <li>3. <code className="text-zinc-300">VAPID_PRIVATE_KEY</code> ekle</li>
+              <li>4. <code className="text-zinc-300">VAPID_EMAIL</code> ekle (<code className="text-zinc-300">mailto:3mr3ren@gmail.com</code>)</li>
+              <li>5. <code className="text-zinc-300">CRON_SECRET</code> ekle</li>
+              <li>6. Redeploy yap</li>
+            </ol>
+          </div>
+        </div>
 
         {/* API Token */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">

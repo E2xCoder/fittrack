@@ -36,21 +36,35 @@ model User {
   dietaryPreferences  String[]
   mealsPerDay         Int?     @default(3)
 
-  meals          Meal[]
-  mealPacks      MealPack[]
-  mealLogs       MealLog[]
-  mealCategories UserMealCategory[]
-  dailyLogs      DailyLog[]
-  workouts       Workout[]
-  exercises      Exercise[]
-  userSplits     UserSplit[]
-  bodyLogs       BodyLog[]
-  weightLogs     WeightLog[]
-  progressPhotos ProgressPhoto[]
-  sessions       Session[]
-  accounts       Account[]
+  meals              Meal[]
+  mealPacks          MealPack[]
+  mealLogs           MealLog[]
+  mealCategories     UserMealCategory[]
+  dailyLogs          DailyLog[]
+  workouts           Workout[]
+  exercises          Exercise[]
+  userSplits         UserSplit[]
+  bodyLogs           BodyLog[]
+  weightLogs         WeightLog[]
+  progressPhotos     ProgressPhoto[]
+  sessions           Session[]
+  accounts           Account[]
+  pushSubscriptions  PushSubscription[]
 
   @@map("user")
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model UserMealCategory {
