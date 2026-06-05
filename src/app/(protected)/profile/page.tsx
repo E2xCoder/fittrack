@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { authClient } from "@/lib/auth-client";
 
 export default function ProfilePage() {
+  const router = useRouter();
   const [form, setForm] = useState({
     name: "",
     calorieTarget: "",
@@ -23,6 +27,12 @@ export default function ProfilePage() {
 
   // ── Role ────────────────────────────────────────────────────────────
   const [isAdmin, setIsAdmin] = useState(false);
+
+  // ── GDPR ────────────────────────────────────────────────────────────
+  const [exporting, setExporting] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   // ── Push notifications ──────────────────────────────────────────────
   type NotifState = "unsupported" | "denied" | "subscribed" | "unsubscribed" | "loading";
@@ -171,6 +181,33 @@ export default function ProfilePage() {
     const view = new Uint8Array(buffer);
     for (let i = 0; i < rawData.length; i++) view[i] = rawData.charCodeAt(i);
     return buffer;
+  }
+
+  async function exportData() {
+    setExporting(true);
+    try {
+      const res = await fetch("/api/user/export");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `fittrack-export-${new Date().toISOString().split("T")[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function deleteAccount() {
+    setDeleting(true);
+    try {
+      await fetch("/api/user/account", { method: "DELETE" });
+      await authClient.signOut();
+      router.push("/login");
+    } catch {
+      setDeleting(false);
+    }
   }
 
   async function copyToken() {
@@ -397,7 +434,67 @@ export default function ProfilePage() {
             </button>
           )}
         </div>
+        {/* GDPR — Data & Privacy */}
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+          <h2 className="mb-1 text-sm font-semibold text-zinc-300">🔒 Veri & Gizlilik</h2>
+          <p className="mb-3 text-xs text-zinc-500">
+            GDPR kapsamında verilerinizi indirebilir veya hesabınızı kalıcı olarak silebilirsiniz.{" "}
+            <Link href="/privacy" className="text-green-400 hover:underline">Gizlilik Politikası →</Link>
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={exportData}
+              disabled={exporting}
+              className="flex-1 rounded-xl bg-zinc-800 py-2.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-700 disabled:opacity-50 transition-colors"
+            >
+              {exporting ? "İndiriliyor…" : "⬇ Verilerimi İndir"}
+            </button>
+            <button
+              onClick={() => { setShowDeleteModal(true); setDeleteConfirm(""); }}
+              className="flex-1 rounded-xl bg-red-950/60 py-2.5 text-xs font-semibold text-red-400 hover:bg-red-900/60 border border-red-900/40 transition-colors"
+            >
+              🗑 Hesabımı Sil
+            </button>
+          </div>
+        </div>
       </div>
+
+      {/* Delete confirmation modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-red-900/50 bg-zinc-900 p-6">
+            <h2 className="mb-1 text-base font-bold text-white">Hesabı Sil</h2>
+            <p className="mb-4 text-sm text-zinc-400">
+              Bu işlem <span className="font-semibold text-red-400">geri alınamaz.</span>{" "}
+              Tüm verileriniz (antrenmanlar, öğünler, ölçümler) kalıcı olarak silinir.
+            </p>
+            <p className="mb-2 text-xs text-zinc-500">
+              Onaylamak için <span className="font-mono text-zinc-300">SİL</span> yazın:
+            </p>
+            <input
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder="SİL"
+              className="mb-4 w-full rounded-xl bg-zinc-800 p-3 text-sm outline-none focus:ring-1 focus:ring-red-800 placeholder:text-zinc-600"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="flex-1 rounded-xl bg-zinc-800 py-2.5 text-sm font-medium hover:bg-zinc-700"
+              >
+                İptal
+              </button>
+              <button
+                onClick={deleteAccount}
+                disabled={deleteConfirm !== "SİL" || deleting}
+                className="flex-1 rounded-xl bg-red-700 py-2.5 text-sm font-bold text-white hover:bg-red-600 disabled:opacity-40 transition-colors"
+              >
+                {deleting ? "Siliniyor…" : "Hesabı Kalıcı Sil"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

@@ -76,8 +76,13 @@ export default function ProtectedLayout({
         </div>
       </nav>
 
-      <div className="mx-auto max-w-7xl pb-24 md:pb-0">
+      <div className="mx-auto max-w-7xl pb-24 md:pb-6">
         {children}
+        <footer className="mt-8 hidden border-t border-zinc-800/50 py-4 text-center text-xs text-zinc-600 md:block">
+          <Link href="/privacy" className="hover:text-zinc-400 transition-colors">
+            Privacy Policy · Gizlilik Politikası
+          </Link>
+        </footer>
       </div>
 
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-zinc-950 md:hidden">
@@ -94,6 +99,11 @@ export default function ProtectedLayout({
               <span className="text-[10px]">{item.label}</span>
             </Link>
           ))}
+        </div>
+        <div className="pb-safe-bottom text-center pb-0.5">
+          <Link href="/privacy" className="text-[9px] text-zinc-700 hover:text-zinc-500 transition-colors">
+            Privacy Policy
+          </Link>
         </div>
       </nav>
     </div>
