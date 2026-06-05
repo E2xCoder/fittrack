@@ -336,18 +336,6 @@ export default function ProfilePage() {
               )}
             </div>
           )}
-
-          <div className="mt-3 rounded-xl bg-zinc-800/30 px-3 py-2">
-            <p className="text-[11px] font-medium text-zinc-400 mb-1">Vercel&apos;e VAPID key ekleme:</p>
-            <ol className="space-y-0.5 text-[11px] text-zinc-500">
-              <li>1. Vercel Dashboard → Project → Settings → Environment Variables</li>
-              <li>2. <code className="text-zinc-300">NEXT_PUBLIC_VAPID_PUBLIC_KEY</code> ekle</li>
-              <li>3. <code className="text-zinc-300">VAPID_PRIVATE_KEY</code> ekle</li>
-              <li>4. <code className="text-zinc-300">VAPID_EMAIL</code> ekle (<code className="text-zinc-300">mailto:3mr3ren@gmail.com</code>)</li>
-              <li>5. <code className="text-zinc-300">CRON_SECRET</code> ekle</li>
-              <li>6. Redeploy yap</li>
-            </ol>
-          </div>
         </div>
 
         {/* API Token */}
