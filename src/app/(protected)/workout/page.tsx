@@ -87,9 +87,9 @@ function SetInput({
 // ─── Exercise Card ────────────────────────────────────────────────────────────
 
 function suggestWeight(w: number): number {
-  if (w <= 10) return Math.round((w + 1) * 2) / 2;
-  if (w <= 30) return Math.round((w + 2.5) * 2) / 2;
-  return Math.round((w + 5) * 2) / 2;
+  if (w <= 30) return w + 2;
+  if (w <= 60) return w + 2.5;
+  return w + 5;
 }
 
 function ExerciseCard({
