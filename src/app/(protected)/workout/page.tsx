@@ -242,31 +242,36 @@ export default function WorkoutPage() {
 
   useEffect(() => {
     async function init() {
-      const res = await fetch("/api/workouts/init");
-      const data = await res.json();
-      setSplits(data.splits);
-      if (data.splits.length > 0) {
-        const firstSplit = data.splits[0].name;
-        setSelectedSplit(firstSplit);
-        if (data.workout) {
-          setNotes(data.workout.notes ?? "");
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const loaded = data.workout.exercises.map((ex: any) => ({
-            name: ex.name,
-            sets: ex.sets.length > 0
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              ? ex.sets.map((s: any) => ({
-                  setNumber: s.setNumber,
-                  weight: s.weight ? String(s.weight) : "",
-                  reps: s.reps ? String(s.reps) : "",
-                  sets: s.sets ? String(s.sets) : "1",
-                  rpe: s.rpe ? String(s.rpe) : "",
-                }))
-              : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
-          }));
-          setExercises(loaded);
-          loaded.forEach((ex: Exercise) => fetchOverload(ex.name));
+      try {
+        const res = await fetch("/api/workouts/init");
+        const data = await res.json();
+        const loadedSplits: UserSplit[] = data.splits ?? [];
+        setSplits(loadedSplits);
+        if (loadedSplits.length > 0) {
+          const firstSplit = loadedSplits[0].name;
+          setSelectedSplit(firstSplit);
+          if (data.workout) {
+            setNotes(data.workout.notes ?? "");
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const loaded = (data.workout.exercises ?? []).map((ex: any) => ({
+              name: ex.name,
+              sets: (ex.sets ?? []).length > 0
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                ? ex.sets.map((s: any) => ({
+                    setNumber: s.setNumber,
+                    weight: s.weight ? String(s.weight) : "",
+                    reps: s.reps ? String(s.reps) : "",
+                    sets: s.sets ? String(s.sets) : "1",
+                    rpe: s.rpe ? String(s.rpe) : "",
+                  }))
+                : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
+            }));
+            setExercises(loaded);
+            loaded.forEach((ex: Exercise) => fetchOverload(ex.name));
+          }
         }
+      } catch {
+        // init failed — page stays in empty state, user can still add exercises
       }
       initializedRef.current = true;
     }
@@ -299,26 +304,30 @@ export default function WorkoutPage() {
     setOverloadData({});
     setNotes("");
     setSplitLoading(true);
-    const res = await fetch(`/api/workouts/init?split=${encodeURIComponent(splitName)}`);
-    const data = await res.json();
-    if (data.workout) {
-      setNotes(data.workout.notes ?? "");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const loaded = data.workout.exercises.map((ex: any) => ({
-        name: ex.name,
-        sets: ex.sets.length > 0
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ? ex.sets.map((s: any) => ({
-              setNumber: s.setNumber,
-              weight: s.weight ? String(s.weight) : "",
-              reps: s.reps ? String(s.reps) : "",
-              sets: s.sets ? String(s.sets) : "1",
-              rpe: s.rpe ? String(s.rpe) : "",
-            }))
-          : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
-      }));
-      setExercises(loaded);
-      loaded.forEach((ex: Exercise) => fetchOverload(ex.name));
+    try {
+      const res = await fetch(`/api/workouts/init?split=${encodeURIComponent(splitName)}`);
+      const data = await res.json();
+      if (data.workout) {
+        setNotes(data.workout.notes ?? "");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const loaded = (data.workout.exercises ?? []).map((ex: any) => ({
+          name: ex.name,
+          sets: (ex.sets ?? []).length > 0
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ? ex.sets.map((s: any) => ({
+                setNumber: s.setNumber,
+                weight: s.weight ? String(s.weight) : "",
+                reps: s.reps ? String(s.reps) : "",
+                sets: s.sets ? String(s.sets) : "1",
+                rpe: s.rpe ? String(s.rpe) : "",
+              }))
+            : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
+        }));
+        setExercises(loaded);
+        loaded.forEach((ex: Exercise) => fetchOverload(ex.name));
+      }
+    } catch {
+      // split fetch failed — exercises stay empty for this split
     }
     setSplitLoading(false);
   }
@@ -361,9 +370,13 @@ export default function WorkoutPage() {
   }
 
   async function fetchOverload(exerciseName: string) {
-    const res = await fetch(`/api/workout/previous?exerciseName=${encodeURIComponent(exerciseName)}`);
-    const data = await res.json();
-    setOverloadData((prev) => ({ ...prev, [exerciseName]: data }));
+    try {
+      const res = await fetch(`/api/workout/previous?exerciseName=${encodeURIComponent(exerciseName)}`);
+      const data = await res.json();
+      setOverloadData((prev) => ({ ...prev, [exerciseName]: data }));
+    } catch {
+      // overload fetch failed — badge just won't show for this exercise
+    }
   }
 
   function removeExercise(index: number) {
