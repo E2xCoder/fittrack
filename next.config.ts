@@ -19,6 +19,6 @@ export default withSentryConfig(nextConfig, {
   // Upload slightly wider set of source maps for better stack traces
   widenClientFileUpload: true,
 
-  // Keep source maps off the public CDN
-  hideSourceMaps: true,
+  // Delete source maps from the server after upload so they never reach the CDN
+  sourcemaps: { deleteSourcemapsAfterUpload: true },
 });
