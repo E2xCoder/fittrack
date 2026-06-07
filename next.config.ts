@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
     TZ: "Europe/Istanbul",
     // Bridge SENTRY_DSN (server-only var) into the client bundle
     NEXT_PUBLIC_SENTRY_DSN: process.env.SENTRY_DSN ?? "",
+    // Expose ONLY whether the OpenAI key exists (never the key itself) so the
+    // client can hide the AI button when the feature isn't configured.
+    NEXT_PUBLIC_AI_ENABLED: process.env.OPENAI_API_KEY ? "1" : "",
   },
 };
 

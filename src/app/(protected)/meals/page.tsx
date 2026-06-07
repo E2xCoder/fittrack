@@ -6,6 +6,10 @@ import dynamic from "next/dynamic";
 import { posthog } from "@/lib/posthog";
 
 const FoodDatabaseModal = dynamic(() => import("@/components/FoodDatabaseModal"), { ssr: false });
+const AIMealAnalyzer = dynamic(() => import("./AIMealAnalyzer"), { ssr: false });
+
+// Inlined at build time via next.config env bridge — true only when OPENAI_API_KEY is set.
+const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === "1";
 
 interface UserMealCategory {
   id: string;
@@ -62,6 +66,7 @@ function MealsContent() {
   const [expandedPack, setExpandedPack] = useState<string | null>(null);
   const [loggedPack, setLoggedPack] = useState<Record<string, boolean>>({});
   const [showFoodDB, setShowFoodDB] = useState(false);
+  const [showAI, setShowAI] = useState(false);
 
   // Category manager state
   const [newCatName, setNewCatName] = useState("");
@@ -401,18 +406,36 @@ function MealsContent() {
                 ))}
               </select>
             </div>
-            <button
-              onClick={() => setShowFoodDB(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-800 bg-blue-950/40 py-2.5 text-sm font-bold text-blue-400 hover:bg-blue-900/40 transition-colors"
-            >
-              🔍 Food Database ile Ara
-            </button>
+            <div className={AI_ENABLED ? "grid grid-cols-2 gap-2" : ""}>
+              <button
+                onClick={() => setShowFoodDB(true)}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-800 bg-blue-950/40 py-2.5 text-sm font-bold text-blue-400 hover:bg-blue-900/40 transition-colors"
+              >
+                🔍 Food Database
+              </button>
+              {AI_ENABLED && (
+                <button
+                  onClick={() => setShowAI(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-green-800 bg-green-950/40 py-2.5 text-sm font-bold text-green-400 hover:bg-green-900/40 transition-colors"
+                >
+                  🍽️ AI Analiz
+                </button>
+              )}
+            </div>
           </div>
 
           {showFoodDB && (
             <FoodDatabaseModal
               dateParam={dateParam}
               onClose={() => setShowFoodDB(false)}
+              onAdded={fetchAll}
+            />
+          )}
+
+          {showAI && (
+            <AIMealAnalyzer
+              dateParam={dateParam}
+              onClose={() => setShowAI(false)}
               onAdded={fetchAll}
             />
           )}
