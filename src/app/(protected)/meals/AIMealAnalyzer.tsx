@@ -280,241 +280,254 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
       onClick={onClose}
     >
       {/* ── İç panel (bottom sheet) ──────────────────────────────────────────
-          The panel itself is the scroll container — no nested flex height to
-          miscompute. This is the structure that scrolls reliably on iOS+Android. */}
+          Panel iki bölüme ayrılmış: üst kısım scroll edilebilir, alt kısım sabit.
+          Bu yapı iOS + Android'de butonun her zaman görünmesini sağlar. */}
       <div
-        className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl bg-zinc-900 sm:mx-auto sm:max-w-lg"
+        className="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-2xl bg-zinc-900 sm:mx-auto sm:max-w-lg"
         style={{
-          maxHeight: "85vh",
-          overflowY: "auto",
-          WebkitOverflowScrolling: "touch", // iOS momentum scroll
-          overscrollBehavior: "contain", // Android bounce / scroll-chaining fix
+          height: "85vh",
           paddingBottom: "env(safe-area-inset-bottom)", // iPhone notch / home bar
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="space-y-4 px-4 pb-6 pt-4">
-          {/* 1 — Başlık + X (sticky değil, içerikle birlikte kayar) */}
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="text-base font-black leading-tight text-white">🍽️ AI ile Analiz</h2>
-              <p className="text-[11px] text-zinc-500">GPT-4o · fotoğraf + açıklama</p>
-            </div>
-            <button
-              onClick={onClose}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:text-white"
-            >
-              ✕
-            </button>
-          </div>
-
-          {/* Hidden file inputs */}
-          <input
-            ref={cameraRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleFile}
-            className="hidden"
-          />
-          <input
-            ref={galleryRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFile}
-            className="hidden"
-          />
-
-          {/* 2 — Fotoğraf önizleme / çekme butonları */}
-          {image ? (
-            <div className="relative overflow-hidden rounded-2xl border border-zinc-700">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={image} alt="Yemek" className="max-h-64 w-full bg-black object-contain" />
-              <button
-                onClick={() => setImage(null)}
-                className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur transition-colors hover:bg-red-600"
-                title="Fotoğrafı sil"
-              >
-                🗑
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => cameraRef.current?.click()}
-                className="flex flex-col items-center gap-1 rounded-2xl border border-zinc-700 bg-zinc-800 py-5 text-sm font-semibold text-zinc-300 transition-colors hover:border-green-600 hover:text-green-400"
-              >
-                <span className="text-2xl">📷</span>
-                Kameradan Çek
-              </button>
-              <button
-                onClick={() => galleryRef.current?.click()}
-                className="flex flex-col items-center gap-1 rounded-2xl border border-zinc-700 bg-zinc-800 py-5 text-sm font-semibold text-zinc-300 transition-colors hover:border-green-600 hover:text-green-400"
-              >
-                <span className="text-2xl">🖼️</span>
-                Galeriden Seç
-              </button>
-            </div>
-          )}
-
-          {/* 3 — Açıklama (textarea) */}
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            rows={4}
-            placeholder="Örn: 100gr pilav, 120gr tavuk göğsü, 1 yemek kaşığı zeytinyağı"
-            className="w-full resize-none rounded-2xl border border-zinc-700 bg-zinc-800 p-4 text-sm text-white outline-none transition-colors placeholder:text-zinc-500 focus:border-green-600"
-          />
-
-          {/* 4 — Analiz Et butonu */}
-          <button
-            onClick={analyze}
-            disabled={analyzing}
-            className="w-full rounded-xl bg-green-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-green-900/30 transition-colors hover:bg-green-500 disabled:opacity-50"
-          >
-            {analyzing ? "GPT-4o analiz ediyor... 🤔" : "✨ Analiz Et"}
-          </button>
-
-          {error && (
-            <p className="rounded-xl bg-red-950/40 px-4 py-3 text-sm text-red-400">{error}</p>
-          )}
-
-          {/* 5 — Sonuçlar */}
-          {result && (
-            <div className="space-y-3 border-t border-zinc-800 pt-4">
-              {/* Totals */}
-              <div className="rounded-2xl border border-green-900/40 bg-green-950/20 p-4">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-green-600">
-                  Toplam
-                </p>
-                <div className="flex items-end gap-2">
-                  <span className="text-4xl font-black text-green-400">{result.totalCalories}</span>
-                  <span className="mb-1 text-sm text-zinc-500">kcal</span>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {macroChips.slice(1).map((m) => (
-                    <span
-                      key={m.label}
-                      className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${m.color}`}
-                    >
-                      {m.label} {m.value}g
-                    </span>
-                  ))}
-                </div>
+        {/* ── Üst: scroll edilebilir alan (başlık + fotoğraf + textarea + sonuçlar) */}
+        <div
+          className="flex-1 overflow-y-auto"
+          style={{
+            WebkitOverflowScrolling: "touch", // iOS momentum scroll
+            overscrollBehavior: "contain", // Android scroll-chaining fix
+          }}
+        >
+          <div className="space-y-4 px-4 pb-4 pt-4">
+            {/* 1 — Başlık + X */}
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-base font-black leading-tight text-white">🍽️ AI ile Analiz</h2>
+                <p className="text-[11px] text-zinc-500">GPT-4o · fotoğraf + açıklama</p>
               </div>
+              <button
+                onClick={onClose}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
 
-              {/* Items */}
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-zinc-400">
-                  {result.items.length} yemek
-                </p>
+            {/* Hidden file inputs */}
+            <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleFile}
+              className="hidden"
+            />
+            <input
+              ref={galleryRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFile}
+              className="hidden"
+            />
+
+            {/* 2 — Fotoğraf önizleme / çekme butonları */}
+            {image ? (
+              <div className="relative overflow-hidden rounded-2xl border border-zinc-700">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={image} alt="Yemek" className="max-h-64 w-full bg-black object-contain" />
                 <button
-                  onClick={() => setEditing((v) => !v)}
-                  className="rounded-lg bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-700"
+                  onClick={() => setImage(null)}
+                  className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur transition-colors hover:bg-red-600"
+                  title="Fotoğrafı sil"
                 >
-                  {editing ? "✓ Bitti" : "✏ Düzenle"}
+                  🗑
                 </button>
               </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => cameraRef.current?.click()}
+                  className="flex flex-col items-center gap-1 rounded-2xl border border-zinc-700 bg-zinc-800 py-5 text-sm font-semibold text-zinc-300 transition-colors hover:border-green-600 hover:text-green-400"
+                >
+                  <span className="text-2xl">📷</span>
+                  Kameradan Çek
+                </button>
+                <button
+                  onClick={() => galleryRef.current?.click()}
+                  className="flex flex-col items-center gap-1 rounded-2xl border border-zinc-700 bg-zinc-800 py-5 text-sm font-semibold text-zinc-300 transition-colors hover:border-green-600 hover:text-green-400"
+                >
+                  <span className="text-2xl">🖼️</span>
+                  Galeriden Seç
+                </button>
+              </div>
+            )}
 
-              <div className="space-y-2">
-                {result.items.map((it) =>
-                  editing ? (
-                    <div key={it.id} className="space-y-2 rounded-xl border border-zinc-700 bg-zinc-800 p-3">
-                      <div className="flex gap-2">
-                        <input
-                          value={it.name}
-                          onChange={(e) => updateText(it.id, "name", e.target.value)}
-                          className="flex-1 rounded-lg bg-zinc-700 px-2 py-1.5 text-sm text-white outline-none focus:ring-1 focus:ring-green-700"
-                        />
-                        <button
-                          onClick={() => removeItem(it.id)}
-                          className="rounded-lg bg-zinc-700 px-2 text-sm text-zinc-400 transition-colors hover:bg-red-900 hover:text-red-300"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <label className="flex items-center gap-1 rounded-lg bg-zinc-700 px-2 py-1">
-                          <span className="text-[10px] text-zinc-400">Miktar</span>
+            {/* 3 — Açıklama (textarea) */}
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              rows={4}
+              placeholder="Örn: 100gr pilav, 120gr tavuk göğsü, 1 yemek kaşığı zeytinyağı"
+              className="w-full resize-none rounded-2xl border border-zinc-700 bg-zinc-800 p-4 text-sm text-white outline-none transition-colors placeholder:text-zinc-500 focus:border-green-600"
+            />
+
+            {/* 5 — Sonuçlar (analiz sonrası) */}
+            {result && (
+              <div className="space-y-3 border-t border-zinc-800 pt-4">
+                {/* Totals */}
+                <div className="rounded-2xl border border-green-900/40 bg-green-950/20 p-4">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-green-600">
+                    Toplam
+                  </p>
+                  <div className="flex items-end gap-2">
+                    <span className="text-4xl font-black text-green-400">{result.totalCalories}</span>
+                    <span className="mb-1 text-sm text-zinc-500">kcal</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {macroChips.slice(1).map((m) => (
+                      <span
+                        key={m.label}
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${m.color}`}
+                      >
+                        {m.label} {m.value}g
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Items */}
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-zinc-400">
+                    {result.items.length} yemek
+                  </p>
+                  <button
+                    onClick={() => setEditing((v) => !v)}
+                    className="rounded-lg bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-700"
+                  >
+                    {editing ? "✓ Bitti" : "✏ Düzenle"}
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {result.items.map((it) =>
+                    editing ? (
+                      <div key={it.id} className="space-y-2 rounded-xl border border-zinc-700 bg-zinc-800 p-3">
+                        <div className="flex gap-2">
                           <input
-                            type="number"
-                            step="any"
-                            inputMode="decimal"
-                            value={it.amount}
-                            onChange={(e) => updateNumber(it.id, "amount", e.target.value)}
-                            className="w-full bg-transparent text-right text-sm text-white outline-none"
+                            value={it.name}
+                            onChange={(e) => updateText(it.id, "name", e.target.value)}
+                            className="flex-1 rounded-lg bg-zinc-700 px-2 py-1.5 text-sm text-white outline-none focus:ring-1 focus:ring-green-700"
                           />
-                        </label>
-                        <label className="flex items-center gap-1 rounded-lg bg-zinc-700 px-2 py-1">
-                          <span className="text-[10px] text-zinc-400">Birim</span>
-                          <input
-                            value={it.unit}
-                            onChange={(e) => updateText(it.id, "unit", e.target.value)}
-                            className="w-full bg-transparent text-right text-sm text-white outline-none"
-                          />
-                        </label>
-                      </div>
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {(["calories", "protein", "carbs", "fat"] as const).map((f) => (
-                          <label key={f} className="rounded-lg bg-zinc-700 px-1.5 py-1 text-center">
-                            <span className="block text-[9px] uppercase text-zinc-400">
-                              {f === "calories" ? "kcal" : f === "protein" ? "P" : f === "carbs" ? "K" : "Y"}
-                            </span>
+                          <button
+                            onClick={() => removeItem(it.id)}
+                            className="rounded-lg bg-zinc-700 px-2 text-sm text-zinc-400 transition-colors hover:bg-red-900 hover:text-red-300"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <label className="flex items-center gap-1 rounded-lg bg-zinc-700 px-2 py-1">
+                            <span className="text-[10px] text-zinc-400">Miktar</span>
                             <input
                               type="number"
                               step="any"
                               inputMode="decimal"
-                              value={it[f]}
-                              onChange={(e) => updateNumber(it.id, f, e.target.value)}
-                              className="w-full bg-transparent text-center text-sm text-white outline-none"
+                              value={it.amount}
+                              onChange={(e) => updateNumber(it.id, "amount", e.target.value)}
+                              className="w-full bg-transparent text-right text-sm text-white outline-none"
                             />
                           </label>
-                        ))}
+                          <label className="flex items-center gap-1 rounded-lg bg-zinc-700 px-2 py-1">
+                            <span className="text-[10px] text-zinc-400">Birim</span>
+                            <input
+                              value={it.unit}
+                              onChange={(e) => updateText(it.id, "unit", e.target.value)}
+                              className="w-full bg-transparent text-right text-sm text-white outline-none"
+                            />
+                          </label>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {(["calories", "protein", "carbs", "fat"] as const).map((f) => (
+                            <label key={f} className="rounded-lg bg-zinc-700 px-1.5 py-1 text-center">
+                              <span className="block text-[9px] uppercase text-zinc-400">
+                                {f === "calories" ? "kcal" : f === "protein" ? "P" : f === "carbs" ? "K" : "Y"}
+                              </span>
+                              <input
+                                type="number"
+                                step="any"
+                                inputMode="decimal"
+                                value={it[f]}
+                                onChange={(e) => updateNumber(it.id, f, e.target.value)}
+                                className="w-full bg-transparent text-center text-sm text-white outline-none"
+                              />
+                            </label>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div
-                      key={it.id}
-                      className="flex items-center justify-between rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-white">
-                          {it.name}
-                          {it.amount ? (
-                            <span className="ml-1 text-xs font-normal text-zinc-500">
-                              {it.amount}{it.unit}
-                            </span>
-                          ) : null}
-                        </p>
-                        <p className="text-[11px] text-zinc-500">
-                          P:{it.protein}g · K:{it.carbs}g · Y:{it.fat}g
-                        </p>
+                    ) : (
+                      <div
+                        key={it.id}
+                        className="flex items-center justify-between rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-white">
+                            {it.name}
+                            {it.amount ? (
+                              <span className="ml-1 text-xs font-normal text-zinc-500">
+                                {it.amount}{it.unit}
+                              </span>
+                            ) : null}
+                          </p>
+                          <p className="text-[11px] text-zinc-500">
+                            P:{it.protein}g · K:{it.carbs}g · Y:{it.fat}g
+                          </p>
+                        </div>
+                        <span className="ml-2 shrink-0 text-sm font-bold text-green-400">
+                          {it.calories} kcal
+                        </span>
                       </div>
-                      <span className="ml-2 shrink-0 text-sm font-bold text-green-400">
-                        {it.calories} kcal
-                      </span>
-                    </div>
-                  )
-                )}
+                    )
+                  )}
+                </div>
               </div>
+            )}
+          </div>
+        </div>
 
-              {/* 6 — Onayla ve Ekle / Her Yemeği Ayrı Logla */}
-              <div className="space-y-2 pt-1">
-                <button
-                  onClick={() => logMeal("single")}
-                  disabled={logging !== null || result.items.length === 0}
-                  className="w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white shadow-lg shadow-green-900/30 transition-colors hover:bg-green-500 disabled:opacity-50"
-                >
-                  {logging === "single" ? "Ekleniyor…" : "✓ Onayla ve Tek Log Ekle"}
-                </button>
-                <button
-                  onClick={() => logMeal("separate")}
-                  disabled={logging !== null || result.items.length === 0}
-                  className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-3 text-sm font-semibold text-zinc-200 transition-colors hover:border-green-600 hover:text-green-400 disabled:opacity-50"
-                >
-                  {logging === "separate" ? "Ekleniyor…" : "📋 Her Yemeği Ayrı Logla"}
-                </button>
-              </div>
+        {/* ── Alt: sabit alan — Analiz Et butonu + log butonları her zaman görünür */}
+        <div className="flex-shrink-0 space-y-2 border-t border-zinc-800 px-4 pb-4 pt-3">
+          {error && (
+            <p className="rounded-xl bg-red-950/40 px-4 py-3 text-sm text-red-400">{error}</p>
+          )}
+
+          {/* 4 — Analiz Et butonu (her zaman görünür) */}
+          {!result && (
+            <button
+              onClick={analyze}
+              disabled={analyzing}
+              className="w-full rounded-xl bg-green-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-green-900/30 transition-colors hover:bg-green-500 disabled:opacity-50"
+            >
+              {analyzing ? "GPT-4o analiz ediyor... 🤔" : "✨ Analiz Et"}
+            </button>
+          )}
+
+          {/* 6 — Log butonları (sonuçlar gelince) */}
+          {result && (
+            <div className="space-y-2">
+              <button
+                onClick={() => logMeal("single")}
+                disabled={logging !== null || result.items.length === 0}
+                className="w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white shadow-lg shadow-green-900/30 transition-colors hover:bg-green-500 disabled:opacity-50"
+              >
+                {logging === "single" ? "Ekleniyor…" : "✓ Onayla ve Tek Log Ekle"}
+              </button>
+              <button
+                onClick={() => logMeal("separate")}
+                disabled={logging !== null || result.items.length === 0}
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-3 text-sm font-semibold text-zinc-200 transition-colors hover:border-green-600 hover:text-green-400 disabled:opacity-50"
+              >
+                {logging === "separate" ? "Ekleniyor…" : "📋 Her Yemeği Ayrı Logla"}
+              </button>
             </div>
           )}
         </div>
