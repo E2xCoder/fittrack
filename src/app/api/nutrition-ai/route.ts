@@ -11,7 +11,7 @@ const SYSTEM_PROMPT =
   "If the user says \"I ate X pieces\" and the label shows \"Y pieces = Zg\":\n" +
   "- Calculate: (X / Y) * Z = total grams eaten\n" +
   "- Example: \"12 pieces\", label says \"4 pieces = 15g\" → (12/4)*15 = 45g eaten\n" +
-  "- Use ONLY this 45g to calculate macros, NOT the package total\n\n" +
+  "- Use ONLY the eaten amount to calculate macros, NOT the package total\n\n" +
   "RULE 2 - NEVER USE PACKAGE TOTAL:\n" +
   "Never use total package weight (e.g. 90g package) unless user says \"I ate the whole package\"\n\n" +
   "RULE 3 - PARTIAL AMOUNTS:\n" +
@@ -20,7 +20,7 @@ const SYSTEM_PROMPT =
   "Return ONLY this JSON, no other text:\n" +
   "{\"totalCalories\": number, \"totalProtein\": number, \"totalCarbs\": number, \"totalFat\": number, \"items\": [{\"name\": \"product name (Xg)\", \"amount\": number, \"unit\": \"g\", \"calories\": number, \"protein\": number, \"carbs\": number, \"fat\": number}]}\n\n" +
   "RULE 5 - SHOW CALCULATION:\n" +
-  "In the item name, always show the actual amount: \"Milka Chocolate (45g)\" not just \"Milka Chocolate\"";
+  "In the item name, always show the actual amount: \"Product X (45g)\" not just \"Product X\"";
 
 interface ChatTextPart {
   type: "text";
