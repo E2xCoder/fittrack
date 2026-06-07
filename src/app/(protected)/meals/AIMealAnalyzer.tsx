@@ -6,6 +6,9 @@ import { posthog } from "@/lib/posthog";
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface AIItem {
+  /** Stable client-side id — items are edited/removed by id, never by array index,
+   *  so values can't get mismatched to the wrong row while editing. */
+  id: string;
   name: string;
   amount: number;
   unit: string;
@@ -21,6 +24,25 @@ interface AIResult {
   totalCarbs: number;
   totalFat: number;
   items: AIItem[];
+}
+
+/** Shape returned by /api/nutrition-ai (no client ids yet). */
+type RawItem = Omit<AIItem, "id">;
+interface RawResult {
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+  items: RawItem[];
+}
+
+/** Numeric fields that are recomputed into the totals. */
+type NumericField = "amount" | "calories" | "protein" | "carbs" | "fat";
+
+let idCounter = 0;
+function newId(): string {
+  idCounter += 1;
+  return `ai-${Date.now().toString(36)}-${idCounter}`;
 }
 
 interface Props {
@@ -125,10 +147,18 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
         setError(data?.error ?? "Analiz başarısız oldu, tekrar deneyin.");
         return;
       }
-      setResult(data as AIResult);
+      const raw = data as RawResult;
+      const items: AIItem[] = (raw.items ?? []).map((it) => ({ ...it, id: newId() }));
+      setResult({
+        totalCalories: raw.totalCalories,
+        totalProtein: raw.totalProtein,
+        totalCarbs: raw.totalCarbs,
+        totalFat: raw.totalFat,
+        items,
+      });
       posthog.capture("ai_meal_analyzed", {
         hasImage: !!image,
-        itemCount: (data as AIResult).items?.length ?? 0,
+        itemCount: items.length,
       });
     } catch {
       setError("Bağlantı hatası. İnternet bağlantınızı kontrol edin.");
@@ -137,22 +167,35 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
     }
   }
 
-  function updateItem(idx: number, field: keyof AIItem, value: string) {
+  // Edit the items array directly (by id). Totals are always recomputed from the
+  // items here, so the displayed value is never out of sync — toggling the
+  // Düzenle/Bitti view does NOT copy into a separate state.
+  function updateText(id: string, field: "name" | "unit", value: string) {
     setResult((prev) => {
       if (!prev) return prev;
-      const items = prev.items.map((it, i) => {
-        if (i !== idx) return it;
-        if (field === "name" || field === "unit") return { ...it, [field]: value };
-        return { ...it, [field]: Number(value) || 0 };
-      });
+      const items = prev.items.map((it) =>
+        it.id === id ? { ...it, [field]: value } : it
+      );
       return { ...prev, items, ...sumTotals(items) };
     });
   }
 
-  function removeItem(idx: number) {
+  function updateNumber(id: string, field: NumericField, value: string) {
+    const n = value === "" ? 0 : Number(value);
+    const safe = Number.isFinite(n) ? n : 0;
     setResult((prev) => {
       if (!prev) return prev;
-      const items = prev.items.filter((_, i) => i !== idx);
+      const items = prev.items.map((it) =>
+        it.id === id ? { ...it, [field]: safe } : it
+      );
+      return { ...prev, items, ...sumTotals(items) };
+    });
+  }
+
+  function removeItem(id: string) {
+    setResult((prev) => {
+      if (!prev) return prev;
+      const items = prev.items.filter((it) => it.id !== id);
       return { ...prev, items, ...sumTotals(items) };
     });
   }
@@ -221,11 +264,11 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-zinc-950 sm:items-center sm:justify-center sm:bg-black/70 sm:backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
       onClick={onClose}
     >
       <div
-        className="flex h-full w-full flex-col bg-zinc-950 sm:h-auto sm:max-h-[90vh] sm:max-w-lg sm:rounded-3xl sm:border sm:border-zinc-700 sm:shadow-2xl"
+        className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-3xl bg-zinc-950 sm:max-w-lg sm:rounded-3xl sm:border sm:border-zinc-700 sm:shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -242,8 +285,9 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
           </button>
         </div>
 
-        {/* Body */}
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 pb-safe">
+        {/* Body — flex-1 + min-h-0 lets this scroll inside the max-h-[90vh] panel.
+            The webkit class restores momentum scrolling on iOS Safari. */}
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto [-webkit-overflow-scrolling:touch] px-4 py-4 pb-safe">
           {/* Hidden file inputs */}
           <input
             ref={cameraRef}
@@ -353,17 +397,17 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
               </div>
 
               <div className="space-y-2">
-                {result.items.map((it, idx) =>
+                {result.items.map((it) =>
                   editing ? (
-                    <div key={idx} className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
+                    <div key={it.id} className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
                       <div className="flex gap-2">
                         <input
                           value={it.name}
-                          onChange={(e) => updateItem(idx, "name", e.target.value)}
+                          onChange={(e) => updateText(it.id, "name", e.target.value)}
                           className="flex-1 rounded-lg bg-zinc-800 px-2 py-1.5 text-sm text-white outline-none focus:ring-1 focus:ring-green-700"
                         />
                         <button
-                          onClick={() => removeItem(idx)}
+                          onClick={() => removeItem(it.id)}
                           className="rounded-lg bg-zinc-800 px-2 text-sm text-zinc-500 transition-colors hover:bg-red-900 hover:text-red-300"
                         >
                           ✕
@@ -374,8 +418,10 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
                           <span className="text-[10px] text-zinc-500">Miktar</span>
                           <input
                             type="number"
+                            step="any"
+                            inputMode="decimal"
                             value={it.amount}
-                            onChange={(e) => updateItem(idx, "amount", e.target.value)}
+                            onChange={(e) => updateNumber(it.id, "amount", e.target.value)}
                             className="w-full bg-transparent text-right text-sm text-white outline-none"
                           />
                         </label>
@@ -383,7 +429,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
                           <span className="text-[10px] text-zinc-500">Birim</span>
                           <input
                             value={it.unit}
-                            onChange={(e) => updateItem(idx, "unit", e.target.value)}
+                            onChange={(e) => updateText(it.id, "unit", e.target.value)}
                             className="w-full bg-transparent text-right text-sm text-white outline-none"
                           />
                         </label>
@@ -396,8 +442,10 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
                             </span>
                             <input
                               type="number"
+                              step="any"
+                              inputMode="decimal"
                               value={it[f]}
-                              onChange={(e) => updateItem(idx, f, e.target.value)}
+                              onChange={(e) => updateNumber(it.id, f, e.target.value)}
                               className="w-full bg-transparent text-center text-sm text-white outline-none"
                             />
                           </label>
@@ -406,7 +454,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
                     </div>
                   ) : (
                     <div
-                      key={idx}
+                      key={it.id}
                       className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5"
                     >
                       <div className="min-w-0 flex-1">

@@ -12,7 +12,11 @@ const SYSTEM_PROMPT =
   "{totalCalories, totalProtein, totalCarbs, totalFat, items: [{name, amount, " +
   "unit, calories, protein, carbs, fat}]}. Be precise. If the user says '100g " +
   "chicken breast', use exact nutritional data for 100g chicken breast. All " +
-  "values should be numbers, not strings.";
+  "values should be numbers, not strings. " +
+  "CRITICAL: When user mentions two quantities for the same food (e.g. 'I ate " +
+  "130g out of 185g', 'yarısını yedim', 'bir kısmını yedim'), ALWAYS calculate " +
+  "for the SMALLER/EATEN amount only. Never sum multiple interpretations. The " +
+  "total package size is irrelevant - only calculate what was actually consumed.";
 
 interface ChatTextPart {
   type: "text";
