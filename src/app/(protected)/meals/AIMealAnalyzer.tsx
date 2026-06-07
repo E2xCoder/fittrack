@@ -254,17 +254,18 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
       }}
       onClick={onClose}
     >
-      {/* Alt panel — sabit yukseklik yok, icerik uzadikca yukari uzar */}
+      {/* Ortada centered modal */}
       <div
         style={{
           position: "fixed",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          borderRadius: "16px 16px 0 0",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: "90%",
+          maxWidth: 480,
+          borderRadius: 16,
           background: "#18181b",
           padding: "16px",
-          paddingBottom: "calc(16px + env(safe-area-inset-bottom))",
         }}
         onClick={(e) => e.stopPropagation()}
       >
