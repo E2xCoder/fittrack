@@ -263,6 +263,8 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
           transform: "translate(-50%, -50%)",
           width: "90%",
           maxWidth: 480,
+          maxHeight: "90vh",
+          overflowY: "auto",
           borderRadius: 16,
           background: "#18181b",
           padding: "16px",
