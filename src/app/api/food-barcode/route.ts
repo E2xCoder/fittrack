@@ -2,6 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 
 const UA = "FitTrack/1.0 (fitness tracking app)";
 
+// ── Liquid detection ─────────────────────────────────────────────────────────
+
+const LIQUID_KEYWORDS = [
+  // English
+  "water", "juice", "drink", "milk", "yogurt", "beverage", "soda", "beer",
+  "wine", "coffee", "tea", "smoothie", "shake", "soup", "broth", "syrup",
+  "lemonade", "cola", "sauce",
+  // Turkish
+  "su", "süt", "içecek", "meyve suyu", "limonata", "kahve", "çay", "bira", "şarap",
+];
+
+function detectServingLabel(
+  name: string,
+  categories?: string,
+  quantity?: string,
+  servingQuantityUnit?: string
+): "ml" | "g" {
+  if (servingQuantityUnit?.toLowerCase() === "ml") return "ml";
+  if (quantity?.toLowerCase().includes("ml")) return "ml";
+  const text = `${name} ${categories ?? ""}`.toLowerCase();
+  if (LIQUID_KEYWORDS.some((kw) => text.includes(kw))) return "ml";
+  return "g";
+}
+
 // ── OFF ────────────────────────────────────────────────────────────────────
 
 async function fetchOFFBarcode(code: string) {
@@ -81,10 +105,23 @@ export async function GET(req: NextRequest) {
 
   // Try OFF first (has richer product data), then USDA as fallback
   const off = await fetchOFFBarcode(code);
-  if (off) return NextResponse.json({ status: 1, source: off.source, product: off.product });
+  if (off) {
+    const p = off.product as Record<string, unknown>;
+    const servingLabel = detectServingLabel(
+      String(p.product_name ?? ""),
+      String(p.categories ?? ""),
+      String(p.quantity ?? ""),
+      String(p.serving_quantity_unit ?? "")
+    );
+    return NextResponse.json({ status: 1, source: off.source, product: { ...p, servingLabel } });
+  }
 
   const usda = await fetchUSDABarcode(code);
-  if (usda) return NextResponse.json({ status: 1, source: usda.source, product: usda.product });
+  if (usda) {
+    const p = usda.product as Record<string, unknown>;
+    const servingLabel = detectServingLabel(String(p.product_name ?? ""));
+    return NextResponse.json({ status: 1, source: usda.source, product: { ...p, servingLabel } });
+  }
 
   return NextResponse.json({ status: 0 });
 }

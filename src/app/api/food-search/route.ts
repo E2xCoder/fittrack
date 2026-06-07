@@ -1,7 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const OFF_FIELDS = "product_name,brands,nutriments,image_thumb_url,code";
+const OFF_FIELDS =
+  "product_name,brands,nutriments,image_thumb_url,code,categories,quantity,serving_quantity_unit";
 const UA = "FitTrack/1.0 (fitness tracking app)";
+
+// ── Liquid detection ─────────────────────────────────────────────────────────
+
+const LIQUID_KEYWORDS = [
+  // English
+  "water", "juice", "drink", "milk", "yogurt", "beverage", "soda", "beer",
+  "wine", "coffee", "tea", "smoothie", "shake", "soup", "broth", "syrup",
+  "lemonade", "cola", "sauce",
+  // Turkish
+  "su", "süt", "içecek", "meyve suyu", "limonata", "kahve", "çay", "bira", "şarap",
+];
+
+/**
+ * Returns "ml" if the product is clearly a liquid, "g" otherwise.
+ * Priority: explicit unit fields → name/category keyword match.
+ */
+function detectServingLabel(
+  name: string,
+  categories?: string,
+  quantity?: string,
+  servingQuantityUnit?: string
+): "ml" | "g" {
+  if (servingQuantityUnit?.toLowerCase() === "ml") return "ml";
+  if (quantity?.toLowerCase().includes("ml")) return "ml";
+  const text = `${name} ${categories ?? ""}`.toLowerCase();
+  if (LIQUID_KEYWORDS.some((kw) => text.includes(kw))) return "ml";
+  return "g";
+}
 
 // ── USDA FoodData Central ─────────────────────────────────────────────────
 
@@ -20,12 +49,14 @@ function fdcNutrient(food: FDCFood, id: number): number {
 }
 
 function fdcToUnified(food: FDCFood) {
+  const name = food.description ?? "";
   return {
     code: food.gtinUpc ?? `fdc_${food.fdcId}`,
-    product_name: food.description ?? "",
+    product_name: name,
     brands: food.brandOwner ?? food.brandName ?? "",
     image_thumb_url: null,
     source: "USDA" as const,
+    servingLabel: detectServingLabel(name),
     nutriments: {
       "energy-kcal_100g": Math.round(fdcNutrient(food, 1008)),
       "proteins_100g":    Math.round(fdcNutrient(food, 1003) * 10) / 10,
@@ -61,7 +92,16 @@ async function fetchOFF(q: string) {
     const res = await fetch(url, { headers: { "User-Agent": UA }, next: { revalidate: 60 } });
     if (!res.ok) return [];
     const data = await res.json();
-    return (data.products ?? []).map((p: object) => ({ ...p, source: "OFF" as const }));
+    return (data.products ?? []).map((p: Record<string, unknown>) => ({
+      ...p,
+      source: "OFF" as const,
+      servingLabel: detectServingLabel(
+        String(p.product_name ?? ""),
+        String(p.categories ?? ""),
+        String(p.quantity ?? ""),
+        String(p.serving_quantity_unit ?? "")
+      ),
+    }));
   } catch {
     return [];
   }
