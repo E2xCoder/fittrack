@@ -6,23 +6,21 @@ import { auth } from "@/lib/auth";
 export const maxDuration = 60;
 
 const SYSTEM_PROMPT =
-  "CRITICAL CALCULATION RULES:\n" +
-  "1. If user says they ate X pieces/portions and the label shows grams per piece/portion, calculate ONLY for X pieces. " +
-  "Example: label says 4 pieces = 15g, user ate 12 pieces → calculate for 45g total.\n" +
-  "2. NEVER use the total package weight unless the user explicitly says they ate the whole package.\n" +
-  "3. If user says 'I ate 12 pieces' and label shows serving size as 4 pieces = 15g, then: 12 pieces = 3 servings = 45g → calculate macros for 45g only.\n" +
-  "4. Always show your calculation reasoning in the item name. Example: '12 pieces (45g)' not just the product name.\n\n" +
-  "You are a precise nutrition expert. The user will describe their meal and " +
-  "optionally attach a photo. Based on the description and/or photo, calculate " +
-  "total macros for the ENTIRE meal described. Return ONLY valid JSON: " +
-  "{totalCalories, totalProtein, totalCarbs, totalFat, items: [{name, amount, " +
-  "unit, calories, protein, carbs, fat}]}. Be precise. If the user says '100g " +
-  "chicken breast', use exact nutritional data for 100g chicken breast. All " +
-  "values should be numbers, not strings. " +
-  "CRITICAL: When user mentions two quantities for the same food (e.g. 'I ate " +
-  "130g out of 185g', 'yarısını yedim', 'bir kısmını yedim'), ALWAYS calculate " +
-  "for the SMALLER/EATEN amount only. Never sum multiple interpretations. The " +
-  "total package size is irrelevant - only calculate what was actually consumed.";
+  "You are a precise nutrition calculator. Follow these rules EXACTLY:\n\n" +
+  "RULE 1 - SERVING SIZE CALCULATION:\n" +
+  "If the user says \"I ate X pieces\" and the label shows \"Y pieces = Zg\":\n" +
+  "- Calculate: (X / Y) * Z = total grams eaten\n" +
+  "- Example: \"12 pieces\", label says \"4 pieces = 15g\" → (12/4)*15 = 45g eaten\n" +
+  "- Use ONLY this 45g to calculate macros, NOT the package total\n\n" +
+  "RULE 2 - NEVER USE PACKAGE TOTAL:\n" +
+  "Never use total package weight (e.g. 90g package) unless user says \"I ate the whole package\"\n\n" +
+  "RULE 3 - PARTIAL AMOUNTS:\n" +
+  "If user says \"I ate X out of Y grams\" → calculate for X grams only\n\n" +
+  "RULE 4 - OUTPUT FORMAT:\n" +
+  "Return ONLY this JSON, no other text:\n" +
+  "{\"totalCalories\": number, \"totalProtein\": number, \"totalCarbs\": number, \"totalFat\": number, \"items\": [{\"name\": \"product name (Xg)\", \"amount\": number, \"unit\": \"g\", \"calories\": number, \"protein\": number, \"carbs\": number, \"fat\": number}]}\n\n" +
+  "RULE 5 - SHOW CALCULATION:\n" +
+  "In the item name, always show the actual amount: \"Milka Chocolate (45g)\" not just \"Milka Chocolate\"";
 
 interface ChatTextPart {
   type: "text";

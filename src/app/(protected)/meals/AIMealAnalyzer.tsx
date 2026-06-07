@@ -109,9 +109,13 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
   const galleryRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    const prevPosition = document.body.style.position;
     document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed"; // iOS Safari scroll lock
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = prevOverflow;
+      document.body.style.position = prevPosition;
     };
   }, []);
 
@@ -263,8 +267,9 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
           transform: "translate(-50%, -50%)",
           width: "90%",
           maxWidth: 480,
-          maxHeight: "90vh",
+          maxHeight: "80vh",
           overflowY: "auto",
+          paddingBottom: "80px",
           borderRadius: 16,
           background: "#18181b",
           padding: "16px",
