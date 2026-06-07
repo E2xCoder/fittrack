@@ -3,11 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { posthog } from "@/lib/posthog";
 
-// ─── Types ──────────────────────────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface AIItem {
-  /** Stable client-side id — items are edited/removed by id, never by array index,
-   *  so values can't get mismatched to the wrong row while editing. */
   id: string;
   name: string;
   amount: number;
@@ -26,7 +24,6 @@ interface AIResult {
   items: AIItem[];
 }
 
-/** Shape returned by /api/nutrition-ai (no client ids yet). */
 type RawItem = Omit<AIItem, "id">;
 interface RawResult {
   totalCalories: number;
@@ -36,7 +33,6 @@ interface RawResult {
   items: RawItem[];
 }
 
-/** Numeric fields that are recomputed into the totals. */
 type NumericField = "amount" | "calories" | "protein" | "carbs" | "fat";
 
 let idCounter = 0;
@@ -52,8 +48,6 @@ interface Props {
 }
 
 // ─── Image helper ─────────────────────────────────────────────────────────────
-// Phone photos are several MB; downscale to ≤1024px JPEG before sending so the
-// payload (and OpenAI vision cost) stays small.
 
 async function fileToResizedDataUrl(file: File): Promise<string> {
   const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -114,33 +108,30 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
 
-  // Lock background scroll while the sheet is open (iOS + Android). Restored on
-  // unmount, which happens when the parent stops rendering the modal on close.
   useEffect(() => {
-    const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = prev;
+      document.body.style.overflow = "";
     };
   }, []);
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-selecting the same file
+    e.target.value = "";
     if (!file) return;
     setError("");
     try {
       const resized = await fileToResizedDataUrl(file);
       setImage(resized);
     } catch {
-      setError("Fotoğraf yüklenemedi, başka bir görsel deneyin.");
+      setError("Fotograf yuklenemedi, baska bir gorsel deneyin.");
     }
   }
 
   async function analyze() {
     setError("");
     if (!image && !message.trim()) {
-      setError("Lütfen bir açıklama yazın veya fotoğraf ekleyin.");
+      setError("Lutfen bir aciklama yazin veya fotograf ekleyin.");
       return;
     }
     setAnalyzing(true);
@@ -154,7 +145,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data) {
-        setError(data?.error ?? "Analiz başarısız oldu, tekrar deneyin.");
+        setError(data?.error ?? "Analiz basarisiz oldu, tekrar deneyin.");
         return;
       }
       const raw = data as RawResult;
@@ -166,26 +157,18 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
         totalFat: raw.totalFat,
         items,
       });
-      posthog.capture("ai_meal_analyzed", {
-        hasImage: !!image,
-        itemCount: items.length,
-      });
+      posthog.capture("ai_meal_analyzed", { hasImage: !!image, itemCount: items.length });
     } catch {
-      setError("Bağlantı hatası. İnternet bağlantınızı kontrol edin.");
+      setError("Baglanti hatasi. Internet baglantinizi kontrol edin.");
     } finally {
       setAnalyzing(false);
     }
   }
 
-  // Edit the items array directly (by id). Totals are always recomputed from the
-  // items here, so the displayed value is never out of sync — toggling the
-  // Düzenle/Bitti view does NOT copy into a separate state.
   function updateText(id: string, field: "name" | "unit", value: string) {
     setResult((prev) => {
       if (!prev) return prev;
-      const items = prev.items.map((it) =>
-        it.id === id ? { ...it, [field]: value } : it
-      );
+      const items = prev.items.map((it) => (it.id === id ? { ...it, [field]: value } : it));
       return { ...prev, items, ...sumTotals(items) };
     });
   }
@@ -195,9 +178,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
     const safe = Number.isFinite(n) ? n : 0;
     setResult((prev) => {
       if (!prev) return prev;
-      const items = prev.items.map((it) =>
-        it.id === id ? { ...it, [field]: safe } : it
-      );
+      const items = prev.items.map((it) => (it.id === id ? { ...it, [field]: safe } : it));
       return { ...prev, items, ...sumTotals(items) };
     });
   }
@@ -233,7 +214,6 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
         });
         if (!res.ok) throw new Error("log failed");
       } else {
-        // Sequential to avoid a race on the daily-log unique [userId, date] row.
         for (const it of result.items) {
           const label = it.amount ? `${it.name} (${it.amount}${it.unit})` : it.name;
           const res = await fetch("/api/log-meal", {
@@ -258,283 +238,329 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
       onAdded();
       onClose();
     } catch {
-      setError("Loglama başarısız oldu, tekrar deneyin.");
+      setError("Loglama basarisiz oldu, tekrar deneyin.");
       setLogging(null);
     }
   }
 
-  const macroChips = result
-    ? [
-        { label: "kcal", value: result.totalCalories, color: "bg-zinc-800 text-white" },
-        { label: "P", value: result.totalProtein, color: "bg-blue-950 text-blue-300" },
-        { label: "K", value: result.totalCarbs, color: "bg-amber-950 text-amber-300" },
-        { label: "Y", value: result.totalFat, color: "bg-rose-950 text-rose-300" },
-      ]
-    : [];
-
   return (
-    // ── Dış overlay ──────────────────────────────────────────────────────────
+    // Tam ekran overlay
     <div
-      className="fixed inset-0 z-50"
-      style={{ background: "rgba(0,0,0,0.75)" }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 50,
+        background: "rgba(0,0,0,0.8)",
+      }}
       onClick={onClose}
     >
-      {/* ── İç panel (bottom sheet) ──────────────────────────────────────────
-          Panel iki bölüme ayrılmış: üst kısım scroll edilebilir, alt kısım sabit.
-          Bu yapı iOS + Android'de butonun her zaman görünmesini sağlar. */}
+      {/* Alt panel — sabit yukseklik yok, icerik uzadikca yukari uzar */}
       <div
-        className="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-2xl bg-zinc-900 sm:mx-auto sm:max-w-lg"
         style={{
-          // iOS'ta vh, bottom nav bar'ı (≈60px) ve safe-area'yı hesaba katmaz.
-          // calc ile hem nav bar hem safe-area çıkarılıyor — panel her zaman sığar.
-          maxHeight: "calc(80vh - 60px - env(safe-area-inset-bottom))",
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          borderRadius: "16px 16px 0 0",
+          background: "#18181b",
+          padding: "16px",
+          paddingBottom: "calc(16px + env(safe-area-inset-bottom))",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* ── Üst: scroll edilebilir alan (başlık + fotoğraf + textarea + sonuçlar) */}
-        <div
-          className="flex-1 overflow-y-auto"
+        {/* Hidden file inputs */}
+        <input
+          ref={cameraRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleFile}
+          style={{ display: "none" }}
+        />
+        <input
+          ref={galleryRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFile}
+          style={{ display: "none" }}
+        />
+
+        {/* 1 — Baslik + X */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
+          <div>
+            <div style={{ color: "#fff", fontWeight: 900, fontSize: 15 }}>AI ile Analiz</div>
+            <div style={{ color: "#71717a", fontSize: 11, marginTop: 2 }}>GPT-4o · fotograf + aciklama</div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: "50%",
+              border: "1px solid #3f3f46",
+              background: "#27272a",
+              color: "#a1a1aa",
+              cursor: "pointer",
+              fontSize: 14,
+              flexShrink: 0,
+            }}
+          >
+            X
+          </button>
+        </div>
+
+        {/* 2 — Fotograf onizleme veya kamera/galeri butonlari */}
+        {image ? (
+          <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: "1px solid #3f3f46", marginBottom: 12 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={image} alt="Yemek" style={{ width: "100%", maxHeight: 220, objectFit: "contain", background: "#000", display: "block" }} />
+            <button
+              onClick={() => setImage(null)}
+              style={{
+                position: "absolute",
+                top: 8,
+                right: 8,
+                width: 32,
+                height: 32,
+                borderRadius: "50%",
+                background: "rgba(0,0,0,0.7)",
+                color: "#fff",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+            >
+              Sil
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+            <button
+              onClick={() => cameraRef.current?.click()}
+              style={{
+                padding: "20px 8px",
+                borderRadius: 12,
+                border: "1px solid #3f3f46",
+                background: "#27272a",
+                color: "#d4d4d8",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Kameradan Cek
+            </button>
+            <button
+              onClick={() => galleryRef.current?.click()}
+              style={{
+                padding: "20px 8px",
+                borderRadius: 12,
+                border: "1px solid #3f3f46",
+                background: "#27272a",
+                color: "#d4d4d8",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Galeriden Sec
+            </button>
+          </div>
+        )}
+
+        {/* 3 — Textarea */}
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          rows={4}
+          placeholder="Ornek: 100gr pilav, 120gr tavuk gogusu"
           style={{
-            WebkitOverflowScrolling: "touch", // iOS momentum scroll
-            overscrollBehavior: "contain", // Android scroll-chaining fix
+            width: "100%",
+            resize: "none",
+            borderRadius: 12,
+            border: "1px solid #3f3f46",
+            background: "#27272a",
+            color: "#fff",
+            padding: 12,
+            fontSize: 13,
+            outline: "none",
+            boxSizing: "border-box",
+            marginBottom: 12,
+            fontFamily: "inherit",
+          }}
+        />
+
+        {/* 4 — Analiz Et butonu */}
+        <button
+          onClick={analyze}
+          disabled={analyzing}
+          style={{
+            width: "100%",
+            borderRadius: 10,
+            background: analyzing ? "#166534" : "#16a34a",
+            color: "#fff",
+            fontWeight: 700,
+            fontSize: 14,
+            padding: "14px 0",
+            border: "none",
+            cursor: analyzing ? "not-allowed" : "pointer",
+            opacity: analyzing ? 0.7 : 1,
+            marginBottom: 12,
           }}
         >
-          <div className="space-y-4 px-4 pb-4 pt-4">
-            {/* 1 — Başlık + X */}
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 className="text-base font-black leading-tight text-white">🍽️ AI ile Analiz</h2>
-                <p className="text-[11px] text-zinc-500">GPT-4o · fotoğraf + açıklama</p>
-              </div>
-              <button
-                onClick={onClose}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
+          {analyzing ? "GPT-4o analiz ediyor..." : "Analiz Et"}
+        </button>
 
-            {/* Hidden file inputs */}
-            <input
-              ref={cameraRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={handleFile}
-              className="hidden"
-            />
-            <input
-              ref={galleryRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFile}
-              className="hidden"
-            />
-
-            {/* 2 — Fotoğraf önizleme / çekme butonları */}
-            {image ? (
-              <div className="relative overflow-hidden rounded-2xl border border-zinc-700">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={image} alt="Yemek" className="max-h-64 w-full bg-black object-contain" />
-                <button
-                  onClick={() => setImage(null)}
-                  className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur transition-colors hover:bg-red-600"
-                  title="Fotoğrafı sil"
-                >
-                  🗑
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => cameraRef.current?.click()}
-                  className="flex flex-col items-center gap-1 rounded-2xl border border-zinc-700 bg-zinc-800 py-5 text-sm font-semibold text-zinc-300 transition-colors hover:border-green-600 hover:text-green-400"
-                >
-                  <span className="text-2xl">📷</span>
-                  Kameradan Çek
-                </button>
-                <button
-                  onClick={() => galleryRef.current?.click()}
-                  className="flex flex-col items-center gap-1 rounded-2xl border border-zinc-700 bg-zinc-800 py-5 text-sm font-semibold text-zinc-300 transition-colors hover:border-green-600 hover:text-green-400"
-                >
-                  <span className="text-2xl">🖼️</span>
-                  Galeriden Seç
-                </button>
-              </div>
-            )}
-
-            {/* 3 — Açıklama (textarea) */}
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              rows={4}
-              placeholder="Örn: 100gr pilav, 120gr tavuk göğsü, 1 yemek kaşığı zeytinyağı"
-              className="w-full resize-none rounded-2xl border border-zinc-700 bg-zinc-800 p-4 text-sm text-white outline-none transition-colors placeholder:text-zinc-500 focus:border-green-600"
-            />
-
-            {/* 5 — Sonuçlar (analiz sonrası) */}
-            {result && (
-              <div className="space-y-3 border-t border-zinc-800 pt-4">
-                {/* Totals */}
-                <div className="rounded-2xl border border-green-900/40 bg-green-950/20 p-4">
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-green-600">
-                    Toplam
-                  </p>
-                  <div className="flex items-end gap-2">
-                    <span className="text-4xl font-black text-green-400">{result.totalCalories}</span>
-                    <span className="mb-1 text-sm text-zinc-500">kcal</span>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {macroChips.slice(1).map((m) => (
-                      <span
-                        key={m.label}
-                        className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${m.color}`}
-                      >
-                        {m.label} {m.value}g
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Items */}
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-zinc-400">
-                    {result.items.length} yemek
-                  </p>
-                  <button
-                    onClick={() => setEditing((v) => !v)}
-                    className="rounded-lg bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-700"
-                  >
-                    {editing ? "✓ Bitti" : "✏ Düzenle"}
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  {result.items.map((it) =>
-                    editing ? (
-                      <div key={it.id} className="space-y-2 rounded-xl border border-zinc-700 bg-zinc-800 p-3">
-                        <div className="flex gap-2">
-                          <input
-                            value={it.name}
-                            onChange={(e) => updateText(it.id, "name", e.target.value)}
-                            className="flex-1 rounded-lg bg-zinc-700 px-2 py-1.5 text-sm text-white outline-none focus:ring-1 focus:ring-green-700"
-                          />
-                          <button
-                            onClick={() => removeItem(it.id)}
-                            className="rounded-lg bg-zinc-700 px-2 text-sm text-zinc-400 transition-colors hover:bg-red-900 hover:text-red-300"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <label className="flex items-center gap-1 rounded-lg bg-zinc-700 px-2 py-1">
-                            <span className="text-[10px] text-zinc-400">Miktar</span>
-                            <input
-                              type="number"
-                              step="any"
-                              inputMode="decimal"
-                              value={it.amount}
-                              onChange={(e) => updateNumber(it.id, "amount", e.target.value)}
-                              className="w-full bg-transparent text-right text-sm text-white outline-none"
-                            />
-                          </label>
-                          <label className="flex items-center gap-1 rounded-lg bg-zinc-700 px-2 py-1">
-                            <span className="text-[10px] text-zinc-400">Birim</span>
-                            <input
-                              value={it.unit}
-                              onChange={(e) => updateText(it.id, "unit", e.target.value)}
-                              className="w-full bg-transparent text-right text-sm text-white outline-none"
-                            />
-                          </label>
-                        </div>
-                        <div className="grid grid-cols-4 gap-1.5">
-                          {(["calories", "protein", "carbs", "fat"] as const).map((f) => (
-                            <label key={f} className="rounded-lg bg-zinc-700 px-1.5 py-1 text-center">
-                              <span className="block text-[9px] uppercase text-zinc-400">
-                                {f === "calories" ? "kcal" : f === "protein" ? "P" : f === "carbs" ? "K" : "Y"}
-                              </span>
-                              <input
-                                type="number"
-                                step="any"
-                                inputMode="decimal"
-                                value={it[f]}
-                                onChange={(e) => updateNumber(it.id, f, e.target.value)}
-                                className="w-full bg-transparent text-center text-sm text-white outline-none"
-                              />
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div
-                        key={it.id}
-                        className="flex items-center justify-between rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-white">
-                            {it.name}
-                            {it.amount ? (
-                              <span className="ml-1 text-xs font-normal text-zinc-500">
-                                {it.amount}{it.unit}
-                              </span>
-                            ) : null}
-                          </p>
-                          <p className="text-[11px] text-zinc-500">
-                            P:{it.protein}g · K:{it.carbs}g · Y:{it.fat}g
-                          </p>
-                        </div>
-                        <span className="ml-2 shrink-0 text-sm font-bold text-green-400">
-                          {it.calories} kcal
-                        </span>
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-            )}
+        {/* Hata mesaji */}
+        {error && (
+          <div style={{ borderRadius: 10, background: "rgba(127,29,29,0.3)", color: "#f87171", fontSize: 13, padding: "12px 14px", marginBottom: 12 }}>
+            {error}
           </div>
-        </div>
+        )}
 
-        {/* ── Alt: sabit alan — Analiz Et butonu + log butonları her zaman görünür */}
-        <div
-          className="flex-shrink-0 space-y-2 border-t border-zinc-800 px-4 pt-3"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
-        >
-          {error && (
-            <p className="rounded-xl bg-red-950/40 px-4 py-3 text-sm text-red-400">{error}</p>
-          )}
+        {/* 5 — Sonuclar */}
+        {result && (
+          <div style={{ borderTop: "1px solid #27272a", paddingTop: 16 }}>
+            {/* Toplam */}
+            <div style={{ borderRadius: 12, border: "1px solid rgba(20,83,45,0.4)", background: "rgba(5,46,22,0.2)", padding: 16, marginBottom: 12 }}>
+              <div style={{ color: "#16a34a", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Toplam</div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 6, marginBottom: 8 }}>
+                <span style={{ color: "#4ade80", fontSize: 36, fontWeight: 900, lineHeight: 1 }}>{result.totalCalories}</span>
+                <span style={{ color: "#71717a", fontSize: 13, marginBottom: 4 }}>kcal</span>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                <span style={{ borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 600, background: "#172554", color: "#93c5fd" }}>P {result.totalProtein}g</span>
+                <span style={{ borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 600, background: "#451a03", color: "#fcd34d" }}>K {result.totalCarbs}g</span>
+                <span style={{ borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 600, background: "#4c0519", color: "#fda4af" }}>Y {result.totalFat}g</span>
+              </div>
+            </div>
 
-          {/* 4 — Analiz Et butonu (her zaman görünür) */}
-          {!result && (
-            <button
-              onClick={analyze}
-              disabled={analyzing}
-              className="w-full rounded-xl bg-green-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-green-900/30 transition-colors hover:bg-green-500 disabled:opacity-50"
-            >
-              {analyzing ? "GPT-4o analiz ediyor... 🤔" : "✨ Analiz Et"}
-            </button>
-          )}
-
-          {/* 6 — Log butonları (sonuçlar gelince) */}
-          {result && (
-            <div className="space-y-2">
+            {/* Items baslik + duzenle */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <span style={{ color: "#a1a1aa", fontSize: 12, fontWeight: 600 }}>{result.items.length} yemek</span>
               <button
-                onClick={() => logMeal("single")}
-                disabled={logging !== null || result.items.length === 0}
-                className="w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white shadow-lg shadow-green-900/30 transition-colors hover:bg-green-500 disabled:opacity-50"
+                onClick={() => setEditing((v) => !v)}
+                style={{ borderRadius: 8, background: "#27272a", color: "#d4d4d8", fontSize: 12, fontWeight: 500, padding: "4px 12px", border: "none", cursor: "pointer" }}
               >
-                {logging === "single" ? "Ekleniyor…" : "✓ Onayla ve Tek Log Ekle"}
-              </button>
-              <button
-                onClick={() => logMeal("separate")}
-                disabled={logging !== null || result.items.length === 0}
-                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-3 text-sm font-semibold text-zinc-200 transition-colors hover:border-green-600 hover:text-green-400 disabled:opacity-50"
-              >
-                {logging === "separate" ? "Ekleniyor…" : "📋 Her Yemeği Ayrı Logla"}
+                {editing ? "Bitti" : "Duzenle"}
               </button>
             </div>
-          )}
-        </div>
+
+            {/* Item listesi */}
+            <div style={{ marginBottom: 12 }}>
+              {result.items.map((it) =>
+                editing ? (
+                  <div key={it.id} style={{ borderRadius: 10, border: "1px solid #3f3f46", background: "#27272a", padding: 12, marginBottom: 8 }}>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                      <input
+                        value={it.name}
+                        onChange={(e) => updateText(it.id, "name", e.target.value)}
+                        style={{ flex: 1, borderRadius: 8, background: "#3f3f46", border: "none", color: "#fff", padding: "6px 8px", fontSize: 13, outline: "none" }}
+                      />
+                      <button
+                        onClick={() => removeItem(it.id)}
+                        style={{ borderRadius: 8, background: "#3f3f46", border: "none", color: "#a1a1aa", padding: "0 10px", cursor: "pointer", fontSize: 13 }}
+                      >
+                        X
+                      </button>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 4, borderRadius: 8, background: "#3f3f46", padding: "4px 8px" }}>
+                        <span style={{ color: "#71717a", fontSize: 10 }}>Miktar</span>
+                        <input
+                          type="number"
+                          step="any"
+                          inputMode="decimal"
+                          value={it.amount}
+                          onChange={(e) => updateNumber(it.id, "amount", e.target.value)}
+                          style={{ flex: 1, background: "transparent", border: "none", color: "#fff", fontSize: 13, textAlign: "right", outline: "none" }}
+                        />
+                      </label>
+                      <label style={{ display: "flex", alignItems: "center", gap: 4, borderRadius: 8, background: "#3f3f46", padding: "4px 8px" }}>
+                        <span style={{ color: "#71717a", fontSize: 10 }}>Birim</span>
+                        <input
+                          value={it.unit}
+                          onChange={(e) => updateText(it.id, "unit", e.target.value)}
+                          style={{ flex: 1, background: "transparent", border: "none", color: "#fff", fontSize: 13, textAlign: "right", outline: "none" }}
+                        />
+                      </label>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6 }}>
+                      {(["calories", "protein", "carbs", "fat"] as const).map((f) => (
+                        <label key={f} style={{ borderRadius: 8, background: "#3f3f46", padding: "4px 6px", textAlign: "center" }}>
+                          <span style={{ display: "block", color: "#71717a", fontSize: 9, textTransform: "uppercase", marginBottom: 2 }}>
+                            {f === "calories" ? "kcal" : f === "protein" ? "P" : f === "carbs" ? "K" : "Y"}
+                          </span>
+                          <input
+                            type="number"
+                            step="any"
+                            inputMode="decimal"
+                            value={it[f]}
+                            onChange={(e) => updateNumber(it.id, f, e.target.value)}
+                            style={{ width: "100%", background: "transparent", border: "none", color: "#fff", fontSize: 13, textAlign: "center", outline: "none" }}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    key={it.id}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderRadius: 10, border: "1px solid #3f3f46", background: "#27272a", padding: "10px 12px", marginBottom: 8 }}
+                  >
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ color: "#fff", fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {it.name}
+                        {it.amount ? <span style={{ color: "#71717a", fontWeight: 400, marginLeft: 4, fontSize: 11 }}>{it.amount}{it.unit}</span> : null}
+                      </div>
+                      <div style={{ color: "#71717a", fontSize: 11, marginTop: 2 }}>P:{it.protein}g · K:{it.carbs}g · Y:{it.fat}g</div>
+                    </div>
+                    <span style={{ color: "#4ade80", fontSize: 13, fontWeight: 700, marginLeft: 8, flexShrink: 0 }}>{it.calories} kcal</span>
+                  </div>
+                )
+              )}
+            </div>
+
+            {/* Log butonlari */}
+            <button
+              onClick={() => logMeal("single")}
+              disabled={logging !== null || result.items.length === 0}
+              style={{
+                width: "100%",
+                borderRadius: 10,
+                background: "#16a34a",
+                color: "#fff",
+                fontWeight: 700,
+                fontSize: 14,
+                padding: "13px 0",
+                border: "none",
+                cursor: logging !== null ? "not-allowed" : "pointer",
+                opacity: logging !== null || result.items.length === 0 ? 0.5 : 1,
+                marginBottom: 8,
+              }}
+            >
+              {logging === "single" ? "Ekleniyor..." : "Onayla ve Tek Log Ekle"}
+            </button>
+            <button
+              onClick={() => logMeal("separate")}
+              disabled={logging !== null || result.items.length === 0}
+              style={{
+                width: "100%",
+                borderRadius: 10,
+                border: "1px solid #3f3f46",
+                background: "#27272a",
+                color: "#e4e4e7",
+                fontWeight: 600,
+                fontSize: 14,
+                padding: "13px 0",
+                cursor: logging !== null ? "not-allowed" : "pointer",
+                opacity: logging !== null || result.items.length === 0 ? 0.5 : 1,
+              }}
+            >
+              {logging === "separate" ? "Ekleniyor..." : "Her Yemegi Ayri Logla"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
