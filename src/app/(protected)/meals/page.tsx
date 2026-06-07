@@ -287,7 +287,9 @@ function MealsContent() {
   const filteredMeals = useMemo(() => {
     return meals.filter((meal) => {
       const matchesSearch = meal.name.toLowerCase().includes(search.toLowerCase());
-      const matchesFilter = filter === "ALL" || meal.categoryId === filter;
+      const matchesFilter =
+        filter === "ALL" ||
+        (filter === "FAVORITES" ? meal.isFavorite : meal.categoryId === filter);
       return matchesSearch && matchesFilter;
     });
   }, [meals, search, filter]);
@@ -401,6 +403,7 @@ function MealsContent() {
                 className="rounded-xl bg-zinc-900 px-3 text-sm"
               >
                 <option value="ALL">All</option>
+                <option value="FAVORITES">Favoriler</option>
                 {categories.map((cat) => (
                   <option key={cat.id} value={cat.id}>{cat.emoji} {cat.name}</option>
                 ))}
