@@ -41,12 +41,13 @@ interface PreviousPerformance {
 interface OverloadBest {
   weight: number;
   reps: number;
-  volume: number;
 }
 
 interface OverloadData {
-  lastWeekBest: OverloadBest | null;
-  thisWeekBest: OverloadBest | null;
+  lastBestSet: OverloadBest | null;
+  prevBestSet: OverloadBest | null;
+  suggestion: string | null;
+  isPR: boolean;
 }
 
 // ─── Colour palette per exercise index ───────────────────────────────────────
@@ -87,12 +88,6 @@ function SetInput({
 
 // ─── Exercise Card ────────────────────────────────────────────────────────────
 
-function suggestWeight(w: number): number {
-  if (w <= 30) return w + 2;
-  if (w <= 60) return w + 2.5;
-  return w + 5;
-}
-
 function ExerciseCard({
   exercise,
   exIdx,
@@ -114,11 +109,6 @@ function ExerciseCard({
 }) {
   const acc = accentFor(exIdx);
 
-  const isPR =
-    overload?.thisWeekBest &&
-    overload?.lastWeekBest &&
-    overload.thisWeekBest.volume > overload.lastWeekBest.volume;
-
   return (
     <div
       className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900"
@@ -138,28 +128,20 @@ function ExerciseCard({
         </button>
       </div>
 
-      {/* Progressive overload suggestion */}
-      {isPR ? (
+      {/* Progressive overload badge */}
+      {overload?.isPR ? (
         <div className="mx-2 mb-1 rounded bg-green-950/60 px-1.5 py-0.5 border border-green-900/40">
-          <span className="text-[9px] font-semibold text-green-400">PR! 🏆 {overload!.thisWeekBest!.weight}kg × {overload!.thisWeekBest!.reps}</span>
+          <span className="text-[9px] font-semibold text-green-400">PR</span>
         </div>
-      ) : overload?.lastWeekBest ? (
+      ) : overload?.suggestion && overload?.lastBestSet ? (
         <div className="mx-2 mb-1 rounded bg-zinc-800/50 px-1.5 py-0.5">
           <span className="text-[9px] text-zinc-400">
-            Geçen: {overload.lastWeekBest.weight}kg×{overload.lastWeekBest.reps} → <span className="text-blue-400 font-semibold">{suggestWeight(overload.lastWeekBest.weight)}kg dene 💪</span>
+            Gecen: {overload.lastBestSet.weight}kg x {overload.lastBestSet.reps} -{" "}
+            <span className="font-semibold text-blue-400">{overload.suggestion}</span>
           </span>
         </div>
       ) : null}
 
-      {/* Previous perf */}
-      {prev && !overload?.lastWeekBest && (
-        <div className="mx-2 mb-1 rounded bg-zinc-800/50 px-1.5 py-0.5">
-          <span className="text-[9px] text-zinc-500">
-            Last: {prev.sets.slice(0,2).map((s, i) => `${s.weight ?? "?"}×${s.reps ?? "?"}`).join("  ")}
-            {prev.sets.length > 2 ? "…" : ""}
-          </span>
-        </div>
-      )}
 
       {/* Column headers */}
       <div className="grid grid-cols-[1fr_1fr_1fr_1fr_14px] gap-0.5 px-2 pb-0.5">
