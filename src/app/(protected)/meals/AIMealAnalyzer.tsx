@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { posthog } from "@/lib/posthog";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -113,6 +113,16 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
 
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
+
+  // Lock background scroll while the sheet is open (iOS + Android). Restored on
+  // unmount, which happens when the parent stops rendering the modal on close.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -263,31 +273,41 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
     : [];
 
   return (
+    // ── Dış overlay ──────────────────────────────────────────────────────────
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-50"
+      style={{ background: "rgba(0,0,0,0.75)" }}
       onClick={onClose}
     >
+      {/* ── İç panel (bottom sheet) ──────────────────────────────────────────
+          The panel itself is the scroll container — no nested flex height to
+          miscompute. This is the structure that scrolls reliably on iOS+Android. */}
       <div
-        className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-3xl bg-zinc-950 sm:max-w-lg sm:rounded-3xl sm:border sm:border-zinc-700 sm:shadow-2xl"
+        className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl bg-zinc-900 sm:mx-auto sm:max-w-lg"
+        style={{
+          maxHeight: "85vh",
+          overflowY: "auto",
+          WebkitOverflowScrolling: "touch", // iOS momentum scroll
+          overscrollBehavior: "contain", // Android bounce / scroll-chaining fix
+          paddingBottom: "env(safe-area-inset-bottom)", // iPhone notch / home bar
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-4 py-3">
-          <div>
-            <h2 className="text-base font-black leading-tight text-white">🍽️ AI ile Analiz</h2>
-            <p className="text-[11px] text-zinc-500">GPT-4o · fotoğraf + açıklama</p>
+        <div className="space-y-4 px-4 pb-6 pt-4">
+          {/* 1 — Başlık + X (sticky değil, içerikle birlikte kayar) */}
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-base font-black leading-tight text-white">🍽️ AI ile Analiz</h2>
+              <p className="text-[11px] text-zinc-500">GPT-4o · fotoğraf + açıklama</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:text-white"
+            >
+              ✕
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-800 bg-zinc-900 text-zinc-400 transition-colors hover:text-white"
-          >
-            ✕
-          </button>
-        </div>
 
-        {/* Body — flex-1 + min-h-0 lets this scroll inside the max-h-[90vh] panel.
-            The webkit class restores momentum scrolling on iOS Safari. */}
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto [-webkit-overflow-scrolling:touch] px-4 py-4 pb-safe">
           {/* Hidden file inputs */}
           <input
             ref={cameraRef}
@@ -305,11 +325,11 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
             className="hidden"
           />
 
-          {/* Photo area */}
+          {/* 2 — Fotoğraf önizleme / çekme butonları */}
           {image ? (
-            <div className="relative overflow-hidden rounded-2xl border border-zinc-800">
+            <div className="relative overflow-hidden rounded-2xl border border-zinc-700">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={image} alt="Yemek" className="max-h-64 w-full object-contain bg-black" />
+              <img src={image} alt="Yemek" className="max-h-64 w-full bg-black object-contain" />
               <button
                 onClick={() => setImage(null)}
                 className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur transition-colors hover:bg-red-600"
@@ -322,14 +342,14 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => cameraRef.current?.click()}
-                className="flex flex-col items-center gap-1 rounded-2xl border border-zinc-800 bg-zinc-900 py-5 text-sm font-semibold text-zinc-300 transition-colors hover:border-green-600 hover:text-green-400"
+                className="flex flex-col items-center gap-1 rounded-2xl border border-zinc-700 bg-zinc-800 py-5 text-sm font-semibold text-zinc-300 transition-colors hover:border-green-600 hover:text-green-400"
               >
                 <span className="text-2xl">📷</span>
                 Kameradan Çek
               </button>
               <button
                 onClick={() => galleryRef.current?.click()}
-                className="flex flex-col items-center gap-1 rounded-2xl border border-zinc-800 bg-zinc-900 py-5 text-sm font-semibold text-zinc-300 transition-colors hover:border-green-600 hover:text-green-400"
+                className="flex flex-col items-center gap-1 rounded-2xl border border-zinc-700 bg-zinc-800 py-5 text-sm font-semibold text-zinc-300 transition-colors hover:border-green-600 hover:text-green-400"
               >
                 <span className="text-2xl">🖼️</span>
                 Galeriden Seç
@@ -337,16 +357,16 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
             </div>
           )}
 
-          {/* Message input */}
+          {/* 3 — Açıklama (textarea) */}
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             rows={4}
             placeholder="Örn: 100gr pilav, 120gr tavuk göğsü, 1 yemek kaşığı zeytinyağı"
-            className="w-full resize-none rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-white outline-none transition-colors placeholder:text-zinc-600 focus:border-green-600"
+            className="w-full resize-none rounded-2xl border border-zinc-700 bg-zinc-800 p-4 text-sm text-white outline-none transition-colors placeholder:text-zinc-500 focus:border-green-600"
           />
 
-          {/* Analyze button */}
+          {/* 4 — Analiz Et butonu */}
           <button
             onClick={analyze}
             disabled={analyzing}
@@ -359,7 +379,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
             <p className="rounded-xl bg-red-950/40 px-4 py-3 text-sm text-red-400">{error}</p>
           )}
 
-          {/* Result */}
+          {/* 5 — Sonuçlar */}
           {result && (
             <div className="space-y-3 border-t border-zinc-800 pt-4">
               {/* Totals */}
@@ -399,23 +419,23 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
               <div className="space-y-2">
                 {result.items.map((it) =>
                   editing ? (
-                    <div key={it.id} className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
+                    <div key={it.id} className="space-y-2 rounded-xl border border-zinc-700 bg-zinc-800 p-3">
                       <div className="flex gap-2">
                         <input
                           value={it.name}
                           onChange={(e) => updateText(it.id, "name", e.target.value)}
-                          className="flex-1 rounded-lg bg-zinc-800 px-2 py-1.5 text-sm text-white outline-none focus:ring-1 focus:ring-green-700"
+                          className="flex-1 rounded-lg bg-zinc-700 px-2 py-1.5 text-sm text-white outline-none focus:ring-1 focus:ring-green-700"
                         />
                         <button
                           onClick={() => removeItem(it.id)}
-                          className="rounded-lg bg-zinc-800 px-2 text-sm text-zinc-500 transition-colors hover:bg-red-900 hover:text-red-300"
+                          className="rounded-lg bg-zinc-700 px-2 text-sm text-zinc-400 transition-colors hover:bg-red-900 hover:text-red-300"
                         >
                           ✕
                         </button>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        <label className="flex items-center gap-1 rounded-lg bg-zinc-800 px-2 py-1">
-                          <span className="text-[10px] text-zinc-500">Miktar</span>
+                        <label className="flex items-center gap-1 rounded-lg bg-zinc-700 px-2 py-1">
+                          <span className="text-[10px] text-zinc-400">Miktar</span>
                           <input
                             type="number"
                             step="any"
@@ -425,8 +445,8 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
                             className="w-full bg-transparent text-right text-sm text-white outline-none"
                           />
                         </label>
-                        <label className="flex items-center gap-1 rounded-lg bg-zinc-800 px-2 py-1">
-                          <span className="text-[10px] text-zinc-500">Birim</span>
+                        <label className="flex items-center gap-1 rounded-lg bg-zinc-700 px-2 py-1">
+                          <span className="text-[10px] text-zinc-400">Birim</span>
                           <input
                             value={it.unit}
                             onChange={(e) => updateText(it.id, "unit", e.target.value)}
@@ -436,8 +456,8 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
                       </div>
                       <div className="grid grid-cols-4 gap-1.5">
                         {(["calories", "protein", "carbs", "fat"] as const).map((f) => (
-                          <label key={f} className="rounded-lg bg-zinc-800 px-1.5 py-1 text-center">
-                            <span className="block text-[9px] uppercase text-zinc-500">
+                          <label key={f} className="rounded-lg bg-zinc-700 px-1.5 py-1 text-center">
+                            <span className="block text-[9px] uppercase text-zinc-400">
                               {f === "calories" ? "kcal" : f === "protein" ? "P" : f === "carbs" ? "K" : "Y"}
                             </span>
                             <input
@@ -455,7 +475,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
                   ) : (
                     <div
                       key={it.id}
-                      className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5"
+                      className="flex items-center justify-between rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5"
                     >
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-white">
@@ -478,7 +498,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
                 )}
               </div>
 
-              {/* Log actions */}
+              {/* 6 — Onayla ve Ekle / Her Yemeği Ayrı Logla */}
               <div className="space-y-2 pt-1">
                 <button
                   onClick={() => logMeal("single")}
