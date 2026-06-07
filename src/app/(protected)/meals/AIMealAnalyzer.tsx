@@ -285,8 +285,9 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
       <div
         className="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-2xl bg-zinc-900 sm:mx-auto sm:max-w-lg"
         style={{
-          height: "85vh",
-          paddingBottom: "env(safe-area-inset-bottom)", // iPhone notch / home bar
+          // iOS'ta vh, bottom nav bar'ı (≈60px) ve safe-area'yı hesaba katmaz.
+          // calc ile hem nav bar hem safe-area çıkarılıyor — panel her zaman sığar.
+          maxHeight: "calc(80vh - 60px - env(safe-area-inset-bottom))",
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -495,7 +496,10 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
         </div>
 
         {/* ── Alt: sabit alan — Analiz Et butonu + log butonları her zaman görünür */}
-        <div className="flex-shrink-0 space-y-2 border-t border-zinc-800 px-4 pb-4 pt-3">
+        <div
+          className="flex-shrink-0 space-y-2 border-t border-zinc-800 px-4 pt-3"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
+        >
           {error && (
             <p className="rounded-xl bg-red-950/40 px-4 py-3 text-sm text-red-400">{error}</p>
           )}
