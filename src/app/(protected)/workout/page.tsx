@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { searchExercises } from "@/lib/exercises";
 import Link from "next/link";
+import { posthog } from "@/lib/posthog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -441,6 +442,7 @@ export default function WorkoutPage() {
         })),
       }),
     });
+    posthog.capture("workout_saved", { split: selectedSplit, exerciseCount: exercises.length });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);

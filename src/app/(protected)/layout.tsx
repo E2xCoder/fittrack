@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
+import PostHogProvider from "@/components/PostHogProvider";
 
 const navItems = [
   { href: "/dashboard", label: "Home", icon: "📊" },
@@ -43,6 +44,7 @@ export default function ProtectedLayout({
   }
 
   return (
+    <PostHogProvider>
     <div className="min-h-screen bg-black text-white">
       <nav className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
@@ -107,5 +109,6 @@ export default function ProtectedLayout({
         </div>
       </nav>
     </div>
+    </PostHogProvider>
   );
 }

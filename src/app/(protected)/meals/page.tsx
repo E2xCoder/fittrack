@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
+import { posthog } from "@/lib/posthog";
 
 const FoodDatabaseModal = dynamic(() => import("@/components/FoodDatabaseModal"), { ssr: false });
 
@@ -139,6 +140,7 @@ function MealsContent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mealId: meal.id, quantity: multiplier, date: dateParam }),
     });
+    posthog.capture("meal_logged", { mealName: meal.name, calories: meal.calories });
     setAdded((p) => ({ ...p, [meal.id]: true }));
     setTimeout(() => setAdded((p) => ({ ...p, [meal.id]: false })), 1500);
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { posthog } from "@/lib/posthog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -142,6 +143,7 @@ function AddQuantityModal({
           }),
         });
       }
+      posthog.capture("food_db_used", { source: product.source });
       onDone();
     } catch {
       // Re-enable buttons so the user can retry
@@ -267,9 +269,10 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
 
   // ── Barcode lookup (manual entry or a scanned code) ───────────────────
 
-  async function fetchBarcode(code: string) {
+  async function fetchBarcode(code: string, method: "camera" | "manual" = "manual") {
     const trimmed = code.trim();
     if (!trimmed) return;
+    posthog.capture("barcode_scanned", { method });
     setBarcodeError("");
     setBarcodeProduct(null);
     setBarcodeLoading(true);
@@ -325,7 +328,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
       setIsScanning(false);
       const code = result.getText();
       setBarcodeInput(code);
-      fetchBarcode(code);
+      fetchBarcode(code, "camera");
     } catch {
       // No barcode / stream ended — drop back to idle if still the same stream.
       if (streamRef.current === stream) setIsScanning(false);

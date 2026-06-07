@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { initPostHog, posthog } from "@/lib/posthog";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -696,6 +697,8 @@ export default function OnboardingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
+      initPostHog();
+      posthog.capture("onboarding_completed", { goal: form.goal, gymDays: form.gymDays });
       router.replace("/dashboard");
     } catch {
       setSaving(false);
