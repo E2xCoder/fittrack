@@ -14,7 +14,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ lastBestSet: null, prevBestSet: null, suggestion: null, isPR: false });
   }
 
-  const today = getTodayInTimezone();
+  const userTzRow = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { timezone: true },
+  });
+  const today = getTodayInTimezone(userTzRow?.timezone ?? "Europe/Berlin");
   const sixtyDaysAgo = new Date(today);
   sixtyDaysAgo.setDate(today.getDate() - 60);
 

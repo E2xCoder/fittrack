@@ -55,12 +55,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing mealId or meal data" }, { status: 400 });
   }
 
+  const userTzRow = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { timezone: true },
+  });
+  const userTz = userTzRow?.timezone ?? "Europe/Berlin";
+
   let logDate: Date;
   if (body.date) {
     logDate = new Date(body.date + "T12:00:00");
     logDate.setHours(0, 0, 0, 0);
   } else {
-    logDate = getTodayInTimezone();
+    logDate = getTodayInTimezone(userTz);
   }
 
   let dailyLog = await prisma.dailyLog.findFirst({

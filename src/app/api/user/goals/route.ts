@@ -28,6 +28,8 @@ export async function GET() {
       shareCalories: true,
       shareWorkout:  true,
       shareStreak:   true,
+      // Timezone
+      timezone:      true,
     },
   });
 
@@ -60,6 +62,8 @@ export async function POST(request: Request) {
       shareCalories: body.shareCalories ?? true,
       shareWorkout:  body.shareWorkout  ?? true,
       shareStreak:   body.shareStreak   ?? true,
+      // Timezone
+      timezone:      body.timezone      || "Europe/Berlin",
     },
   });
 

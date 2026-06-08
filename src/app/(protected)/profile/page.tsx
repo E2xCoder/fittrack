@@ -5,6 +5,24 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 
+const TIMEZONES = [
+  { value: "Europe/Istanbul",     label: "İstanbul (UTC+3)" },
+  { value: "Europe/Berlin",       label: "Berlin / Orta Avrupa (UTC+1/+2)" },
+  { value: "Europe/London",       label: "Londra (UTC+0/+1)" },
+  { value: "Europe/Paris",        label: "Paris (UTC+1/+2)" },
+  { value: "Europe/Moscow",       label: "Moskova (UTC+3)" },
+  { value: "America/New_York",    label: "New York (UTC-5/-4)" },
+  { value: "America/Chicago",     label: "Chicago (UTC-6/-5)" },
+  { value: "America/Los_Angeles", label: "Los Angeles (UTC-8/-7)" },
+  { value: "America/Sao_Paulo",   label: "São Paulo (UTC-3)" },
+  { value: "Africa/Cairo",        label: "Kahire (UTC+2)" },
+  { value: "Asia/Dubai",          label: "Dubai (UTC+4)" },
+  { value: "Asia/Kolkata",        label: "Hindistan (UTC+5:30)" },
+  { value: "Asia/Tokyo",          label: "Tokyo (UTC+9)" },
+  { value: "Asia/Shanghai",       label: "Çin (UTC+8)" },
+  { value: "Australia/Sydney",    label: "Sidney (UTC+10/+11)" },
+];
+
 export default function ProfilePage() {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -25,6 +43,8 @@ export default function ProfilePage() {
     shareCalories: true,
     shareWorkout:  true,
     shareStreak:   true,
+    // Timezone
+    timezone:      "Europe/Berlin",
   });
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -88,6 +108,7 @@ export default function ProfilePage() {
           shareCalories: data.shareCalories ?? true,
           shareWorkout:  data.shareWorkout  ?? true,
           shareStreak:   data.shareStreak   ?? true,
+          timezone:      data.timezone      ?? "Europe/Berlin",
         });
         setLoading(false);
       });
@@ -384,6 +405,26 @@ export default function ProfilePage() {
               </label>
             ))}
           </div>
+        </div>
+
+        {/* Timezone */}
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+          <h2 className="mb-1 text-sm font-semibold text-zinc-300">🕐 Saat Dilimi</h2>
+          <p className="mb-3 text-xs text-zinc-500">
+            Sabah 08:00 bildirimleri bu saat dilimine göre gönderilir.
+          </p>
+          <select
+            value={form.timezone}
+            onChange={(e) => setForm((p) => ({ ...p, timezone: e.target.value }))}
+            className="w-full rounded-xl bg-zinc-800 px-4 py-3 text-sm text-white outline-none focus:ring-1 focus:ring-zinc-600 appearance-none"
+          >
+            {!TIMEZONES.find((tz) => tz.value === form.timezone) && (
+              <option value={form.timezone}>{form.timezone}</option>
+            )}
+            {TIMEZONES.map((tz) => (
+              <option key={tz.value} value={tz.value}>{tz.label}</option>
+            ))}
+          </select>
         </div>
 
         <button onClick={save}

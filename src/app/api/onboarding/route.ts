@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
     fatTarget,
     gymDays,
     splits,
+    timezone,
   } = body;
 
   // Update user profile
@@ -55,6 +56,7 @@ export async function POST(req: NextRequest) {
       proteinTarget: proteinTarget ? Number(proteinTarget) : undefined,
       carbTarget: carbTarget ? Number(carbTarget) : undefined,
       fatTarget: fatTarget ? Number(fatTarget) : undefined,
+      timezone: timezone || "Europe/Berlin",
       onboardingCompleted: true,
     },
   });

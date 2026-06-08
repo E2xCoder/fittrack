@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
       carbTarget: true,
       fatTarget: true,
       weight: true,
+      timezone: true,
     },
   });
 
@@ -30,7 +31,8 @@ export async function GET(req: NextRequest) {
     fat: user?.fatTarget ?? 70,
   };
 
-  const today = getTodayInTimezone();
+  const userTz = user?.timezone ?? "Europe/Berlin";
+  const today = getTodayInTimezone(userTz);
   const start = new Date(today);
   start.setDate(today.getDate() - (clampedDays - 1));
   start.setHours(0, 0, 0, 0);
@@ -50,13 +52,13 @@ export async function GET(req: NextRequest) {
   for (let i = 0; i < clampedDays; i++) {
     const d = new Date(start);
     d.setDate(start.getDate() + i);
-    const dateStr = d.toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
+    const dateStr = d.toLocaleDateString("en-CA", { timeZone: userTz });
 
     const log = logs.find(
-      (l) => new Date(l.date).toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" }) === dateStr
+      (l) => new Date(l.date).toLocaleDateString("en-CA", { timeZone: userTz }) === dateStr
     );
     const bodyLog = bodyLogs.find(
-      (b) => new Date(b.date).toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" }) === dateStr
+      (b) => new Date(b.date).toLocaleDateString("en-CA", { timeZone: userTz }) === dateStr
     );
 
     const calories = log?.totalCalories ?? 0;
@@ -136,18 +138,18 @@ export async function GET(req: NextRequest) {
   // Collect all distinct logged dates
   const loggedDateSet = new Set<string>();
   for (const l of allLogs)
-    loggedDateSet.add(new Date(l.date).toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" }));
+    loggedDateSet.add(new Date(l.date).toLocaleDateString("en-CA", { timeZone: userTz }));
   for (const b of allBodyLogs)
-    loggedDateSet.add(new Date(b.date).toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" }));
+    loggedDateSet.add(new Date(b.date).toLocaleDateString("en-CA", { timeZone: userTz }));
 
-  const todayStr = today.toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
+  const todayStr = today.toLocaleDateString("en-CA", { timeZone: userTz });
 
   // Current streak — walk back from today
   let currentStreak = 0;
   {
     const cur = new Date(today);
     while (true) {
-      const ds = cur.toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
+      const ds = cur.toLocaleDateString("en-CA", { timeZone: userTz });
       if (loggedDateSet.has(ds)) {
         currentStreak++;
         cur.setDate(cur.getDate() - 1);

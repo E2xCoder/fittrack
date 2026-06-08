@@ -10,6 +10,7 @@ interface FormData {
   // Step 1
   name: string;
   goal: string;
+  timezone: string;
   // Step 2
   height: string;
   weight: string;
@@ -37,6 +38,24 @@ const GOALS = [
   { id: "muscle_gain", label: "Kas Kazan", emoji: "💪", desc: "Kas kütlesi artır" },
   { id: "maintain", label: "Form Koru", emoji: "⚖️", desc: "Mevcut formu koru" },
   { id: "bulk", label: "Bulk", emoji: "🏗️", desc: "Kalori fazlasıyla hacim al" },
+];
+
+const TIMEZONES = [
+  { value: "Europe/Istanbul",    label: "İstanbul (UTC+3)" },
+  { value: "Europe/Berlin",      label: "Berlin / Orta Avrupa (UTC+1/+2)" },
+  { value: "Europe/London",      label: "Londra (UTC+0/+1)" },
+  { value: "Europe/Paris",       label: "Paris (UTC+1/+2)" },
+  { value: "Europe/Moscow",      label: "Moskova (UTC+3)" },
+  { value: "America/New_York",   label: "New York (UTC-5/-4)" },
+  { value: "America/Chicago",    label: "Chicago (UTC-6/-5)" },
+  { value: "America/Los_Angeles",label: "Los Angeles (UTC-8/-7)" },
+  { value: "America/Sao_Paulo",  label: "São Paulo (UTC-3)" },
+  { value: "Africa/Cairo",       label: "Kahire (UTC+2)" },
+  { value: "Asia/Dubai",         label: "Dubai (UTC+4)" },
+  { value: "Asia/Kolkata",       label: "Hindistan (UTC+5:30)" },
+  { value: "Asia/Tokyo",         label: "Tokyo (UTC+9)" },
+  { value: "Asia/Shanghai",      label: "Çin (UTC+8)" },
+  { value: "Australia/Sydney",   label: "Sidney (UTC+10/+11)" },
 ];
 
 const ACTIVITY_LEVELS = [
@@ -263,6 +282,9 @@ function Confetti() {
 // ─── Step Components ──────────────────────────────────────────────────────────
 
 function Step1({ data, update }: { data: FormData; update: (d: Partial<FormData>) => void }) {
+  // Check if detected timezone is in our known list; if not, show the raw value as an extra option
+  const knownTz = TIMEZONES.find((tz) => tz.value === data.timezone);
+
   return (
     <div className="space-y-6">
       <div className="text-center">
@@ -290,6 +312,24 @@ function Step1({ data, update }: { data: FormData; update: (d: Partial<FormData>
             />
           ))}
         </div>
+      </div>
+      <div>
+        <p className="mb-2 text-xs font-semibold text-zinc-400">Saat Dilimi</p>
+        <select
+          value={data.timezone}
+          onChange={(e) => update({ timezone: e.target.value })}
+          className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-white outline-none focus:border-green-600 appearance-none"
+        >
+          {!knownTz && (
+            <option value={data.timezone}>{data.timezone}</option>
+          )}
+          {TIMEZONES.map((tz) => (
+            <option key={tz.value} value={tz.value}>{tz.label}</option>
+          ))}
+        </select>
+        <p className="mt-1.5 text-[11px] text-zinc-500">
+          Tarayıcıdan otomatik algılandı. Sabah 08:00 bildirimleri bu saate göre gönderilir.
+        </p>
       </div>
     </div>
   );
@@ -634,6 +674,7 @@ export default function OnboardingPage() {
   const [form, setForm] = useState<FormData>({
     name: "",
     goal: "",
+    timezone: "Europe/Berlin",
     height: "",
     weight: "",
     age: "",
@@ -664,8 +705,14 @@ export default function OnboardingPage() {
     });
   };
 
-  // Check if already onboarded
+  // Check if already onboarded + auto-detect timezone
   useEffect(() => {
+    // Auto-detect browser timezone
+    try {
+      const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (detected) setForm((prev) => ({ ...prev, timezone: detected }));
+    } catch {}
+
     fetch("/api/user/me")
       .then((r) => r.json())
       .then((u) => { if (u?.onboardingCompleted) router.replace("/dashboard"); })
