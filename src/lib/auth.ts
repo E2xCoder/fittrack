@@ -22,5 +22,6 @@ export const auth = betterAuth({
   trustedOrigins: [
     "http://localhost:3000",
     "https://fittrack-ten-umber.vercel.app",
+    "https://fittrackme.com",
   ],
 });
