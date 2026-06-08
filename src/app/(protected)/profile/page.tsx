@@ -344,23 +344,17 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Timezone */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-          <h2 className="mb-1 text-sm font-semibold text-zinc-300">🕐 Saat Dilimi</h2>
-          <p className="mb-3 text-xs text-zinc-500">
-            Sabah 08:00 bildirimleri bu saat dilimine göre gönderilir.
-          </p>
+        {/* Timezone TEST */}
+        <div style={{border: "1px solid red", padding: "16px", marginBottom: "16px", borderRadius: "12px"}}>
+          <p style={{color: "white", marginBottom: "8px"}}>Saat Dilimi TEST</p>
           <select
-            value={form.timezone}
-            onChange={(e) => setForm((p) => ({ ...p, timezone: e.target.value }))}
-            className="w-full rounded-xl bg-zinc-800 px-4 py-3 text-sm text-white outline-none focus:ring-1 focus:ring-zinc-600 appearance-none"
+            value={form.timezone ?? "Europe/Berlin"}
+            onChange={(e) => setForm(p => ({ ...p, timezone: e.target.value }))}
+            style={{width: "100%", padding: "8px", background: "#27272a", color: "white", borderRadius: "8px"}}
           >
-            {!TIMEZONES.find((tz) => tz.value === form.timezone) && (
-              <option value={form.timezone}>{form.timezone}</option>
-            )}
-            {TIMEZONES.map((tz) => (
-              <option key={tz.value} value={tz.value}>{tz.label}</option>
-            ))}
+            <option value="Europe/Berlin">Europe/Berlin</option>
+            <option value="Europe/Istanbul">Europe/Istanbul</option>
+            <option value="America/New_York">America/New_York</option>
           </select>
         </div>
 
