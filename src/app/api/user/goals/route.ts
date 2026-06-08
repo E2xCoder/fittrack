@@ -21,6 +21,13 @@ export async function GET() {
       stepTarget: true,
       waterTarget: true,
       sleepTarget: true,
+      // Social
+      username:      true,
+      isPublic:      true,
+      shareSteps:    true,
+      shareCalories: true,
+      shareWorkout:  true,
+      shareStreak:   true,
     },
   });
 
@@ -46,6 +53,13 @@ export async function POST(request: Request) {
       stepTarget: Number(body.stepTarget) || 10000,
       waterTarget: Number(body.waterTarget) || 2.5,
       sleepTarget: Number(body.sleepTarget) || 8,
+      // Social
+      username:      body.username?.trim()  || null,
+      isPublic:      body.isPublic      ?? true,
+      shareSteps:    body.shareSteps    ?? true,
+      shareCalories: body.shareCalories ?? true,
+      shareWorkout:  body.shareWorkout  ?? true,
+      shareStreak:   body.shareStreak   ?? true,
     },
   });
 

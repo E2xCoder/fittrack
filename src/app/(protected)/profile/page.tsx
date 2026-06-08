@@ -18,7 +18,15 @@ export default function ProfilePage() {
     stepTarget: "",
     waterTarget: "",
     sleepTarget: "",
+    // Social
+    username:      "",
+    isPublic:      true,
+    shareSteps:    true,
+    shareCalories: true,
+    shareWorkout:  true,
+    shareStreak:   true,
   });
+  const [usernameError, setUsernameError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
   const [apiToken, setApiToken] = useState<string | null>(null);
@@ -74,6 +82,12 @@ export default function ProfilePage() {
           stepTarget: data.stepTarget ?? "10000",
           waterTarget: data.waterTarget ?? "2.5",
           sleepTarget: data.sleepTarget ?? "8",
+          username:      data.username      ?? "",
+          isPublic:      data.isPublic      ?? true,
+          shareSteps:    data.shareSteps    ?? true,
+          shareCalories: data.shareCalories ?? true,
+          shareWorkout:  data.shareWorkout  ?? true,
+          shareStreak:   data.shareStreak   ?? true,
         });
         setLoading(false);
       });
@@ -89,7 +103,18 @@ export default function ProfilePage() {
     refreshNotifState();
   }, [refreshNotifState]);
 
+  function validateUsername(val: string): string | null {
+    if (!val) return null; // empty is allowed (no username)
+    if (val.length < 3)  return "En az 3 karakter";
+    if (val.length > 20) return "En fazla 20 karakter";
+    if (!/^[a-zA-Z0-9_]+$/.test(val)) return "Sadece harf, rakam ve _ kullanilabilir";
+    return null;
+  }
+
   async function save() {
+    const usernameErr = validateUsername(form.username);
+    if (usernameErr) { setUsernameError(usernameErr); return; }
+    setUsernameError(null);
     await fetch("/api/user/goals", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -269,7 +294,7 @@ export default function ProfilePage() {
             ].map(({ key, label, placeholder, unit }) => (
               <div key={key}>
                 <label className="mb-1 block text-xs text-zinc-400">{label} ({unit})</label>
-                <input type="number" value={form[key as keyof typeof form]}
+                <input type="number" value={form[key as keyof typeof form] as string}
                   onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))}
                   className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
                   placeholder={placeholder} />
@@ -289,11 +314,74 @@ export default function ProfilePage() {
             ].map(({ key, label, placeholder, unit }) => (
               <div key={key}>
                 <label className="mb-1 block text-xs text-zinc-400">{label} ({unit})</label>
-                <input type="number" step="0.1" value={form[key as keyof typeof form]}
+                <input type="number" step="0.1" value={form[key as keyof typeof form] as string}
                   onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))}
                   className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
                   placeholder={placeholder} />
               </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Social Profile */}
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-zinc-300">Sosyal Profil</h2>
+            {form.username && (
+              <Link
+                href={`/social/${form.username}`}
+                className="text-xs text-green-400 hover:text-green-300 transition-colors"
+              >
+                Profilimi Gör →
+              </Link>
+            )}
+          </div>
+
+          {/* Username */}
+          <div className="mb-3">
+            <label className="mb-1 block text-xs text-zinc-400">Kullanici adi</label>
+            <div className="flex items-center rounded-xl bg-zinc-800 px-3 py-2 focus-within:ring-1 focus-within:ring-zinc-600">
+              <span className="mr-1 text-sm text-zinc-500">@</span>
+              <input
+                value={form.username}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 20);
+                  setForm((p) => ({ ...p, username: v }));
+                  setUsernameError(validateUsername(v));
+                }}
+                placeholder="kullanici_adi"
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-zinc-600"
+              />
+            </div>
+            {usernameError && (
+              <p className="mt-1 text-xs text-red-400">{usernameError}</p>
+            )}
+            <p className="mt-1 text-[11px] text-zinc-600">Min 3, max 20 karakter. Harf, rakam ve _</p>
+          </div>
+
+          {/* Privacy toggles */}
+          <div className="space-y-2">
+            {[
+              { key: "isPublic",      label: "Profilim herkese acik" },
+              { key: "shareSteps",    label: "Adim sayimi paylasın" },
+              { key: "shareCalories", label: "Kalori bilgimi paylasın" },
+              { key: "shareWorkout",  label: "Antrenman bilgimi paylasın" },
+              { key: "shareStreak",   label: "Streak bilgimi paylasın" },
+            ].map(({ key, label }) => (
+              <label key={key} className="flex cursor-pointer items-center justify-between rounded-xl bg-zinc-800/50 px-3 py-2">
+                <span className="text-xs text-zinc-300">{label}</span>
+                <button
+                  type="button"
+                  onClick={() => setForm((p) => ({ ...p, [key]: !p[key as keyof typeof p] }))}
+                  className={`relative h-5 w-9 rounded-full transition-colors ${
+                    form[key as keyof typeof form] ? "bg-green-600" : "bg-zinc-700"
+                  }`}
+                >
+                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                    form[key as keyof typeof form] ? "translate-x-4" : "translate-x-0.5"
+                  }`} />
+                </button>
+              </label>
             ))}
           </div>
         </div>
