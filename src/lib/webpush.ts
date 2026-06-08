@@ -1,11 +1,5 @@
 import webpush from "web-push";
 
-webpush.setVapidDetails(
-  process.env.VAPID_EMAIL!,
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
-
 export { webpush };
 
 export interface PushPayload {
@@ -15,10 +9,22 @@ export interface PushPayload {
   tag?: string;
 }
 
+let vapidInitialized = false;
+function ensureVapid() {
+  if (vapidInitialized) return;
+  webpush.setVapidDetails(
+    process.env.VAPID_EMAIL!,
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+    process.env.VAPID_PRIVATE_KEY!
+  );
+  vapidInitialized = true;
+}
+
 export async function sendPushNotification(
   subscription: { endpoint: string; p256dh: string; auth: string },
   payload: PushPayload
 ): Promise<{ ok: true } | { ok: false; gone: boolean }> {
+  ensureVapid();
   try {
     await webpush.sendNotification(
       {
