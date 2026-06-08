@@ -2,7 +2,8 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const FROM = process.env.RESEND_FROM_EMAIL ?? "noreply@fittrack.app";
+// Use onboarding@resend.dev for Resend's free shared domain (no custom domain needed)
+const FROM = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
 
 export async function sendPasswordResetEmail(
   to: string,
@@ -31,9 +32,9 @@ export async function sendPasswordResetEmail(
           <!-- Card -->
           <tr>
             <td style="background-color:#18181b;border:1px solid #27272a;border-radius:16px;padding:40px 32px;">
-
-              <!-- Icon -->
               <table width="100%" cellpadding="0" cellspacing="0">
+
+                <!-- Icon -->
                 <tr>
                   <td align="center" style="padding-bottom:24px;">
                     <div style="width:56px;height:56px;background-color:#14532d;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:24px;line-height:56px;text-align:center;">🔐</div>

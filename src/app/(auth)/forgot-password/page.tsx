@@ -2,26 +2,23 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { authClient } from "@/lib/auth-client";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
   async function handleSubmit() {
     if (!email) return;
     setLoading(true);
-    setError("");
     try {
-      await fetch("/api/auth/forget-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, redirectTo: "/reset-password" }),
+      await authClient.requestPasswordReset({
+        email,
+        redirectTo: "/reset-password",
       });
-      // Always show "sent" to avoid email enumeration
     } catch {
-      // show sent regardless
+      // Always show "sent" regardless — avoids email enumeration
     } finally {
       setLoading(false);
       setSent(true);
@@ -56,7 +53,6 @@ export default function ForgotPasswordPage() {
               onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
               className="rounded-2xl bg-zinc-900 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
             />
-            {error && <p className="text-sm text-red-400">{error}</p>}
             <button
               onClick={handleSubmit}
               disabled={loading || !email}
