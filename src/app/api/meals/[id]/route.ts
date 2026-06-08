@@ -33,6 +33,7 @@ export async function PUT(
       sodium: Number(body.sodium) || null,
       servingSize: Number(body.servingSize) || 1,
       servingLabel: body.servingLabel || "piece",
+      imageUrl: body.imageUrl ?? null,
       categoryId: body.categoryId ?? null,
       isFavorite: Boolean(body.isFavorite),
     },

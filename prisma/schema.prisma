@@ -133,6 +133,7 @@ model Meal {
   servingLabel String  @default("piece")
   ingredients  String?
   imageUrl     String?
+  orderIndex   Int      @default(0)
   categoryId   String?
   isFavorite   Boolean  @default(false)
   createdAt    DateTime @default(now())

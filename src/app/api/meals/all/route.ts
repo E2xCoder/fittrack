@@ -36,7 +36,7 @@ export async function GET() {
     prisma.meal.findMany({
       where: { userId: session.user.id },
       include: { category: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ orderIndex: "asc" }, { createdAt: "desc" }],
     }),
     prisma.mealPack.findMany({
       where: { userId: session.user.id },
