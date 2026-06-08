@@ -83,15 +83,15 @@ function AddQuantityModal({
   onDone: () => void;
   onCancel: () => void;
 }) {
-  const [amount, setAmount] = useState(“100”);
-  const [unit, setUnit] = useState<Unit>(product.servingLabel === “ml” ? “ml” : “g”);
-  // null = idle, “today” = log only, “library” = save to library + log
-  const [savingMode, setSavingMode] = useState<null | “today” | “library”>(null);
+  const [amount, setAmount] = useState("100");
+  const [unit, setUnit] = useState<Unit>(product.servingLabel === "ml" ? "ml" : "g");
+  // null = idle, "today" = log only, "library" = save to library + log
+  const [savingMode, setSavingMode] = useState<null | "today" | "library">(null);
   const saving = savingMode !== null;
 
   const numAmount = Math.max(1, Number(amount) || 1);
   // per100 is always per 100 g/ml. For pieces we treat 1 piece = 1 serving (100g worth).
-  const mult = unit === “piece” ? numAmount : numAmount / 100;
+  const mult = unit === "piece" ? numAmount : numAmount / 100;
   const preview = {
     calories: Math.round(product.per100.calories * mult),
     protein:  Math.round(product.per100.protein  * mult * 10) / 10,
@@ -99,20 +99,20 @@ function AddQuantityModal({
     fat:      Math.round(product.per100.fat      * mult * 10) / 10,
   };
 
-  const unitLabel = unit === “g” ? “g” : unit === “ml” ? “ml” : “adet”;
-  const servingLabelForApi = unit === “piece” ? “piece” : unit;
-  const servingSizeForApi  = unit === “piece” ? 1 : 100;
-  const fullName = product.name + (product.brand ? ` (${product.brand})` : “”);
+  const unitLabel = unit === "g" ? "g" : unit === "ml" ? "ml" : "adet";
+  const servingLabelForApi = unit === "piece" ? "piece" : unit;
+  const servingSizeForApi  = unit === "piece" ? 1 : 100;
+  const fullName = product.name + (product.brand ? ` (${product.brand})` : "");
 
-  async function handleSave(mode: “today” | “library”) {
+  async function handleSave(mode: "today" | "library") {
     if (saving) return;
     setSavingMode(mode);
     try {
-      if (mode === “library”) {
+      if (mode === "library") {
         // 1. Save to meal library (base serving) …
-        const mealRes = await fetch(“/api/meals”, {
-          method: “POST”,
-          headers: { “Content-Type”: “application/json” },
+        const mealRes = await fetch("/api/meals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: fullName,
             calories: product.per100.calories,
@@ -128,17 +128,17 @@ function AddQuantityModal({
         const mealId = mealData.id ?? mealData.meal?.id;
         // 2. … then log the chosen amount to the day via that meal
         if (mealId) {
-          await fetch(“/api/log-meal”, {
-            method: “POST”,
-            headers: { “Content-Type”: “application/json” },
+          await fetch("/api/log-meal", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ mealId, quantity: mult, date: dateParam }),
           });
         }
       } else {
         // Ad-hoc: log straight to the day, no permanent library entry
-        await fetch(“/api/log-meal”, {
-          method: “POST”,
-          headers: { “Content-Type”: “application/json” },
+        await fetch("/api/log-meal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: fullName,
             calories: product.per100.calories,
@@ -152,7 +152,7 @@ function AddQuantityModal({
           }),
         });
       }
-      posthog.capture(“food_db_used”, { source: product.source });
+      posthog.capture("food_db_used", { source: product.source });
       onDone();
     } catch {
       // Re-enable buttons so the user can retry
@@ -161,76 +161,76 @@ function AddQuantityModal({
   }
 
   return (
-    <div className=”fixed inset-0 z-[60] flex items-center justify-center bg-black/80 px-4”>
-      <div className=”w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl”>
-        <div className=”mb-4 flex items-start justify-between”>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 px-4">
+      <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl">
+        <div className="mb-4 flex items-start justify-between">
           <div>
-            <p className=”font-bold text-white leading-tight”>{product.name}</p>
-            {product.brand && <p className=”text-xs text-zinc-500”>{product.brand}</p>}
+            <p className="font-bold text-white leading-tight">{product.name}</p>
+            {product.brand && <p className="text-xs text-zinc-500">{product.brand}</p>}
           </div>
-          <button onClick={onCancel} className=”ml-3 text-zinc-500 hover:text-white”>✕</button>
+          <button onClick={onCancel} className="ml-3 text-zinc-500 hover:text-white">✕</button>
         </div>
 
         {/* Birim seçimi */}
-        <div className=”mb-3 flex gap-1.5”>
-          {([“g”, “ml”, “piece”] as Unit[]).map((u) => (
+        <div className="mb-3 flex gap-1.5">
+          {(["g", "ml", "piece"] as Unit[]).map((u) => (
             <button
               key={u}
               onClick={() => setUnit(u)}
               className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition-colors ${
                 unit === u
-                  ? “bg-green-600 text-white”
-                  : “bg-zinc-800 text-zinc-400 hover:text-white”
+                  ? "bg-green-600 text-white"
+                  : "bg-zinc-800 text-zinc-400 hover:text-white"
               }`}
             >
-              {u === “piece” ? “adet” : u}
+              {u === "piece" ? "adet" : u}
             </button>
           ))}
         </div>
 
-        <label className=”mb-1 block text-xs font-semibold text-zinc-400”>
+        <label className="mb-1 block text-xs font-semibold text-zinc-400">
           Miktar ({unitLabel})
         </label>
-        <div className=”mb-4 flex items-center gap-2”>
+        <div className="mb-4 flex items-center gap-2">
           <input
-            type=”number”
+            type="number"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className=”flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-center text-lg font-bold text-white outline-none focus:border-green-600”
+            className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-center text-lg font-bold text-white outline-none focus:border-green-600"
             autoFocus
           />
-          <span className=”text-sm text-zinc-500”>{unitLabel}</span>
+          <span className="text-sm text-zinc-500">{unitLabel}</span>
         </div>
 
-        <div className=”mb-4 rounded-xl bg-zinc-800 p-3”>
-          <p className=”mb-1 text-[11px] text-zinc-500”>
+        <div className="mb-4 rounded-xl bg-zinc-800 p-3">
+          <p className="mb-1 text-[11px] text-zinc-500">
             Önizleme ({numAmount} {unitLabel})
           </p>
-          <div className=”flex flex-wrap gap-1.5”>
-            <span className=”rounded-full bg-zinc-700 px-2.5 py-0.5 text-xs font-bold text-white”>{preview.calories} kcal</span>
-            <span className=”rounded-full bg-blue-950 px-2.5 py-0.5 text-xs font-semibold text-blue-300”>P {preview.protein}g</span>
-            <span className=”rounded-full bg-amber-950 px-2.5 py-0.5 text-xs font-semibold text-amber-300”>K {preview.carbs}g</span>
-            <span className=”rounded-full bg-rose-950 px-2.5 py-0.5 text-xs font-semibold text-rose-300”>Y {preview.fat}g</span>
+          <div className="flex flex-wrap gap-1.5">
+            <span className="rounded-full bg-zinc-700 px-2.5 py-0.5 text-xs font-bold text-white">{preview.calories} kcal</span>
+            <span className="rounded-full bg-blue-950 px-2.5 py-0.5 text-xs font-semibold text-blue-300">P {preview.protein}g</span>
+            <span className="rounded-full bg-amber-950 px-2.5 py-0.5 text-xs font-semibold text-amber-300">K {preview.carbs}g</span>
+            <span className="rounded-full bg-rose-950 px-2.5 py-0.5 text-xs font-semibold text-rose-300">Y {preview.fat}g</span>
           </div>
         </div>
 
-        <div className=”space-y-2”>
+        <div className="space-y-2">
           <button
-            onClick={() => handleSave(“today”)}
+            onClick={() => handleSave("today")}
             disabled={saving}
-            className=”w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white shadow-lg shadow-green-900/30 hover:bg-green-500 transition-colors disabled:opacity-50”
+            className="w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white shadow-lg shadow-green-900/30 hover:bg-green-500 transition-colors disabled:opacity-50"
           >
-            {savingMode === “today” ? “Ekleniyor…” : “Sadece bugün ekle”}
+            {savingMode === "today" ? "Ekleniyor…" : "Sadece bugün ekle"}
           </button>
           <button
-            onClick={() => handleSave(“library”)}
+            onClick={() => handleSave("library")}
             disabled={saving}
-            className=”w-full rounded-xl border border-zinc-700 bg-zinc-800 py-3 text-sm font-semibold text-zinc-200 hover:border-green-600 hover:text-green-400 transition-colors disabled:opacity-50”
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-3 text-sm font-semibold text-zinc-200 hover:border-green-600 hover:text-green-400 transition-colors disabled:opacity-50"
           >
-            {savingMode === “library” ? “Kaydediliyor…” : “Kutüphaneye de kaydet”}
+            {savingMode === "library" ? "Kaydediliyor…" : "Kutüphaneye de kaydet"}
           </button>
-          <p className=”px-1 text-center text-[11px] leading-snug text-zinc-600”>
-            “Sadece bugün ekle” ürünü kütüphaneye kaydetmez, yalnızca güne loglar.
+          <p className="px-1 text-center text-[11px] leading-snug text-zinc-600">
+            "Sadece bugün ekle" ürünü kütüphaneye kaydetmez, yalnızca güne loglar.
           </p>
         </div>
       </div>
