@@ -344,17 +344,37 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Timezone TEST */}
-        <div style={{border: "1px solid red", padding: "16px", marginBottom: "16px", borderRadius: "12px"}}>
-          <p style={{color: "white", marginBottom: "8px"}}>Saat Dilimi TEST</p>
+        {/* Timezone */}
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+          <h2 className="mb-1 text-sm font-semibold text-zinc-300">Saat Dilimi</h2>
+          <p className="mb-3 text-xs text-zinc-500">Sabah bildirimleri bu saate gore gonderilir.</p>
           <select
             value={form.timezone ?? "Europe/Berlin"}
             onChange={(e) => setForm(p => ({ ...p, timezone: e.target.value }))}
-            style={{width: "100%", padding: "8px", background: "#27272a", color: "white", borderRadius: "8px"}}
+            className="w-full rounded-xl bg-zinc-800 p-3 text-sm text-white outline-none focus:ring-1 focus:ring-zinc-600"
           >
-            <option value="Europe/Berlin">Europe/Berlin</option>
-            <option value="Europe/Istanbul">Europe/Istanbul</option>
-            <option value="America/New_York">America/New_York</option>
+            <option value="Europe/Istanbul">Europe/Istanbul (UTC+3)</option>
+            <option value="Europe/Berlin">Europe/Berlin (UTC+1/+2)</option>
+            <option value="Europe/London">Europe/London (UTC+0/+1)</option>
+            <option value="Europe/Paris">Europe/Paris (UTC+1/+2)</option>
+            <option value="Europe/Rome">Europe/Rome (UTC+1/+2)</option>
+            <option value="Europe/Moscow">Europe/Moscow (UTC+3)</option>
+            <option value="Europe/Athens">Europe/Athens (UTC+2/+3)</option>
+            <option value="America/New_York">America/New_York (UTC-5/-4)</option>
+            <option value="America/Chicago">America/Chicago (UTC-6/-5)</option>
+            <option value="America/Denver">America/Denver (UTC-7/-6)</option>
+            <option value="America/Los_Angeles">America/Los_Angeles (UTC-8/-7)</option>
+            <option value="America/Sao_Paulo">America/Sao_Paulo (UTC-3)</option>
+            <option value="Africa/Cairo">Africa/Cairo (UTC+2)</option>
+            <option value="Asia/Dubai">Asia/Dubai (UTC+4)</option>
+            <option value="Asia/Karachi">Asia/Karachi (UTC+5)</option>
+            <option value="Asia/Kolkata">Asia/Kolkata (UTC+5:30)</option>
+            <option value="Asia/Dhaka">Asia/Dhaka (UTC+6)</option>
+            <option value="Asia/Bangkok">Asia/Bangkok (UTC+7)</option>
+            <option value="Asia/Shanghai">Asia/Shanghai (UTC+8)</option>
+            <option value="Asia/Tokyo">Asia/Tokyo (UTC+9)</option>
+            <option value="Australia/Sydney">Australia/Sydney (UTC+10/+11)</option>
+            <option value="Pacific/Auckland">Pacific/Auckland (UTC+12/+13)</option>
           </select>
         </div>
 
