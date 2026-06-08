@@ -4,6 +4,26 @@ import { useEffect, useRef, useState } from "react";
 import { searchExercises } from "@/lib/exercises";
 import Link from "next/link";
 import { posthog } from "@/lib/posthog";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  rectSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+// ─── Stable client IDs for dnd-kit ───────────────────────────────────────────
+
+let _cid = 0;
+function newClientId() { return `ex-${++_cid}`; }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -22,6 +42,8 @@ interface ExerciseSet {
 }
 
 interface Exercise {
+  clientId: string; // stable id for dnd-kit (never changes)
+  id?: string;      // DB id (populated when loaded from server)
   name: string;
   sets: ExerciseSet[];
 }
@@ -50,30 +72,25 @@ interface OverloadData {
   isPR: boolean;
 }
 
-// ─── Colour palette per exercise index ───────────────────────────────────────
+type SaveStatus = "idle" | "saving" | "saved";
+
+// ─── Colour palette ───────────────────────────────────────────────────────────
 
 const ACCENT_COLORS = [
-  { border: "#22c55e", glow: "#22c55e20", text: "text-green-400", ring: "focus:ring-green-800" },
-  { border: "#60a5fa", glow: "#60a5fa20", text: "text-blue-400",  ring: "focus:ring-blue-800"  },
-  { border: "#c084fc", glow: "#c084fc20", text: "text-purple-400",ring: "focus:ring-purple-800"},
-  { border: "#fb923c", glow: "#fb923c20", text: "text-orange-400",ring: "focus:ring-orange-800"},
-  { border: "#f472b6", glow: "#f472b620", text: "text-pink-400",  ring: "focus:ring-pink-800"  },
-  { border: "#34d399", glow: "#34d39920", text: "text-emerald-400",ring:"focus:ring-emerald-800"},
+  { border: "#22c55e", text: "text-green-400",   ring: "focus:ring-green-800"   },
+  { border: "#60a5fa", text: "text-blue-400",    ring: "focus:ring-blue-800"    },
+  { border: "#c084fc", text: "text-purple-400",  ring: "focus:ring-purple-800"  },
+  { border: "#fb923c", text: "text-orange-400",  ring: "focus:ring-orange-800"  },
+  { border: "#f472b6", text: "text-pink-400",    ring: "focus:ring-pink-800"    },
+  { border: "#34d399", text: "text-emerald-400", ring: "focus:ring-emerald-800" },
 ];
-
-function accentFor(i: number) {
-  return ACCENT_COLORS[i % ACCENT_COLORS.length];
-}
+function accentFor(i: number) { return ACCENT_COLORS[i % ACCENT_COLORS.length]; }
 
 // ─── Compact input ────────────────────────────────────────────────────────────
 
-function SetInput({
-  value, placeholder, onChange, ringClass,
-}: {
-  value: string;
-  placeholder: string;
-  onChange: (v: string) => void;
-  ringClass: string;
+function SetInput({ value, placeholder, onChange, ringClass }: {
+  value: string; placeholder: string;
+  onChange: (v: string) => void; ringClass: string;
 }) {
   return (
     <input
@@ -88,24 +105,26 @@ function SetInput({
 
 // ─── Exercise Card ────────────────────────────────────────────────────────────
 
+interface DragHandleProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  listeners: Record<string, any> | undefined;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  attributes: Record<string, any>;
+}
+
 function ExerciseCard({
-  exercise,
-  exIdx,
-  prev,
-  overload,
-  onRemove,
-  onAddSet,
-  onRemoveSet,
-  onUpdateSet,
+  exercise, exIdx, overload,
+  onRemove, onAddSet, onRemoveSet, onUpdateSet,
+  dragHandle,
 }: {
   exercise: Exercise;
   exIdx: number;
-  prev?: PreviousPerformance;
   overload?: OverloadData;
   onRemove: () => void;
   onAddSet: () => void;
   onRemoveSet: (setIdx: number) => void;
   onUpdateSet: (setIdx: number, field: keyof ExerciseSet, value: string) => void;
+  dragHandle?: DragHandleProps;
 }) {
   const acc = accentFor(exIdx);
 
@@ -117,6 +136,18 @@ function ExerciseCard({
       {/* Header */}
       <div className="flex items-center justify-between px-2 pt-2 pb-0.5">
         <div className="flex items-center gap-1 min-w-0">
+          {/* Drag handle — 6-dot grip icon */}
+          <button
+            type="button"
+            className="cursor-grab active:cursor-grabbing shrink-0 select-none text-[13px] leading-none text-zinc-600 hover:text-zinc-400"
+            style={{ touchAction: "none" }}
+            tabIndex={-1}
+            aria-label="Egzersizi sirala"
+            {...dragHandle?.listeners}
+            {...dragHandle?.attributes}
+          >
+            ⠿
+          </button>
           <span className={`text-[10px] font-bold ${acc.text}`}>#{exIdx + 1}</span>
           <span className="truncate text-xs font-bold text-white leading-tight">{exercise.name}</span>
         </div>
@@ -142,13 +173,10 @@ function ExerciseCard({
         </div>
       ) : null}
 
-
       {/* Column headers */}
       <div className="grid grid-cols-[1fr_1fr_1fr_1fr_14px] gap-0.5 px-2 pb-0.5">
         {["kg", "Rep", "Set", "RPE", ""].map((h, i) => (
-          <span key={i} className="text-[9px] font-semibold uppercase tracking-wider text-zinc-600">
-            {h}
-          </span>
+          <span key={i} className="text-[9px] font-semibold uppercase tracking-wider text-zinc-600">{h}</span>
         ))}
       </div>
 
@@ -183,7 +211,29 @@ function ExerciseCard({
   );
 }
 
-// ─── Skeleton Card ───────────────────────────────────────────────────────────
+// ─── Sortable wrapper ─────────────────────────────────────────────────────────
+
+function SortableExerciseCard(props: Omit<React.ComponentProps<typeof ExerciseCard>, "dragHandle">) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: props.exercise.clientId });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+        position: "relative",
+        zIndex: isDragging ? 50 : undefined,
+      }}
+    >
+      <ExerciseCard {...props} dragHandle={{ listeners, attributes }} />
+    </div>
+  );
+}
+
+// ─── Skeleton Card ────────────────────────────────────────────────────────────
 
 function SkeletonCard() {
   return (
@@ -192,9 +242,7 @@ function SkeletonCard() {
       <div className="space-y-1">
         {[1, 2, 3].map((i) => (
           <div key={i} className="grid grid-cols-4 gap-0.5">
-            {[1, 2, 3, 4].map((j) => (
-              <div key={j} className="h-6 rounded-md bg-zinc-800" />
-            ))}
+            {[1, 2, 3, 4].map((j) => <div key={j} className="h-6 rounded-md bg-zinc-800" />)}
           </div>
         ))}
       </div>
@@ -212,21 +260,106 @@ export default function WorkoutPage() {
   const [newExerciseName, setNewExerciseName] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [splitLoading, setSplitLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [notes, setNotes] = useState("");
   const [previousPerf, setPreviousPerf] = useState<Record<string, PreviousPerformance>>({});
   const [overloadData, setOverloadData] = useState<Record<string, OverloadData>>({});
   const [showSplitManager, setShowSplitManager] = useState(false);
   const [newSplitName, setNewSplitName] = useState("");
   const [newSplitEmoji, setNewSplitEmoji] = useState("🏋️");
-  const inputRef = useRef<HTMLInputElement>(null);
-  const initializedRef = useRef(false);
+
+  const inputRef      = useRef<HTMLInputElement>(null);
+  const isReadyRef    = useRef(false);
+  const saveTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Always-fresh refs for the auto-save closure
+  const exercisesRef  = useRef<Exercise[]>([]);
+  const notesRef      = useRef("");
+  const splitRef      = useRef("");
+
+  exercisesRef.current = exercises;
+  notesRef.current     = notes;
+  splitRef.current     = selectedSplit;
+
+  // dnd-kit sensors — require 8px drag before activating (prevents accidental drags)
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
+  // ── Auto-save ──────────────────────────────────────────────────────────────
+
+  function scheduleSave(delayMs = 1000) {
+    if (!isReadyRef.current) return;
+    setSaveStatus("saving");
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(doAutoSave, delayMs);
+  }
+
+  async function doAutoSave() {
+    const exs   = exercisesRef.current;
+    const n     = notesRef.current;
+    const split = splitRef.current;
+    try {
+      await fetch("/api/workouts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          split,
+          notes: n,
+          exercises: exs.map((ex, i) => ({
+            name: ex.name,
+            orderIndex: i,
+            sets: ex.sets.map((s, j) => ({
+              setNumber: j + 1,
+              weight: Number(s.weight) || null,
+              reps:   Number(s.reps)   || null,
+              sets:   Number(s.sets)   || 1,
+              rpe:    Number(s.rpe)    || null,
+            })),
+          })),
+        }),
+      });
+      posthog.capture("workout_saved", { split, exerciseCount: exs.length });
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2000);
+    } catch {
+      setSaveStatus("idle");
+    }
+  }
+
+  // ── Drag & Drop ────────────────────────────────────────────────────────────
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIdx = exercisesRef.current.findIndex((ex) => ex.clientId === String(active.id));
+    const newIdx = exercisesRef.current.findIndex((ex) => ex.clientId === String(over.id));
+    if (oldIdx === -1 || newIdx === -1) return;
+
+    const reordered = arrayMove(exercisesRef.current, oldIdx, newIdx);
+    setExercises(reordered);
+
+    // Fire-and-forget reorder API if all exercises have DB IDs
+    const allHaveIds = reordered.every((ex) => ex.id);
+    if (allHaveIds && reordered.length > 0) {
+      fetch("/api/workout/reorder", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          exercises: reordered.map((ex, i) => ({ id: ex.id, orderIndex: i })),
+        }),
+      }).catch(() => {});
+    }
+
+    scheduleSave(300);
+  }
+
+  // ── Init ───────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     async function init() {
       try {
-        const res = await fetch("/api/workouts/init");
+        const res  = await fetch("/api/workouts/init");
         const data = await res.json();
         const loadedSplits: UserSplit[] = data.splits ?? [];
         setSplits(loadedSplits);
@@ -236,31 +369,35 @@ export default function WorkoutPage() {
           if (data.workout) {
             setNotes(data.workout.notes ?? "");
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const loaded = (data.workout.exercises ?? []).map((ex: any) => ({
+            const loaded: Exercise[] = (data.workout.exercises ?? []).map((ex: any) => ({
+              clientId: newClientId(),
+              id: ex.id,
               name: ex.name,
               sets: (ex.sets ?? []).length > 0
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 ? ex.sets.map((s: any) => ({
                     setNumber: s.setNumber,
                     weight: s.weight ? String(s.weight) : "",
-                    reps: s.reps ? String(s.reps) : "",
-                    sets: s.sets ? String(s.sets) : "1",
-                    rpe: s.rpe ? String(s.rpe) : "",
+                    reps:   s.reps   ? String(s.reps)   : "",
+                    sets:   s.sets   ? String(s.sets)   : "1",
+                    rpe:    s.rpe    ? String(s.rpe)    : "",
                   }))
                 : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
             }));
             setExercises(loaded);
-            loaded.forEach((ex: Exercise) => fetchOverload(ex.name));
+            loaded.forEach((ex) => fetchOverload(ex.name));
           }
         }
       } catch {
-        // init failed — page stays in empty state, user can still add exercises
+        // init failed — empty state, user can still add exercises
       }
-      initializedRef.current = true;
+      isReadyRef.current = true;
     }
     init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Splits ─────────────────────────────────────────────────────────────────
 
   async function fetchSplits() {
     const res = await fetch("/api/splits");
@@ -281,44 +418,49 @@ export default function WorkoutPage() {
 
   async function handleSplitSelect(splitName: string) {
     if (splitName === selectedSplit) return;
-    // Optimistic: switch pill + show skeleton immediately
     setSelectedSplit(splitName);
     setExercises([]);
     setOverloadData({});
     setNotes("");
     setSplitLoading(true);
+    isReadyRef.current = false; // pause auto-save during split load
     try {
-      const res = await fetch(`/api/workouts/init?split=${encodeURIComponent(splitName)}`);
+      const res  = await fetch(`/api/workouts/init?split=${encodeURIComponent(splitName)}`);
       const data = await res.json();
       if (data.workout) {
         setNotes(data.workout.notes ?? "");
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const loaded = (data.workout.exercises ?? []).map((ex: any) => ({
+        const loaded: Exercise[] = (data.workout.exercises ?? []).map((ex: any) => ({
+          clientId: newClientId(),
+          id: ex.id,
           name: ex.name,
           sets: (ex.sets ?? []).length > 0
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             ? ex.sets.map((s: any) => ({
                 setNumber: s.setNumber,
                 weight: s.weight ? String(s.weight) : "",
-                reps: s.reps ? String(s.reps) : "",
-                sets: s.sets ? String(s.sets) : "1",
-                rpe: s.rpe ? String(s.rpe) : "",
+                reps:   s.reps   ? String(s.reps)   : "",
+                sets:   s.sets   ? String(s.sets)   : "1",
+                rpe:    s.rpe    ? String(s.rpe)    : "",
               }))
             : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
         }));
         setExercises(loaded);
-        loaded.forEach((ex: Exercise) => fetchOverload(ex.name));
+        loaded.forEach((ex) => fetchOverload(ex.name));
       }
     } catch {
-      // split fetch failed — exercises stay empty for this split
+      // fetch failed — keep empty state
     }
     setSplitLoading(false);
+    isReadyRef.current = true;
   }
 
   async function deleteSplit(id: string) {
     await fetch(`/api/splits/${id}`, { method: "DELETE" });
     fetchSplits();
   }
+
+  // ── Exercises ──────────────────────────────────────────────────────────────
 
   function handleExerciseInput(value: string) {
     setNewExerciseName(value);
@@ -336,16 +478,16 @@ export default function WorkoutPage() {
     if (!exerciseName) return;
     setExercises((prev) => [
       ...prev,
-      { name: exerciseName, sets: [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }] },
+      { clientId: newClientId(), name: exerciseName, sets: [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }] },
     ]);
-    fetchPrevious(exerciseName);
     fetchOverload(exerciseName);
     setNewExerciseName("");
     setSuggestions([]);
+    scheduleSave(300);
   }
 
   async function fetchPrevious(exerciseName: string) {
-    const res = await fetch(`/api/workouts/previous?exercise=${encodeURIComponent(exerciseName)}`);
+    const res  = await fetch(`/api/workouts/previous?exercise=${encodeURIComponent(exerciseName)}`);
     const data = await res.json();
     if (data.previous) {
       setPreviousPerf((prev) => ({ ...prev, [exerciseName]: data.previous }));
@@ -354,84 +496,66 @@ export default function WorkoutPage() {
 
   async function fetchOverload(exerciseName: string) {
     try {
-      const res = await fetch(`/api/workout/previous?exerciseName=${encodeURIComponent(exerciseName)}`);
+      const res  = await fetch(`/api/workout/previous?exerciseName=${encodeURIComponent(exerciseName)}`);
       const data = await res.json();
       setOverloadData((prev) => ({ ...prev, [exerciseName]: data }));
     } catch {
-      // overload fetch failed — badge just won't show for this exercise
+      // badge just won't show
     }
   }
 
   function removeExercise(index: number) {
     setExercises((prev) => prev.filter((_, i) => i !== index));
+    scheduleSave(300);
   }
 
   function addSet(exIdx: number) {
     setExercises((prev) => {
       const updated = [...prev];
       const last = updated[exIdx].sets[updated[exIdx].sets.length - 1];
-      updated[exIdx].sets = [
-        ...updated[exIdx].sets,
-        { setNumber: updated[exIdx].sets.length + 1, weight: last?.weight ?? "", reps: last?.reps ?? "", sets: "1", rpe: "" },
-      ];
+      updated[exIdx] = {
+        ...updated[exIdx],
+        sets: [
+          ...updated[exIdx].sets,
+          { setNumber: updated[exIdx].sets.length + 1, weight: last?.weight ?? "", reps: last?.reps ?? "", sets: "1", rpe: "" },
+        ],
+      };
       return updated;
     });
+    scheduleSave(300);
   }
 
   function removeSet(exIdx: number, setIdx: number) {
     setExercises((prev) => {
       const updated = [...prev];
-      updated[exIdx].sets = updated[exIdx].sets
-        .filter((_, i) => i !== setIdx)
-        .map((s, i) => ({ ...s, setNumber: i + 1 }));
+      updated[exIdx] = {
+        ...updated[exIdx],
+        sets: updated[exIdx].sets
+          .filter((_, i) => i !== setIdx)
+          .map((s, i) => ({ ...s, setNumber: i + 1 })),
+      };
       return updated;
     });
+    scheduleSave(300);
   }
 
   function updateSet(exIdx: number, setIdx: number, field: keyof ExerciseSet, value: string) {
     setExercises((prev) => {
       const updated = [...prev];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (updated[exIdx].sets[setIdx] as any)[field] = value;
+      const sets = [...updated[exIdx].sets];
+      sets[setIdx] = { ...sets[setIdx], [field]: value };
+      updated[exIdx] = { ...updated[exIdx], sets };
       return updated;
     });
+    scheduleSave(1000); // debounced — user is still typing
   }
 
-  async function saveWorkout() {
-    const isRestDay = selectedSplit === "Rest Day";
-    const hasData = exercises.some((ex) => ex.sets.some((s) => s.weight || s.reps));
-    if (!isRestDay && !hasData) {
-      alert("Add at least one set with weight or reps");
-      return;
-    }
-    setSaving(true);
-    await fetch("/api/workouts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        split: selectedSplit,
-        notes,
-        exercises: exercises.map((ex, i) => ({
-          name: ex.name,
-          orderIndex: i,
-          sets: ex.sets.map((s, j) => ({
-            setNumber: j + 1,
-            weight: Number(s.weight) || null,
-            reps: Number(s.reps) || null,
-            sets: Number(s.sets) || 1,
-            rpe: Number(s.rpe) || null,
-          })),
-        })),
-      }),
-    });
-    posthog.capture("workout_saved", { split: selectedSplit, exerciseCount: exercises.length });
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-  }
+  // ── Derived ────────────────────────────────────────────────────────────────
 
-  const isRestDay = selectedSplit === "Rest Day";
+  const isRestDay      = selectedSplit === "Rest Day";
   const selectedSplitObj = splits.find((s) => s.name === selectedSplit);
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <main className="mx-auto max-w-2xl p-4 pb-28">
@@ -439,7 +563,17 @@ export default function WorkoutPage() {
       {/* ── Header ── */}
       <div className="mb-5 flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-white">Train</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-black tracking-tight text-white">Train</h1>
+            {/* Auto-save indicator */}
+            {saveStatus !== "idle" && (
+              <span className={`text-[11px] font-medium transition-colors ${
+                saveStatus === "saved" ? "text-green-500" : "text-zinc-500"
+              }`}>
+                {saveStatus === "saving" ? "Kaydediliyor..." : "Kaydedildi"}
+              </span>
+            )}
+          </div>
           <p className="text-xs text-zinc-500">Log today's session</p>
         </div>
         <div className="flex gap-1.5">
@@ -447,7 +581,7 @@ export default function WorkoutPage() {
             href="/workout/history"
             className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-400 hover:text-white transition-colors"
           >
-            📋 History
+            History
           </Link>
           <button
             onClick={() => setShowSplitManager(!showSplitManager)}
@@ -457,7 +591,7 @@ export default function WorkoutPage() {
                 : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white"
             }`}
           >
-            ⚙️ Splits
+            Splits
           </button>
         </div>
       </div>
@@ -496,7 +630,10 @@ export default function WorkoutPage() {
       )}
 
       {/* ── Split pills ── */}
-      <div style={{ display: "flex", flexWrap: "nowrap", overflowX: "auto", gap: "8px", paddingBottom: "4px", WebkitOverflowScrolling: "touch" }} className="mb-4">
+      <div
+        style={{ display: "flex", flexWrap: "nowrap", overflowX: "auto", gap: "8px", paddingBottom: "4px", WebkitOverflowScrolling: "touch" }}
+        className="mb-4"
+      >
         {splits.map((split) => {
           const active = selectedSplit === split.name;
           return (
@@ -518,9 +655,7 @@ export default function WorkoutPage() {
 
       {/* ── Active split banner ── */}
       {selectedSplitObj && !isRestDay && (
-        <div
-          className="mb-4 flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2"
-        >
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2">
           <span className="text-lg">{selectedSplitObj.emoji}</span>
           <div>
             <p className="text-xs font-bold text-zinc-200">{selectedSplitObj.name}</p>
@@ -545,10 +680,10 @@ export default function WorkoutPage() {
           <div className="relative mb-4">
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 text-sm">🔍</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 text-sm">+</span>
                 <input
                   ref={inputRef}
-                  placeholder="Search exercise…"
+                  placeholder="Search exercise..."
                   value={newExerciseName}
                   onChange={(e) => handleExerciseInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -589,51 +724,47 @@ export default function WorkoutPage() {
             )}
           </div>
 
-          {/* Exercise cards — 2-column grid */}
-          <div className="grid grid-cols-2 gap-2">
-            {splitLoading
-              ? [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)
-              : exercises.map((exercise, exIdx) => (
-                  <ExerciseCard
-                    key={exIdx}
-                    exercise={exercise}
-                    exIdx={exIdx}
-                    prev={previousPerf[exercise.name]}
-                    overload={overloadData[exercise.name]}
-                    onRemove={() => removeExercise(exIdx)}
-                    onAddSet={() => addSet(exIdx)}
-                    onRemoveSet={(setIdx) => removeSet(exIdx, setIdx)}
-                    onUpdateSet={(setIdx, field, value) => updateSet(exIdx, setIdx, field, value)}
-                  />
-                ))
-            }
-          </div>
+          {/* Exercise cards — draggable 2-column grid */}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={exercises.map((ex) => ex.clientId)}
+              strategy={rectSortingStrategy}
+            >
+              <div className="grid grid-cols-2 gap-2">
+                {splitLoading
+                  ? [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)
+                  : exercises.map((exercise, exIdx) => (
+                      <SortableExerciseCard
+                        key={exercise.clientId}
+                        exercise={exercise}
+                        exIdx={exIdx}
+                        overload={overloadData[exercise.name]}
+                        onRemove={() => removeExercise(exIdx)}
+                        onAddSet={() => addSet(exIdx)}
+                        onRemoveSet={(setIdx) => removeSet(exIdx, setIdx)}
+                        onUpdateSet={(setIdx, field, value) => updateSet(exIdx, setIdx, field, value)}
+                      />
+                    ))}
+              </div>
+            </SortableContext>
+          </DndContext>
 
           {/* Notes */}
           {exercises.length > 0 && (
             <textarea
               placeholder="Workout notes (optional)"
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => { setNotes(e.target.value); scheduleSave(1000); }}
               className="mt-3 w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm text-zinc-300 outline-none focus:border-zinc-600 placeholder:text-zinc-600"
               rows={2}
             />
           )}
         </>
       )}
-
-      {/* ── Save button ── */}
-      <button
-        onClick={saveWorkout}
-        disabled={saving}
-        className={`mt-5 w-full rounded-xl py-3 text-sm font-bold transition-all duration-300 disabled:opacity-50 ${
-          saved
-            ? "bg-green-900 text-green-300 shadow-none"
-            : "bg-green-600 text-white shadow-lg shadow-green-900/40 hover:bg-green-500 hover:shadow-green-800/50"
-        }`}
-      >
-        {saved ? "✓ Saved!" : saving ? "Saving…" : "Save Workout"}
-      </button>
     </main>
   );
 }
