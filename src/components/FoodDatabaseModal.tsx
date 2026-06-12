@@ -85,7 +85,7 @@ function AddQuantityModal({
 }) {
   const [amount, setAmount] = useState("100");
   const [unit, setUnit] = useState<Unit>(product.servingLabel === "ml" ? "ml" : "g");
-  // null = idle, "today" = log only, "library" = save to library + log
+  // null = idle, "today" = log to today only, "library" = save to library only
   const [savingMode, setSavingMode] = useState<null | "today" | "library">(null);
   const saving = savingMode !== null;
 
@@ -109,8 +109,8 @@ function AddQuantityModal({
     setSavingMode(mode);
     try {
       if (mode === "library") {
-        // 1. Save to meal library (base serving) …
-        const mealRes = await fetch("/api/meals", {
+        // Save to meal library only (base serving) — never touches the daily log
+        await fetch("/api/meals", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -124,16 +124,6 @@ function AddQuantityModal({
             isFavorite: false,
           }),
         });
-        const mealData = await mealRes.json();
-        const mealId = mealData.id ?? mealData.meal?.id;
-        // 2. … then log the chosen amount to the day via that meal
-        if (mealId) {
-          await fetch("/api/log-meal", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mealId, quantity: mult, date: dateParam }),
-          });
-        }
       } else {
         // Ad-hoc: log straight to the day, no permanent library entry
         await fetch("/api/log-meal", {
@@ -220,17 +210,17 @@ function AddQuantityModal({
             disabled={saving}
             className="w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white shadow-lg shadow-green-900/30 hover:bg-green-500 transition-colors disabled:opacity-50"
           >
-            {savingMode === "today" ? "Ekleniyor…" : "Sadece bugün ekle"}
+            {savingMode === "today" ? "Ekleniyor…" : "Bugünkü Loga Ekle"}
           </button>
           <button
             onClick={() => handleSave("library")}
             disabled={saving}
             className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-3 text-sm font-semibold text-zinc-200 hover:border-green-600 hover:text-green-400 transition-colors disabled:opacity-50"
           >
-            {savingMode === "library" ? "Kaydediliyor…" : "Kutüphaneye de kaydet"}
+            {savingMode === "library" ? "Kaydediliyor…" : "Kütüphaneye Ekle"}
           </button>
           <p className="px-1 text-center text-[11px] leading-snug text-zinc-600">
-            "Sadece bugün ekle" ürünü kütüphaneye kaydetmez, yalnızca güne loglar.
+            "Bugünkü Loga Ekle" yalnızca güne loglar; "Kütüphaneye Ekle" yalnızca kütüphaneye kaydeder, güne eklemez.
           </p>
         </div>
       </div>
