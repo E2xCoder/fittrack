@@ -11,15 +11,30 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const dateParam = searchParams.get("date");
 
+  const userRow = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      calorieTarget: true,
+      proteinTarget: true,
+      carbTarget: true,
+      fatTarget: true,
+      weight: true,
+      stepTarget: true,
+      timezone: true,
+    },
+  });
+
+  const userTz = userRow?.timezone ?? "Europe/Berlin";
+
   let date: Date;
   if (dateParam) {
     date = new Date(dateParam + "T12:00:00");
     date.setHours(0, 0, 0, 0);
   } else {
-    date = getTodayInTimezone();
+    date = getTodayInTimezone(userTz);
   }
 
-  const [dailyLog, user, bodyLog] = await Promise.all([
+  const [dailyLog, bodyLog, splits] = await Promise.all([
     prisma.dailyLog.findFirst({
       where: { userId: session.user.id, date },
       include: {
@@ -29,19 +44,12 @@ export async function GET(request: Request) {
         },
       },
     }),
-    prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        calorieTarget: true,
-        proteinTarget: true,
-        carbTarget: true,
-        fatTarget: true,
-        weight: true,
-        stepTarget: true,
-      },
-    }),
     prisma.bodyLog.findFirst({
       where: { userId: session.user.id, date },
+    }),
+    prisma.userSplit.findMany({       // <-- EKLENDİ
+      where: { userId: session.user.id },
+      orderBy: { createdAt: "asc" },
     }),
   ]);
 
@@ -52,15 +60,18 @@ export async function GET(request: Request) {
     totalFat: dailyLog?.totalFat ?? 0,
     mealLogs: dailyLog?.mealLogs ?? [],
     goals: {
-      calories: user?.calorieTarget ?? 2400,
-      protein: user?.proteinTarget ?? 150,
-      carbs: user?.carbTarget ?? 200,
-      fat: user?.fatTarget ?? 70,
-      steps: user?.stepTarget ?? 10000,
+      calories: userRow?.calorieTarget ?? 2400,
+      protein: userRow?.proteinTarget ?? 150,
+      carbs: userRow?.carbTarget ?? 200,
+      fat: userRow?.fatTarget ?? 70,
+      steps: userRow?.stepTarget ?? 10000,
     },
     steps: bodyLog?.steps ?? 0,
     caloriesBurned: bodyLog?.caloriesBurned ?? 0,
     water: bodyLog?.water ?? 0,
     sleep: bodyLog?.sleep ?? 0,
+    isGymDay: dailyLog?.isGymDay ?? false,    // <-- EKLENDİ
+    gymSplit: dailyLog?.gymSplit ?? null,      // <-- EKLENDİ
+    splits: splits ?? [],                      // <-- EKLENDİ
   });
 }

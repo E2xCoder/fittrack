@@ -16,27 +16,29 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const dateParam = searchParams.get("date");
 
+  const userProfile = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: {
+      height: true,
+      weight: true,
+      stepTarget: true,
+      waterTarget: true,
+      sleepTarget: true,
+      timezone: true,
+    },
+  });
+
+  const userTz = userProfile?.timezone ?? "Europe/Berlin";
+
   const date = dateParam
     ? new Date(dateParam + "T12:00:00")
-    : getTodayInTimezone();
+    : getTodayInTimezone(userTz);
 
   if (dateParam) date.setHours(0, 0, 0, 0);
 
-  const [bodyLog, userProfile] = await Promise.all([
-    prisma.bodyLog.findFirst({
-      where: { userId: user.id, date },
-    }),
-    prisma.user.findUnique({
-      where: { id: user.id },
-      select: {
-        height: true,
-        weight: true,
-        stepTarget: true,
-        waterTarget: true,
-        sleepTarget: true,
-      },
-    }),
-  ]);
+  const bodyLog = await prisma.bodyLog.findFirst({
+    where: { userId: user.id, date },
+  });
 
   return NextResponse.json({ bodyLog, userProfile });
 }
@@ -48,21 +50,22 @@ export async function POST(request: Request) {
   const body = await request.json();
   const dateParam = body.date;
 
-  const date = dateParam
-    ? new Date(dateParam + "T12:00:00")
-    : getTodayInTimezone();
-
-  if (dateParam) date.setHours(0, 0, 0, 0);
-
   // Calculate calories burned from steps
   const userProfile = await prisma.user.findUnique({
     where: { id: user.id },
-    select: { weight: true },
+    select: { weight: true, timezone: true },
   });
 
+  const userTz = userProfile?.timezone ?? "Europe/Berlin";
   const weight = userProfile?.weight ?? 70;
   const steps = Number(body.steps) || 0;
   const caloriesBurned = Math.round(steps * 0.04 * (weight / 70));
+
+  const date = dateParam
+    ? new Date(dateParam + "T12:00:00")
+    : getTodayInTimezone(userTz);
+
+  if (dateParam) date.setHours(0, 0, 0, 0);
 
   const bodyLog = await prisma.bodyLog.upsert({
     where: { userId_date: { userId: user.id, date } },

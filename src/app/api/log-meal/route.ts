@@ -12,17 +12,61 @@ export async function POST(request: Request) {
   const body = await request.json();
   const quantity = Number(body.quantity) || 1;
 
-  const meal = await prisma.meal.findFirst({
-    where: { id: body.mealId, userId: user.id },
+  // Resolve the nutrition base + display snapshot from one of two sources:
+  //  • an existing library meal (body.mealId), or
+  //  • an ad-hoc payload (name + macros) — logs to the day WITHOUT saving a Meal.
+  let mealId: string | null = null;
+  let base: { calories: number; protein: number; carbs: number; fat: number };
+  let snapshot: {
+    name: string; calories: number; protein: number; carbs: number; fat: number;
+    servingLabel: string; servingSize: number;
+  };
+
+  if (body.mealId) {
+    const meal = await prisma.meal.findFirst({
+      where: { id: body.mealId, userId: user.id },
+    });
+    if (!meal) return NextResponse.json({ error: "Meal not found" }, { status: 404 });
+    mealId = meal.id;
+    base = { calories: meal.calories, protein: meal.protein, carbs: meal.carbs, fat: meal.fat };
+    snapshot = {
+      name: meal.name,
+      calories: meal.calories,
+      protein: meal.protein,
+      carbs: meal.carbs,
+      fat: meal.fat,
+      servingLabel: meal.servingLabel,
+      servingSize: meal.servingSize,
+    };
+  } else if (typeof body.name === "string" && body.name.trim()) {
+    base = {
+      calories: Number(body.calories) || 0,
+      protein:  Number(body.protein)  || 0,
+      carbs:    Number(body.carbs)    || 0,
+      fat:      Number(body.fat)      || 0,
+    };
+    snapshot = {
+      name: body.name.trim(),
+      ...base,
+      servingLabel: typeof body.servingLabel === "string" ? body.servingLabel : "g",
+      servingSize:  Number(body.servingSize) || 100,
+    };
+  } else {
+    return NextResponse.json({ error: "Missing mealId or meal data" }, { status: 400 });
+  }
+
+  const userTzRow = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { timezone: true },
   });
-  if (!meal) return NextResponse.json({ error: "Meal not found" }, { status: 404 });
+  const userTz = userTzRow?.timezone ?? "Europe/Berlin";
 
   let logDate: Date;
   if (body.date) {
     logDate = new Date(body.date + "T12:00:00");
     logDate.setHours(0, 0, 0, 0);
   } else {
-    logDate = getTodayInTimezone();
+    logDate = getTodayInTimezone(userTz);
   }
 
   let dailyLog = await prisma.dailyLog.findFirst({
@@ -35,19 +79,22 @@ export async function POST(request: Request) {
     });
   }
 
-  const calories = meal.calories * quantity;
-  const protein = meal.protein * quantity;
-  const carbs = meal.carbs * quantity;
-  const fat = meal.fat * quantity;
+  const calories = base.calories * quantity;
+  const protein = base.protein * quantity;
+  const carbs = base.carbs * quantity;
+  const fat = base.fat * quantity;
 
-  // Check if this meal is already logged today — if so, merge
-  const existing = await prisma.mealLog.findFirst({
-    where: {
-      dailyLogId: dailyLog.id,
-      mealId: meal.id,
-      userId: user.id,
-    },
-  });
+  // Merge into an existing entry only for library meals (identified by mealId).
+  // Ad-hoc entries (mealId null) always create a fresh row.
+  const existing = mealId
+    ? await prisma.mealLog.findFirst({
+        where: {
+          dailyLogId: dailyLog.id,
+          mealId,
+          userId: user.id,
+        },
+      })
+    : null;
 
   if (existing) {
     // Merge: add to existing entry
@@ -65,7 +112,7 @@ export async function POST(request: Request) {
     // New entry
     await prisma.mealLog.create({
       data: {
-        mealId: meal.id,
+        mealId,
         userId: user.id,
         dailyLogId: dailyLog.id,
         quantity,
@@ -73,15 +120,7 @@ export async function POST(request: Request) {
         protein,
         carbs,
         fat,
-        mealSnapshot: {
-          name: meal.name,
-          calories: meal.calories,
-          protein: meal.protein,
-          carbs: meal.carbs,
-          fat: meal.fat,
-          servingLabel: meal.servingLabel,
-          servingSize: meal.servingSize,
-        },
+        mealSnapshot: snapshot,
       },
     });
   }

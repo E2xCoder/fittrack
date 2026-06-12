@@ -3,6 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+interface MealInfo {
+  name: string;
+  servingLabel: string;
+  servingSize: number;
+}
+
 interface MealLog {
   id: string;
   quantity: number;
@@ -10,12 +16,10 @@ interface MealLog {
   protein: number;
   carbs: number;
   fat: number;
-  meal: {
-    id: string;
-    name: string;
-    servingLabel: string;
-    servingSize: number;
-  };
+  // null for ad-hoc logs (logged without saving to the library) or if the
+  // library meal was later deleted — fall back to mealSnapshot in that case.
+  meal: ({ id: string } & MealInfo) | null;
+  mealSnapshot: MealInfo | null;
 }
 
 interface Goals {
@@ -74,17 +78,26 @@ function MacroBar({ label, current, target, unit, color }: {
   );
 }
 
+/** Resolve display info from the library meal, falling back to the snapshot. */
+function mealInfo(log: MealLog): MealInfo {
+  if (log.meal) return log.meal;
+  return {
+    name: log.mealSnapshot?.name ?? "Bilinmeyen ürün",
+    servingLabel: log.mealSnapshot?.servingLabel ?? "g",
+    servingSize: log.mealSnapshot?.servingSize ?? 100,
+  };
+}
+
 function formatQuantity(log: MealLog): string {
-  const label = log.meal.servingLabel;
-  if (label === "piece") return `x${log.quantity}`;
-  return `${Math.round(log.quantity * log.meal.servingSize)}${label}`;
+  const { servingLabel, servingSize } = mealInfo(log);
+  if (servingLabel === "piece") return `x${log.quantity}`;
+  return `${Math.round(log.quantity * servingSize)}${servingLabel}`;
 }
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(toDateString(new Date()));
-  const [adjusting, setAdjusting] = useState<Record<string, boolean>>({});
   const [showGymPicker, setShowGymPicker] = useState(false);
   const [savingGym, setSavingGym] = useState(false);
 
@@ -117,25 +130,72 @@ export default function DashboardPage() {
   }
 
   async function removeMeal(id: string) {
-    await fetch(`/api/log-meal/${id}`, { method: "DELETE" });
-    fetchData(selectedDate);
+    const log = data?.mealLogs.find(l => l.id === id);
+    if (!log) return;
+
+    setData(prev => prev ? {
+      ...prev,
+      mealLogs: prev.mealLogs.filter(l => l.id !== id),
+      totalCalories: prev.totalCalories - log.calories,
+      totalProtein: prev.totalProtein - log.protein,
+      totalCarbs: prev.totalCarbs - log.carbs,
+      totalFat: prev.totalFat - log.fat,
+    } : prev);
+
+    const res = await fetch(`/api/log-meal/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      setData(prev => prev ? {
+        ...prev,
+        mealLogs: [...prev.mealLogs, log],
+        totalCalories: prev.totalCalories + log.calories,
+        totalProtein: prev.totalProtein + log.protein,
+        totalCarbs: prev.totalCarbs + log.carbs,
+        totalFat: prev.totalFat + log.fat,
+      } : prev);
+    }
   }
 
   async function adjustMeal(log: MealLog, delta: number) {
-    const label = log.meal.servingLabel;
-    const deltaQuantity = label === "piece" ? delta : delta / log.meal.servingSize;
+    const { servingLabel, servingSize } = mealInfo(log);
+    const deltaQuantity = servingLabel === "piece" ? delta : delta / servingSize;
     const newQuantity = log.quantity + deltaQuantity;
 
     if (newQuantity <= 0) { await removeMeal(log.id); return; }
 
-    setAdjusting((p) => ({ ...p, [log.id]: true }));
-    await fetch(`/api/log-meal/${log.id}`, {
+    const ratio = newQuantity / log.quantity;
+    const newCalories = log.calories * ratio;
+    const newProtein = log.protein * ratio;
+    const newCarbs = log.carbs * ratio;
+    const newFat = log.fat * ratio;
+
+    setData(prev => prev ? {
+      ...prev,
+      mealLogs: prev.mealLogs.map(l => l.id !== log.id ? l : {
+        ...l, quantity: newQuantity,
+        calories: newCalories, protein: newProtein,
+        carbs: newCarbs, fat: newFat,
+      }),
+      totalCalories: prev.totalCalories - log.calories + newCalories,
+      totalProtein: prev.totalProtein - log.protein + newProtein,
+      totalCarbs: prev.totalCarbs - log.carbs + newCarbs,
+      totalFat: prev.totalFat - log.fat + newFat,
+    } : prev);
+
+    const res = await fetch(`/api/log-meal/${log.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ quantity: newQuantity }),
     });
-    setAdjusting((p) => ({ ...p, [log.id]: false }));
-    fetchData(selectedDate);
+    if (!res.ok) {
+      setData(prev => prev ? {
+        ...prev,
+        mealLogs: prev.mealLogs.map(l => l.id !== log.id ? l : log),
+        totalCalories: prev.totalCalories - newCalories + log.calories,
+        totalProtein: prev.totalProtein - newProtein + log.protein,
+        totalCarbs: prev.totalCarbs - newCarbs + log.carbs,
+        totalFat: prev.totalFat - newFat + log.fat,
+      } : prev);
+    }
   }
 
   function changeDate(offset: number) {
@@ -250,7 +310,7 @@ export default function DashboardPage() {
                 >
                   😴 Rest Day
                 </button>
-                {data.splits.filter(s => s.name !== "Rest Day").map((split) => (
+                {(data.splits ?? []).filter(s => s.name !== "Rest Day").map((split) => (
                   <button
                     key={split.id}
                     onClick={() => saveGymStatus(true, split.name)}
@@ -292,13 +352,14 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-3">
                 {data.mealLogs.map((log) => {
-                  const isPiece = log.meal.servingLabel === "piece";
+                  const info = mealInfo(log);
+                  const isPiece = info.servingLabel === "piece";
                   const step = isPiece ? 1 : 0.5;
                   return (
                     <div key={log.id} className="rounded-xl bg-zinc-800 p-3">
                       <div className="mb-2 flex items-start justify-between">
                         <div>
-                          <p className="font-medium">{log.meal.name}</p>
+                          <p className="font-medium">{info.name}</p>
                           <p className="text-xs text-zinc-400">
                             {Math.round(log.calories)} kcal · P:{Math.round(log.protein)}g ·
                             C:{Math.round(log.carbs)}g · F:{Math.round(log.fat)}g
@@ -310,13 +371,13 @@ export default function DashboardPage() {
                         </button>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button onClick={() => adjustMeal(log, -step)} disabled={adjusting[log.id]}
-                          className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600 disabled:opacity-50">−</button>
+                        <button onClick={() => adjustMeal(log, -step)}
+                          className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600">−</button>
                         <span className="min-w-16 text-center text-sm font-medium">{formatQuantity(log)}</span>
-                        <button onClick={() => adjustMeal(log, step)} disabled={adjusting[log.id]}
-                          className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600 disabled:opacity-50">+</button>
+                        <button onClick={() => adjustMeal(log, step)}
+                          className="rounded-lg bg-zinc-700 px-3 py-1 text-sm hover:bg-zinc-600">+</button>
                         <span className="text-xs text-zinc-500">
-                          {isPiece ? "pieces" : log.meal.servingLabel}
+                          {isPiece ? "pieces" : info.servingLabel}
                         </span>
                       </div>
                     </div>
