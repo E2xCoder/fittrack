@@ -23,6 +23,14 @@ const TIMEZONES = [
   { value: "Australia/Sydney",    label: "Sidney (UTC+10/+11)" },
 ];
 
+function validateUsername(val: string): string | null {
+  if (!val) return null; // empty is allowed (no username)
+  if (val.length < 3) return "En az 3 karakter";
+  if (val.length > 20) return "En fazla 20 karakter";
+  if (!/^[a-zA-Z0-9_]+$/.test(val)) return "Sadece harf, rakam ve _ kullanilabilir";
+  return null;
+}
+
 export default function ProfilePage() {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -48,7 +56,10 @@ export default function ProfilePage() {
   });
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
   const [apiToken, setApiToken] = useState<string | null>(null);
   const [tokenCopied, setTokenCopied] = useState(false);
   const [generatingToken, setGeneratingToken] = useState(false);
@@ -124,25 +135,36 @@ export default function ProfilePage() {
     refreshNotifState();
   }, [refreshNotifState]);
 
-  function validateUsername(val: string): string | null {
-    if (!val) return null; // empty is allowed (no username)
-    if (val.length < 3)  return "En az 3 karakter";
-    if (val.length > 20) return "En fazla 20 karakter";
-    if (!/^[a-zA-Z0-9_]+$/.test(val)) return "Sadece harf, rakam ve _ kullanilabilir";
-    return null;
-  }
+  useEffect(() => {
+    if (loading || !hasChanges || validateUsername(form.username)) return;
 
-  async function save() {
-    const usernameErr = validateUsername(form.username);
-    if (usernameErr) { setUsernameError(usernameErr); return; }
-    setUsernameError(null);
-    await fetch("/api/user/goals", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    const timer = setTimeout(async () => {
+      setSaving(true);
+      setSaveError(false);
+      try {
+        const res = await fetch("/api/user/goals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+        if (!res.ok) throw new Error("Profile could not be saved");
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      } catch {
+        setSaveError(true);
+      } finally {
+        setSaving(false);
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [form, hasChanges, loading]);
+
+  function updateForm(patch: Partial<typeof form>) {
+    setForm((previous) => ({ ...previous, ...patch }));
+    setHasChanges(true);
+    setSaved(false);
+    setSaveError(false);
   }
 
   async function generateToken() {
@@ -280,7 +302,7 @@ export default function ProfilePage() {
             <div>
               <label className="mb-1 block text-xs text-zinc-400">Name</label>
               <input value={form.name}
-                onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                onChange={(e) => updateForm({ name: e.target.value })}
                 className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
                 placeholder="Your name" />
             </div>
@@ -288,14 +310,14 @@ export default function ProfilePage() {
               <div>
                 <label className="mb-1 block text-xs text-zinc-400">Height (cm)</label>
                 <input type="number" value={form.height}
-                  onChange={(e) => setForm((p) => ({ ...p, height: e.target.value }))}
+                  onChange={(e) => updateForm({ height: e.target.value })}
                   className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
                   placeholder="175" />
               </div>
               <div>
                 <label className="mb-1 block text-xs text-zinc-400">Weight (kg)</label>
                 <input type="number" step="0.1" value={form.weight}
-                  onChange={(e) => setForm((p) => ({ ...p, weight: e.target.value }))}
+                  onChange={(e) => updateForm({ weight: e.target.value })}
                   className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
                   placeholder="75" />
               </div>
@@ -316,7 +338,7 @@ export default function ProfilePage() {
               <div key={key}>
                 <label className="mb-1 block text-xs text-zinc-400">{label} ({unit})</label>
                 <input type="number" value={form[key as keyof typeof form] as string}
-                  onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))}
+                  onChange={(e) => updateForm({ [key]: e.target.value })}
                   className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
                   placeholder={placeholder} />
               </div>
@@ -336,7 +358,7 @@ export default function ProfilePage() {
               <div key={key}>
                 <label className="mb-1 block text-xs text-zinc-400">{label} ({unit})</label>
                 <input type="number" step="0.1" value={form[key as keyof typeof form] as string}
-                  onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))}
+                  onChange={(e) => updateForm({ [key]: e.target.value })}
                   className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
                   placeholder={placeholder} />
               </div>
@@ -350,7 +372,7 @@ export default function ProfilePage() {
           <p className="mb-3 text-xs text-zinc-500">Sabah bildirimleri bu saate gore gonderilir.</p>
           <select
             value={form.timezone ?? "Europe/Berlin"}
-            onChange={(e) => setForm(p => ({ ...p, timezone: e.target.value }))}
+            onChange={(e) => updateForm({ timezone: e.target.value })}
             className="w-full rounded-xl bg-zinc-800 p-3 text-sm text-white outline-none focus:ring-1 focus:ring-zinc-600"
           >
             <option value="Europe/Istanbul">Europe/Istanbul (UTC+3)</option>
@@ -401,7 +423,7 @@ export default function ProfilePage() {
                 value={form.username}
                 onChange={(e) => {
                   const v = e.target.value.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 20);
-                  setForm((p) => ({ ...p, username: v }));
+                  updateForm({ username: v });
                   setUsernameError(validateUsername(v));
                 }}
                 placeholder="kullanici_adi"
@@ -427,7 +449,7 @@ export default function ProfilePage() {
                 <span className="text-xs text-zinc-300">{label}</span>
                 <button
                   type="button"
-                  onClick={() => setForm((p) => ({ ...p, [key]: !p[key as keyof typeof p] }))}
+                  onClick={() => updateForm({ [key]: !form[key as keyof typeof form] })}
                   className={`relative h-5 w-9 rounded-full transition-colors ${
                     form[key as keyof typeof form] ? "bg-green-600" : "bg-zinc-700"
                   }`}
@@ -441,10 +463,11 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <button onClick={save}
-          className="w-full rounded-xl bg-green-600 py-3 font-semibold hover:bg-green-700">
-          {saved ? "Saved ✓" : "Save Profile"}
-        </button>
+        {(saving || saved || saveError) && (
+          <p className={`text-right text-xs ${saveError ? "text-red-400" : saved ? "text-green-400" : "text-zinc-500"}`} aria-live="polite">
+            {saveError ? "Save failed" : saved ? "Saved ✓" : "Saving..."}
+          </p>
+        )}
 
         {/* Push Notifications */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">

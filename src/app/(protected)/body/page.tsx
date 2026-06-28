@@ -282,6 +282,9 @@ function BodyContent() {
   const [history, setHistory] = useState<HistoryLog[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [loadedDate, setLoadedDate] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"daily" | "measurements" | "history">("daily");
 
   const [form, setForm] = useState({
@@ -311,6 +314,8 @@ function BodyContent() {
       setBodyLog({});
       setForm({ weight: "", steps: "", water: "", sleep: "", waist: "", chest: "", hip: "", arm: "", leg: "", bodyFat: "" });
     }
+    setHasChanges(false);
+    setLoadedDate(date);
   }
 
   async function fetchHistory() {
@@ -324,18 +329,37 @@ function BodyContent() {
     fetchHistory();
   }, [selectedDate]);
 
-  async function save() {
-    setSaving(true);
-    await fetch("/api/body", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, date: selectedDate }),
-    });
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-    fetchData(selectedDate);
-    fetchHistory();
+  useEffect(() => {
+    if (!hasChanges || loadedDate !== selectedDate) return;
+
+    const timer = setTimeout(async () => {
+      setSaving(true);
+      setSaveError(false);
+      try {
+        const res = await fetch("/api/body", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...form, date: selectedDate }),
+        });
+        if (!res.ok) throw new Error("Body data could not be saved");
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+        fetchHistory();
+      } catch {
+        setSaveError(true);
+      } finally {
+        setSaving(false);
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [form, hasChanges, loadedDate, selectedDate]);
+
+  function updateForm(key: keyof typeof form, value: string) {
+    setForm((previous) => ({ ...previous, [key]: value }));
+    setHasChanges(true);
+    setSaved(false);
+    setSaveError(false);
   }
 
   function changeDate(offset: number) {
@@ -408,14 +432,14 @@ function BodyContent() {
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
             <label className="mb-2 block text-sm font-medium">⚖️ Weight (kg)</label>
             <input type="number" step="0.1" placeholder="e.g. 75.5" value={form.weight}
-              onChange={(e) => setForm((p) => ({ ...p, weight: e.target.value }))}
+              onChange={(e) => updateForm("weight", e.target.value)}
               className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600" />
           </div>
 
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
             <label className="mb-2 block text-sm font-medium">👟 Steps</label>
             <input type="number" placeholder="e.g. 8000" value={form.steps}
-              onChange={(e) => setForm((p) => ({ ...p, steps: e.target.value }))}
+              onChange={(e) => updateForm("steps", e.target.value)}
               className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600 mb-3" />
             {steps > 0 && (
               <>
@@ -428,7 +452,7 @@ function BodyContent() {
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
             <label className="mb-2 block text-sm font-medium">💧 Water (L)</label>
             <input type="number" step="0.1" placeholder="e.g. 2.5" value={form.water}
-              onChange={(e) => setForm((p) => ({ ...p, water: e.target.value }))}
+              onChange={(e) => updateForm("water", e.target.value)}
               className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600 mb-3" />
             {form.water && (
               <ProgressBar value={Number(form.water)} target={userProfile.waterTarget ?? 2.5} color="bg-blue-500" unit="L" />
@@ -438,7 +462,7 @@ function BodyContent() {
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
             <label className="mb-2 block text-sm font-medium">😴 Sleep (hours)</label>
             <input type="number" step="0.5" placeholder="e.g. 7.5" value={form.sleep}
-              onChange={(e) => setForm((p) => ({ ...p, sleep: e.target.value }))}
+              onChange={(e) => updateForm("sleep", e.target.value)}
               className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600 mb-3" />
             {form.sleep && (
               <ProgressBar value={Number(form.sleep)} target={userProfile.sleepTarget ?? 8} color="bg-indigo-500" unit="hrs" />
@@ -462,7 +486,7 @@ function BodyContent() {
               <input type="number" step="0.1"
                 placeholder={`e.g. ${key === "bodyFat" ? "15" : "80"}`}
                 value={form[key as keyof typeof form]}
-                onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))}
+                onChange={(e) => updateForm(key as keyof typeof form, e.target.value)}
                 className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600" />
             </div>
           ))}
@@ -473,13 +497,10 @@ function BodyContent() {
         <CalendarView history={history} stepTarget={userProfile.stepTarget ?? 10000} />
       )}
 
-      {activeTab !== "history" && (
-        <button onClick={save} disabled={saving}
-          className={`mt-6 w-full rounded-xl py-3 font-semibold transition ${
-            saved ? "bg-green-800 text-green-300" : "bg-green-600 hover:bg-green-700"
-          } disabled:opacity-50`}>
-          {saved ? "Saved ✓" : saving ? "Saving..." : "Save"}
-        </button>
+      {activeTab !== "history" && (saving || saved || saveError) && (
+        <p className={`mt-4 text-right text-xs ${saveError ? "text-red-400" : saved ? "text-green-400" : "text-zinc-500"}`} aria-live="polite">
+          {saveError ? "Save failed" : saved ? "Saved ✓" : "Saving..."}
+        </p>
       )}
     </main>
   );
