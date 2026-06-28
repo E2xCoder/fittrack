@@ -28,21 +28,86 @@ model User {
   sleepTarget   Float?  @default(8)
   apiToken      String? @unique
 
-  meals          Meal[]
-  mealPacks      MealPack[]
-  mealLogs       MealLog[]
-  mealCategories UserMealCategory[]
-  dailyLogs      DailyLog[]
-  workouts       Workout[]
-  exercises      Exercise[]
-  userSplits     UserSplit[]
-  bodyLogs       BodyLog[]
-  weightLogs     WeightLog[]
-  progressPhotos ProgressPhoto[]
-  sessions       Session[]
-  accounts       Account[]
+  // Social
+  username      String?  @unique
+  isPublic      Boolean  @default(true)
+  shareSteps    Boolean  @default(true)
+  shareCalories Boolean  @default(true)
+  shareWorkout  Boolean  @default(true)
+  shareStreak   Boolean  @default(true)
+
+  // Timezone
+  timezone      String   @default("Europe/Berlin")
+
+  role                String   @default("USER")
+
+  onboardingCompleted Boolean  @default(false)
+  age                 Int?
+  gender              String?
+  activityLevel       String?
+  goal                String?
+  dietaryPreferences  String[]
+  mealsPerDay         Int?     @default(3)
+
+  meals              Meal[]
+  mealPacks          MealPack[]
+  mealLogs           MealLog[]
+  mealCategories     UserMealCategory[]
+  dailyLogs          DailyLog[]
+  workouts           Workout[]
+  exercises          Exercise[]
+  userSplits         UserSplit[]
+  bodyLogs           BodyLog[]
+  weightLogs         WeightLog[]
+  progressPhotos     ProgressPhoto[]
+  sessions           Session[]
+  accounts           Account[]
+  pushSubscriptions  PushSubscription[]
+  friendships        Friendship[]       @relation("UserFriends")
+  friendOf           Friendship[]       @relation("FriendOf")
+  weeklyChallenges   WeeklyChallenge[]
 
   @@map("user")
+}
+
+model Friendship {
+  id        String   @id @default(cuid())
+  userId    String
+  friendId  String
+  status    String   @default("pending") // pending | accepted | rejected
+  createdAt DateTime @default(now())
+
+  user   User @relation("UserFriends", fields: [userId],   references: [id], onDelete: Cascade)
+  friend User @relation("FriendOf",    fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+  @@index([userId])
+  @@index([friendId])
+}
+
+model WeeklyChallenge {
+  id        String   @id @default(cuid())
+  userId    String
+  weekStart DateTime
+  steps     Int      @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStart])
+  @@index([userId])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model UserMealCategory {
@@ -109,6 +174,7 @@ model Meal {
   servingLabel String  @default("piece")
   ingredients  String?
   imageUrl     String?
+  orderIndex   Int      @default(0)
   categoryId   String?
   isFavorite   Boolean  @default(false)
   createdAt    DateTime @default(now())

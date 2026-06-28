@@ -27,7 +27,11 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const today = getTodayInTimezone();
+  const userTzRow = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { timezone: true },
+  });
+  const today = getTodayInTimezone(userTzRow?.timezone ?? "Europe/Berlin");
   const split = body.split ?? "Rest Day";
 
   // Find existing workout for today AND this specific split
