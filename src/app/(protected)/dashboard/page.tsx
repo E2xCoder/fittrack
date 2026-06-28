@@ -188,7 +188,7 @@ function QuickLinkCard({
   description: string;
 }) {
   return (
-    <Link href={href} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 transition hover:border-zinc-700 hover:bg-zinc-800/80">
+    <Link href={href} className="block w-full rounded-2xl border border-zinc-800 bg-zinc-900 p-4 transition hover:border-zinc-700 hover:bg-zinc-800/80">
       <p className="font-medium text-white">{title}</p>
       <p className="mt-1 text-sm text-zinc-400">{description}</p>
     </Link>
