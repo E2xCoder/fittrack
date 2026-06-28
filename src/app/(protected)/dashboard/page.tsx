@@ -178,6 +178,23 @@ function StatCard({
   );
 }
 
+function QuickLinkCard({
+  href,
+  title,
+  description,
+}: {
+  href: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <Link href={href} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 transition hover:border-zinc-700 hover:bg-zinc-800/80">
+      <p className="font-medium text-white">{title}</p>
+      <p className="mt-1 text-sm text-zinc-400">{description}</p>
+    </Link>
+  );
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -473,9 +490,9 @@ export default function DashboardPage() {
                   note={`${Math.max(data.goals.steps - data.steps, 0).toLocaleString()} left to goal`}
                 />
                 <StatCard
-                  label="Body"
-                  value={data.latestWeightLog?.weight ? `${data.latestWeightLog.weight} kg` : "No weigh-in"}
-                  note={summary.latestWeightDate ? formatRelativeDate(summary.latestWeightDate) : "Weekly check-ins work best here"}
+                  label="Workout"
+                  value={data.isGymDay ? (data.gymSplit ?? "Gym day") : "Not marked"}
+                  note={data.isGymDay ? "Training is already set for today" : "Set gym or rest day"}
                 />
               </div>
             </div>
@@ -606,31 +623,40 @@ export default function DashboardPage() {
               </div>
 
               <div className="rounded-[28px] border border-zinc-800 bg-zinc-950 p-5">
-                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Body snapshot</p>
-                <h2 className="mt-1 text-xl font-semibold">Keep check-ins lightweight</h2>
+                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Quick access</p>
+                <h2 className="mt-1 text-xl font-semibold">Jump where the detail belongs</h2>
 
                 <div className="mt-4 space-y-3">
-                  <div className="rounded-2xl bg-zinc-900 p-4">
-                    <p className="text-xs text-zinc-500">Latest weigh-in</p>
-                    <p className="mt-1 text-lg font-semibold">
-                      {data.latestWeightLog?.weight ? `${data.latestWeightLog.weight} kg` : "No entry yet"}
-                    </p>
-                    <p className="mt-1 text-xs text-zinc-400">
-                      {summary.latestWeightDate ? formatRelativeDate(summary.latestWeightDate) : "Weekly is enough here."}
-                    </p>
+                  <QuickLinkCard
+                    href={`/meals?date=${selectedDate}`}
+                    title="Meals"
+                    description={data.mealLogs.length > 0 ? `${data.mealLogs.length} meals logged today` : "Open meal logging and library"}
+                  />
+                  <QuickLinkCard
+                    href={`/workout`}
+                    title="Workout"
+                    description={data.isGymDay ? `Today is marked as ${data.gymSplit ?? "gym day"}` : "Open workout flow and history"}
+                  />
+                  <div className="rounded-2xl border border-dashed border-zinc-700 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-white">Body</p>
+                        <p className="mt-1 text-sm text-zinc-400">
+                          {summary.latestWeightDate
+                            ? `${data.latestWeightLog?.weight ?? "--"} kg • ${formatRelativeDate(summary.latestWeightDate)}`
+                            : "Weekly check-ins live in the body page"}
+                        </p>
+                        <p className="mt-2 text-xs text-zinc-500">
+                          {summary.latestMeasurementDate
+                            ? `Measurements: ${formatRelativeDate(summary.latestMeasurementDate)}`
+                            : "Measurements stay separate so this dashboard stays focused on today"}
+                        </p>
+                      </div>
+                      <Link href={`/body?date=${selectedDate}`} className="rounded-xl bg-zinc-800 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-700">
+                        Open
+                      </Link>
+                    </div>
                   </div>
-                  <div className="rounded-2xl bg-zinc-900 p-4">
-                    <p className="text-xs text-zinc-500">Measurement rhythm</p>
-                    <p className="mt-1 text-lg font-semibold">
-                      {summary.latestMeasurementDate ? "Tracked" : "Optional"}
-                    </p>
-                    <p className="mt-1 text-xs text-zinc-400">
-                      {summary.latestMeasurementDate ? formatRelativeDate(summary.latestMeasurementDate) : "Every 2 to 4 weeks is enough."}
-                    </p>
-                  </div>
-                  <Link href={`/body?date=${selectedDate}`} className="block rounded-2xl border border-dashed border-zinc-700 p-4 text-sm text-zinc-300 hover:border-zinc-500">
-                    Open body check-ins
-                  </Link>
                 </div>
               </div>
             </div>
