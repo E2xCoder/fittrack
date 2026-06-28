@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 interface UserProfile {
@@ -37,6 +37,13 @@ type BodyForm = {
   arm: string;
   leg: string;
   bodyFat: string;
+};
+
+type BodyAiSummary = {
+  summary: string;
+  trends: string[];
+  focus: string[];
+  caution: string | null;
 };
 
 const EMPTY_FORM: BodyForm = {
@@ -394,8 +401,16 @@ function BodyContent() {
   const [loadedDate, setLoadedDate] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"today" | "checkin" | "progress">("today");
   const [form, setForm] = useState<BodyForm>(EMPTY_FORM);
+  const [aiSummary, setAiSummary] = useState<BodyAiSummary | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const aiRequestId = useRef(0);
 
   async function fetchData(date: string) {
+    aiRequestId.current += 1;
+    setAiSummary(null);
+    setAiError("");
+    setAiLoading(false);
     const response = await fetch(`/api/body?date=${date}`);
     const data = await response.json();
 
@@ -465,10 +480,62 @@ function BodyContent() {
   }, [form, hasChanges, loadedDate, selectedDate]);
 
   function updateForm(key: keyof BodyForm, value: string) {
+    aiRequestId.current += 1;
     setForm((previous) => ({ ...previous, [key]: value }));
+    setAiSummary(null);
+    setAiError("");
+    setAiLoading(false);
     setHasChanges(true);
     setSaved(false);
     setSaveError(false);
+  }
+
+  async function generateAiSummary() {
+    const checkIn = {
+      weight: form.weight,
+      bodyFat: form.bodyFat,
+      waist: form.waist,
+      chest: form.chest,
+      hip: form.hip,
+      arm: form.arm,
+      leg: form.leg,
+    };
+
+    if (!Object.values(checkIn).some(Boolean)) {
+      setAiError("Add at least one weight, body-fat, or measurement value first.");
+      return;
+    }
+
+    setAiLoading(true);
+    setAiError("");
+    const requestId = ++aiRequestId.current;
+
+    try {
+      const response = await fetch("/api/body-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: selectedDate, checkIn }),
+      });
+      const json = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(typeof json?.error === "string" ? json.error : "Body check-in summary failed.");
+      }
+
+      if (requestId !== aiRequestId.current) return;
+
+      setAiSummary({
+        summary: typeof json.summary === "string" ? json.summary : "Check-in recorded.",
+        trends: Array.isArray(json.trends) ? json.trends : [],
+        focus: Array.isArray(json.focus) ? json.focus : [],
+        caution: typeof json.caution === "string" ? json.caution : null,
+      });
+    } catch (error) {
+      if (requestId !== aiRequestId.current) return;
+      setAiError(error instanceof Error ? error.message : "Body check-in summary failed.");
+    } finally {
+      if (requestId === aiRequestId.current) setAiLoading(false);
+    }
   }
 
   function changeDate(offset: number) {
@@ -759,6 +826,62 @@ function BodyContent() {
               <MetricInput label="Arm (cm)" hint="Optional" value={form.arm} step="0.1" onChange={(value) => updateForm("arm", value)} />
               <MetricInput label="Leg (cm)" hint="Optional" value={form.leg} step="0.1" onChange={(value) => updateForm("leg", value)} />
             </div>
+          </div>
+
+          <div className="rounded-[28px] border border-sky-500/20 bg-sky-500/5 p-5 lg:col-span-2">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-sky-300/80">AI check-in summary</p>
+                <h2 className="mt-1 text-xl font-semibold">A short read on your latest numbers.</h2>
+                <p className="mt-1 text-sm text-zinc-400">Runs only when you ask. Editing or autosaving a value never calls AI.</p>
+              </div>
+              <button
+                onClick={() => void generateAiSummary()}
+                disabled={aiLoading}
+                className="shrink-0 rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-sky-400 disabled:opacity-50"
+              >
+                {aiLoading ? "Analyzing..." : aiSummary ? "Refresh summary" : "Analyze check-in"}
+              </button>
+            </div>
+
+            {aiError && (
+              <p className="mt-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-200" aria-live="polite">
+                {aiError}
+              </p>
+            )}
+
+            {aiSummary && (
+              <div className="mt-5 space-y-4" aria-live="polite">
+                <p className="text-sm text-zinc-200">{aiSummary.summary}</p>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  {aiSummary.trends.length > 0 && (
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-emerald-400">What changed</p>
+                      <div className="space-y-2">
+                        {aiSummary.trends.map((item) => <p key={item} className="text-sm text-zinc-300">{item}</p>)}
+                      </div>
+                    </div>
+                  )}
+
+                  {aiSummary.focus.length > 0 && (
+                    <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-sky-400">Keep in focus</p>
+                      <div className="space-y-2">
+                        {aiSummary.focus.map((item) => <p key={item} className="text-sm text-zinc-300">{item}</p>)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {aiSummary.caution && (
+                  <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-amber-400">Worth rechecking</p>
+                    <p className="mt-1 text-sm text-amber-100">{aiSummary.caution}</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
