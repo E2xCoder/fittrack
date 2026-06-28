@@ -48,18 +48,6 @@ interface Exercise {
   sets: ExerciseSet[];
 }
 
-interface PreviousSet {
-  weight: number | null;
-  reps: number | null;
-  sets: number | null;
-  rpe: number | null;
-}
-
-interface PreviousPerformance {
-  date: string;
-  sets: PreviousSet[];
-}
-
 interface OverloadBest {
   weight: number;
   reps: number;
@@ -70,6 +58,13 @@ interface OverloadData {
   prevBestSet: OverloadBest | null;
   suggestion: string | null;
   isPR: boolean;
+}
+
+interface WorkoutAIRecap {
+  summary: string;
+  wins: string[];
+  focus: string[];
+  caution: string | null;
 }
 
 type SaveStatus = "idle" | "saving" | "saved";
@@ -262,11 +257,13 @@ export default function WorkoutPage() {
   const [splitLoading, setSplitLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [notes, setNotes] = useState("");
-  const [previousPerf, setPreviousPerf] = useState<Record<string, PreviousPerformance>>({});
   const [overloadData, setOverloadData] = useState<Record<string, OverloadData>>({});
   const [showSplitManager, setShowSplitManager] = useState(false);
   const [newSplitName, setNewSplitName] = useState("");
   const [newSplitEmoji, setNewSplitEmoji] = useState("🏋️");
+  const [aiRecap, setAiRecap] = useState<WorkoutAIRecap | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
 
   const inputRef      = useRef<HTMLInputElement>(null);
   const isReadyRef    = useRef(false);
@@ -276,9 +273,11 @@ export default function WorkoutPage() {
   const notesRef      = useRef("");
   const splitRef      = useRef("");
 
-  exercisesRef.current = exercises;
-  notesRef.current     = notes;
-  splitRef.current     = selectedSplit;
+  useEffect(() => {
+    exercisesRef.current = exercises;
+    notesRef.current = notes;
+    splitRef.current = selectedSplit;
+  }, [exercises, notes, selectedSplit]);
 
   // dnd-kit sensors — require 8px drag before activating (prevents accidental drags)
   const sensors = useSensors(
@@ -385,6 +384,7 @@ export default function WorkoutPage() {
                 : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
             }));
             setExercises(loaded);
+            // eslint-disable-next-line react-hooks/immutability
             loaded.forEach((ex) => fetchOverload(ex.name));
           }
         }
@@ -394,7 +394,6 @@ export default function WorkoutPage() {
       isReadyRef.current = true;
     }
     init();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Splits ─────────────────────────────────────────────────────────────────
@@ -486,14 +485,6 @@ export default function WorkoutPage() {
     scheduleSave(300);
   }
 
-  async function fetchPrevious(exerciseName: string) {
-    const res  = await fetch(`/api/workouts/previous?exercise=${encodeURIComponent(exerciseName)}`);
-    const data = await res.json();
-    if (data.previous) {
-      setPreviousPerf((prev) => ({ ...prev, [exerciseName]: data.previous }));
-    }
-  }
-
   async function fetchOverload(exerciseName: string) {
     try {
       const res  = await fetch(`/api/workout/previous?exerciseName=${encodeURIComponent(exerciseName)}`);
@@ -554,6 +545,53 @@ export default function WorkoutPage() {
 
   const isRestDay      = selectedSplit === "Rest Day";
   const selectedSplitObj = splits.find((s) => s.name === selectedSplit);
+  const canAnalyzeWorkout = exercises.some((exercise) =>
+    exercise.sets.some((set) => set.weight.trim() || set.reps.trim())
+  );
+
+  async function generateAiRecap() {
+    if (!canAnalyzeWorkout || isRestDay) {
+      setAiError("Once you log at least one working set, AI recap can analyze the session.");
+      setAiRecap(null);
+      return;
+    }
+
+    setAiLoading(true);
+    setAiError("");
+
+    try {
+      const response = await fetch("/api/workout-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          split: selectedSplit,
+          notes,
+          exercises: exercises.map((exercise) => ({
+            name: exercise.name,
+            sets: exercise.sets.map((set) => ({
+              weight: Number(set.weight) || null,
+              reps: Number(set.reps) || null,
+              sets: Number(set.sets) || 1,
+              rpe: Number(set.rpe) || null,
+            })),
+          })),
+          overloadData,
+        }),
+      });
+
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(typeof json?.error === "string" ? json.error : "Workout recap failed.");
+      }
+
+      setAiRecap(json as WorkoutAIRecap);
+    } catch (error) {
+      setAiRecap(null);
+      setAiError(error instanceof Error ? error.message : "Workout recap failed.");
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -574,9 +612,16 @@ export default function WorkoutPage() {
               </span>
             )}
           </div>
-          <p className="text-xs text-zinc-500">Log today's session</p>
+          <p className="text-xs text-zinc-500">Log today&apos;s session</p>
         </div>
         <div className="flex gap-1.5">
+          <button
+            onClick={() => void generateAiRecap()}
+            disabled={aiLoading || !canAnalyzeWorkout || isRestDay}
+            className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-400 hover:text-white transition-colors disabled:opacity-40"
+          >
+            {aiLoading ? "AI..." : "AI Recap"}
+          </button>
           <Link
             href="/workout/history"
             className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-400 hover:text-white transition-colors"
@@ -674,6 +719,61 @@ export default function WorkoutPage() {
       )}
 
       {/* ── Exercise section ── */}
+      {!isRestDay && (aiRecap || aiError) && (
+        <div className="mb-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">AI Recap</p>
+              <p className="text-sm text-zinc-400">Manual on purpose, so it stays useful without burning credits.</p>
+            </div>
+            <button
+              onClick={() => void generateAiRecap()}
+              disabled={aiLoading || !canAnalyzeWorkout}
+              className="rounded-xl bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-700 disabled:opacity-40"
+            >
+              {aiLoading ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
+
+          {aiError ? (
+            <p className="text-sm text-amber-400">{aiError}</p>
+          ) : aiRecap ? (
+            <div className="space-y-3">
+              <p className="text-sm text-zinc-200">{aiRecap.summary}</p>
+
+              {aiRecap.wins.length > 0 && (
+                <div>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-green-400">Wins</p>
+                  <div className="space-y-1">
+                    {aiRecap.wins.map((item) => (
+                      <p key={item} className="text-sm text-zinc-300">{item}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {aiRecap.focus.length > 0 && (
+                <div>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-blue-400">Focus next</p>
+                  <div className="space-y-1">
+                    {aiRecap.focus.map((item) => (
+                      <p key={item} className="text-sm text-zinc-300">{item}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {aiRecap.caution && (
+                <div className="rounded-xl border border-amber-900/40 bg-amber-950/30 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-amber-400">Watch-out</p>
+                  <p className="mt-1 text-sm text-amber-100">{aiRecap.caution}</p>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+      )}
+
       {!isRestDay && (
         <>
           {/* Search */}
@@ -717,7 +817,7 @@ export default function WorkoutPage() {
                     onClick={() => addExercise(newExerciseName)}
                     className="flex w-full items-center px-4 py-2.5 text-left text-sm text-green-400 hover:bg-zinc-800 transition-colors border-t border-zinc-800"
                   >
-                    + Add "{newExerciseName}" as custom
+                    + Add &quot;{newExerciseName}&quot; as custom
                   </button>
                 )}
               </div>
