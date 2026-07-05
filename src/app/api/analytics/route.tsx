@@ -66,6 +66,9 @@ export async function GET(req: NextRequest) {
     const carbs = log?.totalCarbs ?? 0;
     const fat = log?.totalFat ?? 0;
     const steps = bodyLog?.steps ?? 0;
+    const water = bodyLog?.water ?? 0;
+    const sleep = bodyLog?.sleep ?? 0;
+    const weight = bodyLog?.weight ?? null;
     const caloriesBurned = bodyLog?.caloriesBurned ?? 0;
     const netCalories = calories - caloriesBurned;
     const deficit = goals.calories - netCalories;
@@ -88,6 +91,9 @@ export async function GET(req: NextRequest) {
       carbs,
       fat,
       steps,
+      water,
+      sleep,
+      weight,
       caloriesBurned,
       netCalories,
       deficit,
@@ -186,6 +192,53 @@ export async function GET(req: NextRequest) {
   }
   longestStreak = Math.max(longestStreak, runStreak);
 
+  // ── Week-over-week: trailing 7 days vs the 7 before, independent of period ──
+  const wowStart = new Date(today);
+  wowStart.setDate(today.getDate() - 13);
+  wowStart.setHours(0, 0, 0, 0);
+
+  const [wowDaily, wowBody] = await Promise.all([
+    prisma.dailyLog.findMany({
+      where: { userId, date: { gte: wowStart, lte: today } },
+      select: { date: true, totalCalories: true, totalProtein: true },
+    }),
+    prisma.bodyLog.findMany({
+      where: { userId, date: { gte: wowStart, lte: today } },
+      select: { date: true, steps: true },
+    }),
+  ]);
+
+  function avgOver(startOffset: number, endOffset: number) {
+    // offsets are days-ago (inclusive start, exclusive-ish end)
+    const s = new Date(today);
+    s.setDate(today.getDate() - startOffset);
+    const e = new Date(today);
+    e.setDate(today.getDate() - endOffset);
+    const inRange = (d: Date) => d >= s && d <= e;
+    const cals = wowDaily.filter((l) => inRange(new Date(l.date)) && l.totalCalories > 0);
+    const prot = wowDaily.filter((l) => inRange(new Date(l.date)) && l.totalProtein > 0);
+    const stp = wowBody.filter((l) => inRange(new Date(l.date)) && (l.steps ?? 0) > 0);
+    const mean = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
+    return {
+      calories: Math.round(mean(cals.map((l) => l.totalCalories))),
+      protein: Math.round(mean(prot.map((l) => l.totalProtein))),
+      steps: Math.round(mean(stp.map((l) => l.steps ?? 0))),
+    };
+  }
+
+  const thisWeek = avgOver(6, 0);
+  const lastWeek = avgOver(13, 7);
+  const pctChange = (cur: number, prev: number) =>
+    prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null;
+
+  const wow = {
+    calories: pctChange(thisWeek.calories, lastWeek.calories),
+    protein: pctChange(thisWeek.protein, lastWeek.protein),
+    steps: pctChange(thisWeek.steps, lastWeek.steps),
+  };
+
+  const consistencyScore = loggingRate; // % of period days with any log
+
   // Verdicts
   const verdicts: string[] = [];
   if (loggedCount === 0) {
@@ -242,7 +295,9 @@ export async function GET(req: NextRequest) {
       gymFrequency,
       currentStreak,
       longestStreak,
+      consistencyScore,
     },
+    wow,
     verdicts,
   });
 }
