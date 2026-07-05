@@ -2,6 +2,17 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import {
+  AreaChart,
+  Area,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import { METRICS } from "@/lib/metrics";
 
 interface UserProfile {
   height?: number;
@@ -90,87 +101,139 @@ function dueClasses(state: "fresh" | "soon" | "overdue") {
   return "border-emerald-500/30 bg-emerald-500/10 text-emerald-200";
 }
 
-function progressTone(value: number, target: number) {
-  if (value >= target) return "bg-emerald-400";
-  if (value >= target * 0.7) return "bg-amber-400";
-  return "bg-sky-400";
-}
+type WeightRange = "1W" | "1M" | "3M" | "6M" | "1Y" | "ALL";
+const RANGE_DAYS: Record<WeightRange, number> = {
+  "1W": 7, "1M": 30, "3M": 90, "6M": 180, "1Y": 365, "ALL": 100000,
+};
 
-function ProgressBar({
-  value,
-  target,
-  unit,
-}: {
-  value: number;
-  target: number;
-  unit: string;
-}) {
-  const pct = Math.min((value / target) * 100, 100);
-
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function WeightTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0].payload;
   return (
-    <div>
-      <div className="mb-1 flex justify-between text-xs text-zinc-400">
-        <span>{value} {unit}</span>
-        <span>/ {target} {unit}</span>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
-        <div
-          className={`h-full rounded-full ${progressTone(value, target)}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+    <div className="rounded-xl border border-zinc-700 bg-zinc-900/95 p-2.5 shadow-xl backdrop-blur">
+      <p className="text-[11px] text-zinc-400">{p.label}</p>
+      <p className="text-sm font-bold text-white tabular-nums">{p.weight} kg</p>
+      {p.trend != null && (
+        <p className="text-[11px]" style={{ color: METRICS.protein.hex }}>Trend {p.trend.toFixed(1)} kg</p>
+      )}
     </div>
   );
 }
 
 function WeightChart({ data }: { data: HistoryLog[] }) {
-  const weights = data
-    .filter((entry) => entry.weight)
-    .map((entry) => ({ date: entry.date, weight: Number(entry.weight) }));
+  const [range, setRange] = useState<WeightRange>("3M");
 
-  if (weights.length < 2) {
-    return <p className="py-4 text-center text-xs text-zinc-500">Add at least 2 weigh-ins to see the trend.</p>;
-  }
+  const allWeights = useMemo(
+    () =>
+      data
+        .filter((e) => e.weight)
+        .map((e) => ({ date: e.date.slice(0, 10), weight: Number(e.weight) }))
+        .sort((a, b) => a.date.localeCompare(b.date)),
+    [data]
+  );
 
-  const min = Math.min(...weights.map((entry) => entry.weight)) - 0.5;
-  const max = Math.max(...weights.map((entry) => entry.weight)) + 0.5;
-  const range = max - min || 1;
-  const width = 300;
-  const height = 90;
+  const points = useMemo(() => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - RANGE_DAYS[range]);
+    const cutoffStr = cutoff.toLocaleDateString("en-CA");
+    const filtered = range === "ALL" ? allWeights : allWeights.filter((w) => w.date >= cutoffStr);
 
-  const points = weights.map((entry, index) => ({
-    x: weights.length === 1 ? width / 2 : (index / (weights.length - 1)) * (width - 20) + 10,
-    y: height - 12 - ((entry.weight - min) / range) * (height - 24),
-    ...entry,
-  }));
+    // 5-point trailing moving average for the trend line.
+    const window = 5;
+    return filtered.map((w, i) => {
+      const slice = filtered.slice(Math.max(0, i - window + 1), i + 1);
+      const trend = slice.reduce((s, v) => s + v.weight, 0) / slice.length;
+      return {
+        ...w,
+        label: new Date(`${w.date}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+        trend: Math.round(trend * 10) / 10,
+      };
+    });
+  }, [allWeights, range]);
 
-  const line = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
-  const area = `${line} L ${points[points.length - 1].x} ${height} L ${points[0].x} ${height} Z`;
-  const delta = weights[weights.length - 1].weight - weights[0].weight;
+  const RANGES: WeightRange[] = ["1W", "1M", "3M", "6M", "1Y", "ALL"];
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between text-xs">
-        <span className="text-zinc-500">{weights[0].weight} to {weights[weights.length - 1].weight} kg</span>
-        <span className={delta < 0 ? "text-emerald-400" : delta > 0 ? "text-amber-300" : "text-zinc-400"}>
-          {delta > 0 ? "+" : ""}
-          {delta.toFixed(1)} kg
-        </span>
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-sm font-semibold text-white">Weight trend</p>
+        <div className="flex gap-0.5 rounded-lg border border-zinc-800 bg-zinc-900 p-0.5">
+          {RANGES.map((r) => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              className={`rounded-md px-2 py-1 text-[11px] font-semibold transition ${
+                range === r ? "bg-zinc-700 text-white" : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-28 w-full" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="weight-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d={area} fill="url(#weight-fill)" />
-        <path d={line} fill="none" stroke="#38bdf8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-        {points.map((point) => (
-          <circle key={point.date} cx={point.x} cy={point.y} r="3" fill="#38bdf8" />
-        ))}
-      </svg>
+      {points.length < 2 ? (
+        <p className="py-10 text-center text-xs text-zinc-500">
+          Add at least 2 weigh-ins in this range to see the trend.
+        </p>
+      ) : (
+        <>
+          <div className="mb-2 flex items-baseline gap-2">
+            <span className="text-2xl font-bold tabular-nums text-white">
+              {points[points.length - 1].weight}
+              <span className="ml-1 text-sm font-medium text-zinc-500">kg</span>
+            </span>
+            {(() => {
+              const delta = points[points.length - 1].weight - points[0].weight;
+              return (
+                <span
+                  className="text-sm font-semibold tabular-nums"
+                  style={{ color: delta < 0 ? "#22c55e" : delta > 0 ? "#f59e0b" : "#a1a1aa" }}
+                >
+                  {delta > 0 ? "▲ +" : delta < 0 ? "▼ " : ""}
+                  {delta.toFixed(1)} kg
+                </span>
+              );
+            })()}
+          </div>
+
+          <ResponsiveContainer width="100%" height={300}>
+            <AreaChart data={points} margin={{ left: -18, right: 8, top: 8, bottom: 0 }}>
+              <defs>
+                <linearGradient id="weight-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={METRICS.protein.hex} stopOpacity={0.3} />
+                  <stop offset="100%" stopColor={METRICS.protein.hex} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#71717a" }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={24} />
+              <YAxis domain={["dataMin - 1", "dataMax + 1"]} tick={{ fontSize: 10, fill: "#71717a" }} axisLine={false} tickLine={false} width={38} />
+              <Tooltip content={<WeightTooltip />} />
+              <Area
+                type="monotone"
+                dataKey="weight"
+                name="Weight"
+                stroke={METRICS.protein.hex}
+                strokeWidth={2.2}
+                fill="url(#weight-fill)"
+                dot={{ r: 2.5, fill: METRICS.protein.hex }}
+                activeDot={{ r: 4 }}
+              />
+              {/* Moving-average trend line */}
+              <Line type="monotone" dataKey="trend" name="Trend" stroke="#a1a1aa" strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+          <div className="mt-2 flex justify-center gap-4 text-[11px] text-zinc-500">
+            <span className="flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: METRICS.protein.hex }} /> Weight
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-0.5 w-3" style={{ backgroundColor: "#a1a1aa" }} /> Trend (avg)
+            </span>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -344,16 +407,29 @@ function StatusPill({
   value,
   note,
   tone,
+  trend,
 }: {
   title: string;
   value: string;
   note: string;
   tone: "fresh" | "soon" | "overdue";
+  trend?: { value: number; unit: string };
 }) {
   return (
     <div className={`rounded-2xl border p-4 ${dueClasses(tone)}`}>
       <p className="text-xs uppercase tracking-[0.18em] text-zinc-300/70">{title}</p>
-      <p className="mt-3 text-xl font-semibold text-white">{value}</p>
+      <div className="mt-3 flex items-baseline gap-2">
+        <p className="text-xl font-semibold text-white">{value}</p>
+        {trend && trend.value !== 0 && (
+          <span
+            className="text-sm font-semibold tabular-nums"
+            style={{ color: trend.value < 0 ? "#22c55e" : "#f59e0b" }}
+          >
+            {trend.value < 0 ? "▼ " : "▲ +"}
+            {Math.abs(trend.value).toFixed(1)} {trend.unit}
+          </span>
+        )}
+      </div>
       <p className="mt-1 text-sm text-zinc-300">{note}</p>
     </div>
   );
@@ -384,6 +460,83 @@ function MetricInput({
         className="w-full rounded-xl bg-zinc-800 p-3 outline-none transition focus:ring-1 focus:ring-zinc-600"
       />
     </label>
+  );
+}
+
+function HabitCard({
+  icon,
+  label,
+  value,
+  target,
+  unit,
+  color,
+  step,
+  decimals = 0,
+  onChange,
+}: {
+  icon: string;
+  label: string;
+  value: number;
+  target: number;
+  unit: string;
+  color: string;
+  step: number;
+  decimals?: number;
+  onChange: (value: string) => void;
+}) {
+  const pct = Math.min((value / (target || 1)) * 100, 100);
+  const fmt = (n: number) => (decimals ? n.toFixed(decimals) : String(Math.round(n)));
+  const bump = (delta: number) => {
+    const next = Math.max(0, Math.round((value + delta) * 100) / 100);
+    onChange(next === 0 ? "" : String(next));
+  };
+  return (
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">{icon}</span>
+          <span className="text-sm font-medium text-zinc-300">{label}</span>
+        </div>
+        <span className="text-xs tabular-nums text-zinc-500">
+          {value >= target && value > 0 ? "✓ hedef" : `${fmt(Math.max(target - value, 0))} ${unit} kaldı`}
+        </span>
+      </div>
+      <div className="mb-3 flex items-baseline gap-1">
+        <span className="text-2xl font-bold tabular-nums" style={{ color: value > 0 ? color : undefined }}>
+          {value > 0 ? fmt(value) : "—"}
+        </span>
+        <span className="text-sm text-zinc-500">/ {fmt(target)} {unit}</span>
+      </div>
+      <div className="mb-3 h-2 overflow-hidden rounded-full bg-zinc-800">
+        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: color }} />
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => bump(-step)}
+          disabled={value <= 0}
+          aria-label={`${label} azalt`}
+          className="h-8 w-8 rounded-lg bg-zinc-800 text-sm font-bold text-zinc-200 hover:bg-zinc-700 disabled:opacity-30"
+        >
+          −
+        </button>
+        <input
+          type="number"
+          value={value > 0 ? fmt(value) : ""}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="0"
+          aria-label={`${label} değeri`}
+          className="h-8 flex-1 rounded-lg bg-zinc-800 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600"
+        />
+        <button
+          onClick={() => bump(step)}
+          aria-label={`${label} artır`}
+          className="h-8 w-8 rounded-lg text-sm font-bold text-white hover:opacity-90"
+          style={{ backgroundColor: color }}
+        >
+          +
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -438,7 +591,7 @@ function BodyContent() {
   }
 
   async function fetchHistory() {
-    const response = await fetch("/api/body/history?days=120");
+    const response = await fetch("/api/body/history?days=1825");
     const data = await response.json();
     setHistory(data);
   }
@@ -595,24 +748,28 @@ function BodyContent() {
     form.bodyFat && `Body fat ${form.bodyFat}%`,
   ].filter(Boolean) as string[];
 
-  const insights = [
+  type InsightTone = "positive" | "warning" | "tip";
+  const INSIGHT_ICON: Record<InsightTone, string> = { positive: "✅", warning: "⚠️", tip: "💡" };
+  const INSIGHT_COLOR: Record<InsightTone, string> = { positive: "#22c55e", warning: "#f59e0b", tip: "#6366f1" };
+
+  const insights: { tone: InsightTone; text: string; action?: () => void }[] = [
     stepsValue > 0
       ? stepsValue >= (userProfile.stepTarget ?? 10000)
-        ? "You hit your daily steps target today."
-        : `${(userProfile.stepTarget ?? 10000) - stepsValue} steps left to hit your target.`
-      : "Steps are still empty today.",
+        ? { tone: "positive", text: "You hit your daily steps target today." }
+        : { tone: "tip", text: `${(userProfile.stepTarget ?? 10000) - stepsValue} steps left to hit your target.`, action: () => setActiveTab("today") }
+      : { tone: "warning", text: "Steps are still empty today — tap to log.", action: () => setActiveTab("today") },
     lastWeight
       ? weightDelta === null
-        ? `${formatRelative(lastWeight.date)}. Add one more weigh-in to unlock a trend.`
+        ? { tone: "tip", text: `${formatRelative(lastWeight.date)}. Add one more weigh-in to unlock a trend.`, action: () => setActiveTab("checkin") }
         : weightDelta < 0
-          ? `Latest weigh-in is down ${Math.abs(weightDelta).toFixed(1)} kg from the previous check-in.`
+          ? { tone: "positive", text: `Latest weigh-in is down ${Math.abs(weightDelta).toFixed(1)} kg from the previous check-in.` }
           : weightDelta > 0
-            ? `Latest weigh-in is up ${weightDelta.toFixed(1)} kg from the previous check-in.`
-            : "Your last two weigh-ins were the same."
-      : "No weigh-ins yet. A weekly check-in is enough to get started.",
+            ? { tone: "warning", text: `Latest weigh-in is up ${weightDelta.toFixed(1)} kg from the previous check-in.` }
+            : { tone: "tip", text: "Your last two weigh-ins were the same." }
+      : { tone: "warning", text: "Weigh-in overdue — a weekly check-in is enough to start.", action: () => setActiveTab("checkin") },
     measurementSummary.length > 0
-      ? `Measurements are grouped in one place now so they feel like a check-in, not daily admin.`
-      : "Measurements are optional here. Logging them every 2 to 4 weeks is enough.",
+      ? { tone: "positive", text: "Measurements are grouped as a check-in, not daily admin." }
+      : { tone: "tip", text: "Measurements are optional — every 2 to 4 weeks is enough.", action: () => setActiveTab("checkin") },
   ];
 
   return (
@@ -652,6 +809,7 @@ function BodyContent() {
           value={lastWeight?.weight ? `${lastWeight.weight} kg` : "No entry yet"}
           note={lastWeight ? formatRelative(lastWeight.date) : "Weekly is enough. No need to log this every day."}
           tone={weighInState}
+          trend={weightDelta !== null ? { value: weightDelta, unit: "kg" } : undefined}
         />
         <StatusPill
           title="Measurements"
@@ -715,11 +873,32 @@ function BodyContent() {
           <h2 className="mt-1 text-xl font-semibold">What deserves attention</h2>
 
           <div className="mt-4 space-y-3">
-            {insights.map((insight) => (
-              <div key={insight} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-300">
-                {insight}
-              </div>
-            ))}
+            {insights.map((insight, i) => {
+              const inner = (
+                <div className="flex items-start gap-2.5">
+                  <span className="text-base leading-none">{INSIGHT_ICON[insight.tone]}</span>
+                  <span className="text-sm text-zinc-300">{insight.text}</span>
+                </div>
+              );
+              return insight.action ? (
+                <button
+                  key={i}
+                  onClick={insight.action}
+                  className="w-full rounded-2xl border bg-zinc-900 p-4 text-left transition hover:border-zinc-600"
+                  style={{ borderColor: `${INSIGHT_COLOR[insight.tone]}40` }}
+                >
+                  {inner}
+                </button>
+              ) : (
+                <div
+                  key={i}
+                  className="rounded-2xl border bg-zinc-900 p-4"
+                  style={{ borderColor: `${INSIGHT_COLOR[insight.tone]}40` }}
+                >
+                  {inner}
+                </div>
+              );
+            })}
           </div>
 
           <div className="mt-4 rounded-2xl border border-sky-500/20 bg-sky-500/10 p-4 text-sm text-sky-100">
@@ -743,48 +922,50 @@ function BodyContent() {
       </div>
 
       {activeTab === "today" && (
-        <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="space-y-4">
-            <div className="rounded-[28px] border border-zinc-800 bg-zinc-950 p-5">
-              <div className="mb-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Daily habits</p>
-                <h2 className="mt-1 text-xl font-semibold">Keep this part fast.</h2>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-3">
-                <MetricInput label="Steps" hint="Usually daily" value={form.steps} onChange={(value) => updateForm("steps", value)} />
-                <MetricInput label="Water (L)" hint="Small daily check" value={form.water} step="0.1" onChange={(value) => updateForm("water", value)} />
-                <MetricInput label="Sleep (h)" hint="Nightly recovery" value={form.sleep} step="0.5" onChange={(value) => updateForm("sleep", value)} />
-              </div>
-            </div>
-
-            <div className="rounded-[28px] border border-zinc-800 bg-zinc-950 p-5">
-              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Today at a glance</p>
-              <div className="mt-4 space-y-4">
-                <div>
-                  <p className="mb-2 text-sm text-zinc-400">Steps</p>
-                  <ProgressBar value={stepsValue} target={userProfile.stepTarget ?? 10000} unit="steps" />
-                </div>
-                <div>
-                  <p className="mb-2 text-sm text-zinc-400">Water</p>
-                  <ProgressBar value={waterValue} target={userProfile.waterTarget ?? 2.5} unit="L" />
-                </div>
-                <div>
-                  <p className="mb-2 text-sm text-zinc-400">Sleep</p>
-                  <ProgressBar value={sleepValue} target={userProfile.sleepTarget ?? 8} unit="h" />
-                </div>
-              </div>
-            </div>
-          </div>
-
+        <div className="space-y-4">
           <div className="rounded-[28px] border border-zinc-800 bg-zinc-950 p-5">
-            <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Why this works</p>
-            <h2 className="mt-1 text-xl font-semibold">Today only shows what belongs today.</h2>
-            <div className="mt-4 space-y-3 text-sm text-zinc-400">
-              <p>Weight and measurements are intentionally not leading this screen anymore.</p>
-              <p>You can still log them, but the daily view stays light so it does not feel like admin work.</p>
-              <p>If you later connect wearables, this area becomes even cleaner because it can turn into mostly passive data.</p>
+            <div className="mb-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Daily habits</p>
+              <h2 className="mt-1 text-xl font-semibold">Tap to log — steps, water, sleep.</h2>
             </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <HabitCard
+                icon="👟"
+                label="Steps"
+                value={stepsValue}
+                target={userProfile.stepTarget ?? 10000}
+                unit="adım"
+                color={METRICS.steps.hex}
+                step={500}
+                onChange={(value) => updateForm("steps", value)}
+              />
+              <HabitCard
+                icon="💧"
+                label="Water"
+                value={waterValue}
+                target={userProfile.waterTarget ?? 2.5}
+                unit="L"
+                color={METRICS.water.hex}
+                step={0.25}
+                decimals={2}
+                onChange={(value) => updateForm("water", value)}
+              />
+              <HabitCard
+                icon="😴"
+                label="Sleep"
+                value={sleepValue}
+                target={userProfile.sleepTarget ?? 8}
+                unit="saat"
+                color={METRICS.sleep.hex}
+                step={0.5}
+                decimals={1}
+                onChange={(value) => updateForm("sleep", value)}
+              />
+            </div>
+            <p className="mt-4 text-xs text-zinc-600">
+              Tek dokunuşla ekle ya da tam değeri elle gir — otomatik kaydedilir. Ağırlık ve ölçümler Check-in sekmesinde.
+            </p>
           </div>
         </div>
       )}
