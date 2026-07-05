@@ -32,7 +32,7 @@ export async function GET() {
     );
   }
 
-  const [meals, packs] = await Promise.all([
+  const [meals, packs, recentLogs] = await Promise.all([
     prisma.meal.findMany({
       where: { userId: session.user.id },
       include: { category: true },
@@ -43,7 +43,19 @@ export async function GET() {
       include: { items: { include: { meal: { include: { category: true } } } } },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.mealLog.findMany({
+      where: { userId: session.user.id, mealId: { not: null } },
+      orderBy: { createdAt: "desc" },
+      take: 60,
+      select: { mealId: true },
+    }),
   ]);
 
-  return NextResponse.json({ meals, packs, categories });
+  // Distinct meal ids in recency order — powers the "Recent" filter and the
+  // "recently consumed" quick-add row on the client.
+  const recentMealIds = [...new Set(recentLogs.map((l) => l.mealId))]
+    .filter((id): id is string => !!id)
+    .slice(0, 12);
+
+  return NextResponse.json({ meals, packs, categories, recentMealIds });
 }

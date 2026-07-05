@@ -19,6 +19,9 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { MacroChip } from "@/components/ui/MacroChip";
+import { EmptyState } from "@/components/ui/Primitives";
+import { METRICS } from "@/lib/metrics";
 
 const FoodDatabaseModal = dynamic(() => import("@/components/FoodDatabaseModal"), { ssr: false });
 const AIMealAnalyzer = dynamic(() => import("./AIMealAnalyzer"), { ssr: false });
@@ -65,7 +68,22 @@ interface MealPack {
   items: MealPackItem[];
 }
 
+// Today's logged entries (from the daily log)
+interface LoggedMeal {
+  id: string;
+  quantity: number;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  createdAt?: string;
+  meal: { id: string; name: string; servingLabel: string; servingSize: number; imageUrl?: string | null } | null;
+  mealSnapshot: { name: string; servingLabel: string; servingSize: number; imageUrl?: string | null } | null;
+}
+
 type ServingType = "piece" | "g" | "ml";
+type MealFilter = "ALL" | "FAVORITES" | "HIGH_PROTEIN" | "LOW_CARB" | "RECENT";
+type MealView = "today" | "library";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -78,15 +96,11 @@ function placeholderColor(name: string) {
   return PLACEHOLDER_COLORS[(name.charCodeAt(0) ?? 0) % PLACEHOLDER_COLORS.length];
 }
 
-function MealAvatar({ meal }: { meal: Meal }) {
+function MealAvatar({ meal }: { meal: { name: string; imageUrl?: string | null } }) {
   if (meal.imageUrl) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={meal.imageUrl}
-        alt=""
-        className="h-10 w-10 rounded-lg object-cover shrink-0"
-      />
+      <img src={meal.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover shrink-0" />
     );
   }
   return (
@@ -107,6 +121,49 @@ function getPreview(meal: Meal, amount: string | undefined) {
     carbs: Math.round(meal.carbs * multiplier),
     fat: Math.round(meal.fat * multiplier),
   };
+}
+
+// Is this meal protein-dense? (≥30% of its calories from protein)
+function isHighProtein(m: Meal) {
+  if (m.calories <= 0) return m.protein >= 20;
+  return (m.protein * 4) / m.calories >= 0.3;
+}
+// Low carb? (≤20% of calories from carbs, or simply very few carbs)
+function isLowCarb(m: Meal) {
+  if (m.calories <= 0) return m.carbs <= 10;
+  return (m.carbs * 4) / m.calories <= 0.2;
+}
+
+// ── Meal-time grouping for Today's Log ──
+type MealSlot = "Kahvaltı" | "Öğle" | "Akşam" | "Atıştırmalık";
+const SLOT_ORDER: MealSlot[] = ["Kahvaltı", "Öğle", "Akşam", "Atıştırmalık"];
+const SLOT_ICON: Record<MealSlot, string> = {
+  "Kahvaltı": "🌅",
+  "Öğle": "☀️",
+  "Akşam": "🌙",
+  "Atıştırmalık": "🍎",
+};
+function slotFor(log: LoggedMeal): MealSlot {
+  if (!log.createdAt) return "Atıştırmalık";
+  const hour = new Date(log.createdAt).getHours();
+  if (hour >= 4 && hour < 11) return "Kahvaltı";
+  if (hour >= 11 && hour < 16) return "Öğle";
+  if (hour >= 16 && hour < 22) return "Akşam";
+  return "Atıştırmalık";
+}
+function loggedInfo(log: LoggedMeal) {
+  const info = log.meal ?? log.mealSnapshot;
+  return {
+    name: info?.name ?? "Bilinmeyen",
+    servingLabel: info?.servingLabel ?? "g",
+    servingSize: info?.servingSize ?? 100,
+    imageUrl: info?.imageUrl ?? null,
+  };
+}
+function loggedQty(log: LoggedMeal) {
+  const info = loggedInfo(log);
+  if (info.servingLabel === "piece") return `x${log.quantity}`;
+  return `${Math.round(log.quantity * info.servingSize)}${info.servingLabel}`;
 }
 
 // ─── Compact Meal Card ─────────────────────────────────────────────────────────
@@ -149,7 +206,7 @@ function MealCard({
   const preview = getPreview(meal, amount || undefined);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
+    <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 transition hover:border-zinc-700">
       {/* Main row */}
       <div className="flex items-center gap-2 px-2 py-2">
         {/* Drag handle */}
@@ -158,7 +215,7 @@ function MealCard({
           className="shrink-0 cursor-grab active:cursor-grabbing select-none text-[13px] leading-none text-zinc-600 hover:text-zinc-400"
           style={{ touchAction: "none" }}
           tabIndex={-1}
-          aria-label="Sirala"
+          aria-label="Sırala"
           {...dragHandle?.listeners}
           {...dragHandle?.attributes}
         >
@@ -170,13 +227,18 @@ function MealCard({
 
         {/* Info */}
         <div className="flex-1 min-w-0">
-          <p className="truncate text-sm font-semibold text-white leading-tight">{meal.name}</p>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[11px] font-bold text-white">{meal.calories}</span>
+          <div className="flex items-center gap-1.5">
+            {meal.category && <span className="text-sm" title={meal.category.name}>{meal.category.emoji}</span>}
+            <p className="truncate text-sm font-semibold text-white leading-tight">{meal.name}</p>
+          </div>
+          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+            <span className="text-sm font-bold tabular-nums" style={{ color: METRICS.calories.hex }}>
+              {meal.calories}
+            </span>
             <span className="text-[10px] text-zinc-500">kcal</span>
-            <span className="text-[10px] text-blue-400">P:{meal.protein}g</span>
-            <span className="text-[10px] text-amber-400">C:{meal.carbs}g</span>
-            <span className="text-[10px] text-rose-400">F:{meal.fat}g</span>
+            <MacroChip metric="protein" value={meal.protein} />
+            <MacroChip metric="carbs" value={meal.carbs} />
+            <MacroChip metric="fat" value={meal.fat} />
           </div>
         </div>
 
@@ -184,12 +246,15 @@ function MealCard({
         <div className="flex items-center gap-0.5 shrink-0">
           <button
             onClick={onToggleFavorite}
-            className={`px-1 py-1 text-sm transition-colors ${meal.isFavorite ? "text-yellow-400" : "text-zinc-600 hover:text-zinc-400"}`}
+            aria-label={meal.isFavorite ? "Favorilerden çıkar" : "Favorilere ekle"}
+            className={`px-1.5 py-1 text-lg transition-colors ${meal.isFavorite ? "text-yellow-400" : "text-zinc-600 hover:text-zinc-400"}`}
           >
             {meal.isFavorite ? "★" : "☆"}
           </button>
           <button
             onClick={onToggleExpand}
+            aria-label={expanded ? "Kapat" : "Aç"}
+            aria-expanded={expanded}
             className="px-1 py-1 text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
           >
             {expanded ? "▲" : "▼"}
@@ -205,6 +270,7 @@ function MealCard({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => onAmountChange(String(Math.max(1, Number(amount || 1) - 1)))}
+                  aria-label="Azalt"
                   className="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm font-bold hover:bg-zinc-700"
                 >
                   −
@@ -212,6 +278,7 @@ function MealCard({
                 <span className="min-w-[2rem] text-center text-sm font-semibold">{amount || "1"}</span>
                 <button
                   onClick={() => onAmountChange(String(Number(amount || 1) + 1))}
+                  aria-label="Artır"
                   className="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm font-bold hover:bg-zinc-700"
                 >
                   +
@@ -225,15 +292,18 @@ function MealCard({
                   placeholder={`${meal.servingSize}`}
                   value={amount}
                   onChange={(e) => onAmountChange(e.target.value)}
+                  aria-label="Miktar"
                   className="w-24 rounded-xl bg-zinc-800 px-3 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600"
                 />
                 <span className="text-xs text-zinc-500">{meal.servingLabel}</span>
               </div>
             )}
             {preview && (
-              <span className="ml-auto text-[10px] text-zinc-500">
-                → <span className="text-zinc-300 font-semibold">{preview.calories}</span> kcal
-                &nbsp;P:{preview.protein}g C:{preview.carbs}g F:{preview.fat}g
+              <span className="ml-auto flex items-center gap-1 text-[10px] text-zinc-500">
+                → <span className="font-semibold" style={{ color: METRICS.calories.hex }}>{preview.calories}</span> kcal
+                <MacroChip metric="protein" value={preview.protein} />
+                <MacroChip metric="carbs" value={preview.carbs} />
+                <MacroChip metric="fat" value={preview.fat} />
               </span>
             )}
           </div>
@@ -249,12 +319,14 @@ function MealCard({
             </button>
             <button
               onClick={onEdit}
+              aria-label="Düzenle"
               className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-zinc-700 transition-colors"
             >
               ✏
             </button>
             <button
               onClick={onDelete}
+              aria-label="Sil"
               className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-red-900/60 transition-colors"
             >
               ✕
@@ -297,19 +369,26 @@ function MealsContent() {
   const [meals, setMeals] = useState<Meal[]>([]);
   const [packs, setPacks] = useState<MealPack[]>([]);
   const [categories, setCategories] = useState<UserMealCategory[]>([]);
+  const [recentMealIds, setRecentMealIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<string>("ALL");
+  const [filter, setFilter] = useState<MealFilter>("ALL");
+  const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [added, setAdded] = useState<Record<string, boolean>>({});
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"meals" | "packs" | "categories">("meals");
+  const [mealView, setMealView] = useState<MealView>(dateParam ? "library" : "today");
   const [newPackName, setNewPackName] = useState("");
   const [expandedPack, setExpandedPack] = useState<string | null>(null);
   const [loggedPack, setLoggedPack] = useState<Record<string, boolean>>({});
   const [showFoodDB, setShowFoodDB] = useState(false);
   const [showAI, setShowAI] = useState(false);
   const [showForm, setShowForm] = useState(false);
+
+  // Today's log
+  const [todayLogs, setTodayLogs] = useState<LoggedMeal[]>([]);
+  const [todayGoals, setTodayGoals] = useState<{ calories: number; protein: number } | null>(null);
 
   // Category manager
   const [newCatName, setNewCatName] = useState("");
@@ -331,7 +410,6 @@ function MealsContent() {
     imageUrl: "",
   });
 
-  // dnd-kit
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
@@ -339,30 +417,66 @@ function MealsContent() {
   // ── Data ───────────────────────────────────────────────────────────────────
 
   async function fetchAll() {
-    const res  = await fetch("/api/meals/all");
+    const res = await fetch("/api/meals/all");
     const data = await res.json();
     setMeals(data.meals ?? []);
     setPacks(data.packs ?? []);
     setCategories(data.categories ?? []);
+    setRecentMealIds(data.recentMealIds ?? []);
   }
 
-  useEffect(() => { fetchAll(); }, []);
+  async function fetchTodayLog() {
+    const res = await fetch(`/api/dashboard?date=${dateParam ?? ""}`);
+    const data = await res.json();
+    setTodayLogs(data.mealLogs ?? []);
+    setTodayGoals({ calories: data.goals?.calories ?? 0, protein: data.goals?.protein ?? 0 });
+  }
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void fetchAll();
+      void fetchTodayLog();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Filtered / sorted meal lists ───────────────────────────────────────────
 
   const filteredMeals = useMemo(() => {
-    const base = meals.filter((meal) => {
+    return meals.filter((meal) => {
       const matchSearch = meal.name.toLowerCase().includes(search.toLowerCase());
+      const matchCategory = !categoryFilter || meal.categoryId === categoryFilter;
       const matchFilter =
         filter === "ALL" ||
-        (filter === "FAVORITES" ? meal.isFavorite : meal.categoryId === filter);
-      return matchSearch && matchFilter;
+        (filter === "FAVORITES" && meal.isFavorite) ||
+        (filter === "HIGH_PROTEIN" && isHighProtein(meal)) ||
+        (filter === "LOW_CARB" && isLowCarb(meal)) ||
+        (filter === "RECENT" && recentMealIds.includes(meal.id));
+      return matchSearch && matchCategory && matchFilter;
     });
-    return base;
-  }, [meals, search, filter]);
+  }, [meals, search, filter, categoryFilter, recentMealIds]);
 
-  const favMeals  = useMemo(() => filteredMeals.filter((m) => m.isFavorite).sort((a, b) => a.orderIndex - b.orderIndex),  [filteredMeals]);
-  const restMeals = useMemo(() => filteredMeals.filter((m) => !m.isFavorite).sort((a, b) => a.orderIndex - b.orderIndex), [filteredMeals]);
+  // "Recent" is ordered by recency; everything else keeps manual order.
+  const orderedFiltered = useMemo(() => {
+    if (filter !== "RECENT") return filteredMeals;
+    return [...filteredMeals].sort(
+      (a, b) => recentMealIds.indexOf(a.id) - recentMealIds.indexOf(b.id)
+    );
+  }, [filteredMeals, filter, recentMealIds]);
+
+  // Drag & drop only when the list reflects the manual order (no recency sort).
+  const dndEnabled = filter !== "RECENT";
+  const favMeals = useMemo(() => orderedFiltered.filter((m) => m.isFavorite), [orderedFiltered]);
+  const restMeals = useMemo(() => orderedFiltered.filter((m) => !m.isFavorite), [orderedFiltered]);
+
+  const recentMeals = useMemo(
+    () =>
+      recentMealIds
+        .map((id) => meals.find((m) => m.id === id))
+        .filter((m): m is Meal => !!m)
+        .slice(0, 6),
+    [recentMealIds, meals]
+  );
 
   // ── Drag & Drop ────────────────────────────────────────────────────────────
 
@@ -380,7 +494,6 @@ function MealsContent() {
       const other = group === "fav" ? restMeals : favMeals;
       const allOrdered = group === "fav" ? [...reordered, ...other] : [...favMeals, ...reordered];
 
-      // Optimistic local update
       setMeals((prev) => {
         const map = new Map(prev.map((m) => [m.id, m]));
         allOrdered.forEach((m, i) => {
@@ -390,7 +503,6 @@ function MealsContent() {
         return Array.from(map.values());
       });
 
-      // Persist
       fetch("/api/meals/reorder", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -402,25 +514,25 @@ function MealsContent() {
   // ── Meal CRUD ──────────────────────────────────────────────────────────────
 
   async function saveMeal() {
-    if (!form.name || form.calories === "") { alert("Isim ve kalori gerekli"); return; }
+    if (!form.name || form.calories === "") { alert("İsim ve kalori gerekli"); return; }
     const servingLabel = form.servingType;
-    const servingSize  = form.servingType === "piece" ? 1 : Number(form.servingSize) || 100;
+    const servingSize = form.servingType === "piece" ? 1 : Number(form.servingSize) || 100;
     const payload = {
-      name:        form.name,
-      calories:    Number(form.calories),
-      protein:     Number(form.protein)  || 0,
-      carbs:       Number(form.carbs)    || 0,
-      fat:         Number(form.fat)      || 0,
-      fiber:       Number(form.fiber)    || null,
-      sodium:      Number(form.sodium)   || null,
+      name: form.name,
+      calories: Number(form.calories),
+      protein: Number(form.protein) || 0,
+      carbs: Number(form.carbs) || 0,
+      fat: Number(form.fat) || 0,
+      fiber: Number(form.fiber) || null,
+      sodium: Number(form.sodium) || null,
       servingSize,
       servingLabel,
-      categoryId:  form.categoryId || null,
-      isFavorite:  form.isFavorite,
-      imageUrl:    form.imageUrl.trim() || null,
+      categoryId: form.categoryId || null,
+      isFavorite: form.isFavorite,
+      imageUrl: form.imageUrl.trim() || null,
     };
     const method = editingId ? "PUT" : "POST";
-    const url    = editingId ? `/api/meals/${editingId}` : "/api/meals";
+    const url = editingId ? `/api/meals/${editingId}` : "/api/meals";
     await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     resetForm();
     setShowForm(false);
@@ -433,10 +545,7 @@ function MealsContent() {
   }
 
   async function toggleFavorite(meal: Meal) {
-    // Optimistic update — no fetchAll() needed
-    setMeals((prev) =>
-      prev.map((m) => m.id === meal.id ? { ...m, isFavorite: !m.isFavorite } : m)
-    );
+    setMeals((prev) => prev.map((m) => (m.id === meal.id ? { ...m, isFavorite: !m.isFavorite } : m)));
     await fetch(`/api/meals/${meal.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -447,7 +556,7 @@ function MealsContent() {
   async function addMeal(meal: Meal) {
     const rawAmount = amounts[meal.id];
     const amount = rawAmount ? Number(rawAmount) : meal.servingLabel === "piece" ? 1 : meal.servingSize;
-    if (!amount || amount <= 0) { alert("Gecerli bir miktar girin"); return; }
+    if (!amount || amount <= 0) { alert("Geçerli bir miktar girin"); return; }
     const multiplier = meal.servingLabel === "piece" ? amount : amount / meal.servingSize;
     await fetch("/api/log-meal", {
       method: "POST",
@@ -457,6 +566,26 @@ function MealsContent() {
     posthog.capture("meal_logged", { mealName: meal.name, calories: meal.calories });
     setAdded((p) => ({ ...p, [meal.id]: true }));
     setTimeout(() => setAdded((p) => ({ ...p, [meal.id]: false })), 1500);
+    fetchTodayLog();
+  }
+
+  // Quick-add one serving straight from the recently-consumed row.
+  async function quickAdd(meal: Meal) {
+    await fetch("/api/log-meal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mealId: meal.id, quantity: 1, date: dateParam }),
+    });
+    posthog.capture("meal_logged", { mealName: meal.name, calories: meal.calories });
+    setAdded((p) => ({ ...p, [meal.id]: true }));
+    setTimeout(() => setAdded((p) => ({ ...p, [meal.id]: false })), 1500);
+    fetchTodayLog();
+  }
+
+  async function removeLoggedMeal(id: string) {
+    setTodayLogs((prev) => prev.filter((l) => l.id !== id));
+    await fetch(`/api/log-meal/${id}`, { method: "DELETE" });
+    fetchTodayLog();
   }
 
   function editMeal(meal: Meal) {
@@ -464,21 +593,22 @@ function MealsContent() {
     const servingType: ServingType =
       meal.servingLabel === "g" ? "g" : meal.servingLabel === "ml" ? "ml" : "piece";
     setForm({
-      name:        meal.name,
-      calories:    String(meal.calories),
-      protein:     String(meal.protein),
-      carbs:       String(meal.carbs),
-      fat:         String(meal.fat),
-      fiber:       String(meal.fiber ?? ""),
-      sodium:      String(meal.sodium ?? ""),
+      name: meal.name,
+      calories: String(meal.calories),
+      protein: String(meal.protein),
+      carbs: String(meal.carbs),
+      fat: String(meal.fat),
+      fiber: String(meal.fiber ?? ""),
+      sodium: String(meal.sodium ?? ""),
       servingSize: String(meal.servingSize),
       servingType,
-      categoryId:  meal.categoryId ?? "",
-      isFavorite:  meal.isFavorite,
-      imageUrl:    meal.imageUrl ?? "",
+      categoryId: meal.categoryId ?? "",
+      isFavorite: meal.isFavorite,
+      imageUrl: meal.imageUrl ?? "",
     });
     setShowForm(true);
     setActiveTab("meals");
+    setMealView("library");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -541,6 +671,7 @@ function MealsContent() {
     });
     setLoggedPack((p) => ({ ...p, [packId]: true }));
     setTimeout(() => setLoggedPack((p) => ({ ...p, [packId]: false })), 2000);
+    fetchTodayLog();
   }
 
   // ── Category helpers ───────────────────────────────────────────────────────
@@ -577,9 +708,9 @@ function MealsContent() {
     return pack.items.reduce(
       (acc, item) => ({
         calories: acc.calories + item.meal.calories * item.quantity,
-        protein:  acc.protein  + item.meal.protein  * item.quantity,
-        carbs:    acc.carbs    + item.meal.carbs     * item.quantity,
-        fat:      acc.fat      + item.meal.fat       * item.quantity,
+        protein: acc.protein + item.meal.protein * item.quantity,
+        carbs: acc.carbs + item.meal.carbs * item.quantity,
+        fat: acc.fat + item.meal.fat * item.quantity,
       }),
       { calories: 0, protein: 0, carbs: 0, fat: 0 }
     );
@@ -591,19 +722,55 @@ function MealsContent() {
       })
     : null;
 
+  // ── Today's log grouping ──
+  const todayGroups = useMemo(() => {
+    const groups = new Map<MealSlot, LoggedMeal[]>();
+    for (const log of todayLogs) {
+      const slot = slotFor(log);
+      if (!groups.has(slot)) groups.set(slot, []);
+      groups.get(slot)!.push(log);
+    }
+    return SLOT_ORDER.filter((s) => groups.has(s)).map((slot) => {
+      const logs = groups.get(slot)!;
+      return { slot, logs, calories: logs.reduce((s, l) => s + l.calories, 0) };
+    });
+  }, [todayLogs]);
+
+  const todayTotals = useMemo(
+    () =>
+      todayLogs.reduce(
+        (a, l) => ({
+          calories: a.calories + l.calories,
+          protein: a.protein + l.protein,
+          carbs: a.carbs + l.carbs,
+          fat: a.fat + l.fat,
+        }),
+        { calories: 0, protein: 0, carbs: 0, fat: 0 }
+      ),
+    [todayLogs]
+  );
+
+  const FILTER_CHIPS: { key: MealFilter; label: string }[] = [
+    { key: "ALL", label: "Tümü" },
+    { key: "HIGH_PROTEIN", label: "Yüksek Protein" },
+    { key: "LOW_CARB", label: "Düşük Karb" },
+    { key: "FAVORITES", label: "★ Favoriler" },
+    { key: "RECENT", label: "Son Kullanılan" },
+  ];
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <main className="mx-auto max-w-2xl p-4 pb-28">
-
       {/* Header */}
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-white">Meals</h1>
+          <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-green-400/80">Beslenme</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-white">Meals</h1>
           {displayDate ? (
-            <p className="text-xs text-amber-400">{displayDate} icin ekleniyor</p>
+            <p className="text-xs" style={{ color: METRICS.calories.hex }}>{displayDate} için ekleniyor</p>
           ) : (
-            <p className="text-xs text-zinc-500">Kisisel yemek kutuphanesi</p>
+            <p className="text-xs text-zinc-500">Kişisel yemek kütüphanesi</p>
           )}
         </div>
       </div>
@@ -626,265 +793,443 @@ function MealsContent() {
       {/* ── MEALS TAB ── */}
       {activeTab === "meals" && (
         <>
-          {/* Search + filter bar */}
-          <div className="mb-3 space-y-2">
-            <div className="flex gap-2">
-              <input
-                placeholder="Ara..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2 text-sm outline-none focus:border-zinc-600 placeholder:text-zinc-600"
-              />
-              <select
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                className="rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs text-zinc-400 outline-none"
-              >
-                <option value="ALL">Tumu</option>
-                <option value="FAVORITES">Favoriler</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>{cat.emoji} {cat.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Action buttons row */}
-            <div className="flex gap-2">
-              {/* + New Meal toggle */}
+          {/* Today's Log / Library toggle */}
+          <div className="mb-4 flex rounded-xl border border-zinc-800 bg-zinc-950 p-1">
+            {(["today", "library"] as const).map((v) => (
               <button
-                onClick={() => {
-                  if (showForm && editingId) { resetForm(); }
-                  setShowForm((v) => !v);
-                }}
-                className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition ${
-                  showForm
-                    ? "border border-zinc-600 bg-zinc-800 text-zinc-300"
-                    : "bg-green-600 text-white hover:bg-green-500"
+                key={v}
+                onClick={() => setMealView(v)}
+                className={`flex-1 rounded-lg py-2 text-xs font-semibold transition ${
+                  mealView === v ? "bg-green-600 text-white" : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
-                {showForm ? "✕ Kapat" : "+ Yeni Yemek"}
+                {v === "today" ? "Günün Kaydı" : "Kütüphane"}
               </button>
-              <button
-                onClick={() => setShowFoodDB(true)}
-                className="flex-1 rounded-xl border border-blue-800 bg-blue-950/40 py-2 text-xs font-bold text-blue-400 hover:bg-blue-900/40 transition-colors"
-              >
-                Gida Veritabani
-              </button>
-              {AI_ENABLED && (
-                <button
-                  onClick={() => setShowAI(true)}
-                  className="flex-1 rounded-xl border border-green-800 bg-green-950/40 py-2 text-xs font-bold text-green-400 hover:bg-green-900/40 transition-colors"
-                >
-                  AI Analiz
-                </button>
-              )}
-            </div>
+            ))}
           </div>
 
-          {/* ── New / Edit Meal Form (collapsible) ── */}
-          {showForm && (
-            <div className="mb-4 rounded-2xl border border-zinc-700 bg-zinc-900 p-3">
-              <p className="mb-3 text-xs font-bold uppercase tracking-wider text-zinc-400">
-                {editingId ? "Yemegi Duzenle" : "Yeni Yemek"}
-              </p>
-              <div className="space-y-2">
-                <input
-                  placeholder="Yemek adi"
-                  value={form.name}
-                  onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                  className="w-full rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-600 placeholder:text-zinc-600"
-                />
-
-                <div className="grid grid-cols-2 gap-2">
-                  <select
-                    value={form.categoryId}
-                    onChange={(e) => setForm((p) => ({ ...p, categoryId: e.target.value }))}
-                    className="rounded-xl bg-zinc-800 px-3 py-2 text-sm text-zinc-300 outline-none"
-                  >
-                    <option value="">Kategori yok</option>
-                    {categories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>{cat.emoji} {cat.name}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={form.servingType}
-                    onChange={(e) => setForm((p) => ({ ...p, servingType: e.target.value as ServingType }))}
-                    className="rounded-xl bg-zinc-800 px-3 py-2 text-sm text-zinc-300 outline-none"
-                  >
-                    <option value="piece">Adet basina</option>
-                    <option value="g">Gram (g)</option>
-                    <option value="ml">Mililitre (ml)</option>
-                  </select>
-                </div>
-
-                {form.servingType !== "piece" && (
-                  <div className="flex items-center gap-2 rounded-xl bg-zinc-800 px-3 py-2">
-                    <span className="text-xs text-zinc-500">Baz:</span>
-                    <input
-                      type="number"
-                      value={form.servingSize}
-                      onChange={(e) => setForm((p) => ({ ...p, servingSize: e.target.value }))}
-                      className="w-16 bg-transparent text-sm outline-none"
-                    />
-                    <span className="text-xs text-zinc-500">{form.servingType}</span>
-                    <span className="ml-auto text-[10px] text-zinc-600">makrolar bu miktar icindir</span>
+          {/* ── TODAY'S LOG VIEW ── */}
+          {mealView === "today" && (
+            <div className="space-y-4">
+              {/* Day summary */}
+              <div className="rounded-2xl border border-zinc-700/70 bg-zinc-900 p-4">
+                <div className="flex items-baseline justify-between">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">Bugün toplam</p>
+                    <p className="text-2xl font-bold tabular-nums" style={{ color: METRICS.calories.hex }}>
+                      {Math.round(todayTotals.calories)}
+                      {todayGoals && <span className="ml-1 text-sm font-medium text-zinc-500">/ {todayGoals.calories} kcal</span>}
+                    </p>
                   </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="number" placeholder="Kalori (kcal)" value={form.calories}
-                    onChange={(e) => setForm((p) => ({ ...p, calories: e.target.value }))}
-                    className="rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none placeholder:text-zinc-600" />
-                  <input type="number" placeholder="Protein (g)" value={form.protein}
-                    onChange={(e) => setForm((p) => ({ ...p, protein: e.target.value }))}
-                    className="rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none placeholder:text-zinc-600" />
-                  <input type="number" placeholder="Karbonhidrat (g)" value={form.carbs}
-                    onChange={(e) => setForm((p) => ({ ...p, carbs: e.target.value }))}
-                    className="rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none placeholder:text-zinc-600" />
-                  <input type="number" placeholder="Yag (g)" value={form.fat}
-                    onChange={(e) => setForm((p) => ({ ...p, fat: e.target.value }))}
-                    className="rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none placeholder:text-zinc-600" />
+                  <div className="flex gap-1.5">
+                    <MacroChip metric="protein" value={todayTotals.protein} size="md" />
+                    <MacroChip metric="carbs" value={todayTotals.carbs} size="md" />
+                    <MacroChip metric="fat" value={todayTotals.fat} size="md" />
+                  </div>
                 </div>
+              </div>
 
+              {todayLogs.length === 0 ? (
+                <EmptyState
+                  icon="🍽️"
+                  title="Bugün henüz kayıt yok"
+                  message="Kütüphaneden bir yemek ekleyerek güne başla."
+                  ctaLabel="Kütüphaneye git"
+                  onCta={() => setMealView("library")}
+                />
+              ) : (
+                todayGroups.map((group) => (
+                  <div key={group.slot} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{SLOT_ICON[group.slot]}</span>
+                        <span className="text-sm font-semibold text-white">{group.slot}</span>
+                      </div>
+                      <span className="text-sm font-semibold tabular-nums" style={{ color: METRICS.calories.hex }}>
+                        {Math.round(group.calories)} kcal
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {group.logs.map((log) => {
+                        const info = loggedInfo(log);
+                        return (
+                          <div key={log.id} className="flex items-center gap-2.5 rounded-xl bg-zinc-800/60 p-2.5">
+                            <MealAvatar meal={info} />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-white">{info.name}</p>
+                              <div className="mt-1 flex items-center gap-1.5">
+                                <span className="text-xs font-bold tabular-nums" style={{ color: METRICS.calories.hex }}>
+                                  {Math.round(log.calories)}
+                                </span>
+                                <span className="text-[10px] text-zinc-500">kcal · {loggedQty(log)}</span>
+                                <MacroChip metric="protein" value={log.protein} />
+                                <MacroChip metric="carbs" value={log.carbs} />
+                                <MacroChip metric="fat" value={log.fat} />
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => removeLoggedMeal(log.id)}
+                              aria-label={`${info.name} kaydını sil`}
+                              className="rounded-lg bg-zinc-800 px-2 py-1 text-xs text-zinc-400 hover:bg-red-900 hover:text-red-300"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button
+                      onClick={() => setMealView("library")}
+                      className="mt-3 w-full rounded-xl border border-dashed border-zinc-700 py-2 text-xs text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                    >
+                      + Yemek ekle
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* ── LIBRARY VIEW ── */}
+          {mealView === "library" && (
+            <>
+              {/* Search + action bar */}
+              <div className="mb-3 space-y-3">
                 <input
-                  placeholder="Resim URL (opsiyonel)"
-                  value={form.imageUrl}
-                  onChange={(e) => setForm((p) => ({ ...p, imageUrl: e.target.value }))}
-                  className="w-full rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-600 placeholder:text-zinc-600"
+                  placeholder="Ara..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  aria-label="Yemek ara"
+                  className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2 text-sm outline-none focus:border-zinc-600 placeholder:text-zinc-600"
                 />
 
-                <div className="flex items-center gap-2">
-                  <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-400">
-                    <input
-                      type="checkbox"
-                      checked={form.isFavorite}
-                      onChange={(e) => setForm((p) => ({ ...p, isFavorite: e.target.checked }))}
-                      className="rounded"
-                    />
-                    Favorilere ekle
-                  </label>
+                {/* Filter chips */}
+                <div className="flex flex-wrap gap-1.5">
+                  {FILTER_CHIPS.map((chip) => (
+                    <button
+                      key={chip.key}
+                      onClick={() => setFilter(chip.key)}
+                      className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                        filter === chip.key
+                          ? "bg-green-600 text-white"
+                          : "bg-zinc-900 text-zinc-400 border border-zinc-800 hover:border-zinc-600"
+                      }`}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                  {categories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setCategoryFilter(categoryFilter === cat.id ? "" : cat.id)}
+                      className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                        categoryFilter === cat.id
+                          ? "bg-zinc-700 text-white"
+                          : "bg-zinc-900 text-zinc-400 border border-zinc-800 hover:border-zinc-600"
+                      }`}
+                    >
+                      {cat.emoji} {cat.name}
+                    </button>
+                  ))}
                 </div>
 
+                {/* Action buttons row */}
                 <div className="flex gap-2">
                   <button
-                    onClick={saveMeal}
-                    className="flex-1 rounded-xl bg-green-600 py-2.5 text-sm font-bold text-white hover:bg-green-500 transition-colors"
+                    onClick={() => {
+                      if (showForm && editingId) resetForm();
+                      setShowForm((v) => !v);
+                    }}
+                    className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition ${
+                      showForm
+                        ? "border border-zinc-600 bg-zinc-800 text-zinc-300"
+                        : "bg-green-600 text-white hover:bg-green-500"
+                    }`}
                   >
-                    {editingId ? "Guncelle" : "Kaydet"}
+                    {showForm ? "✕ Kapat" : "+ Yeni Yemek"}
                   </button>
-                  {editingId && (
+                  <button
+                    onClick={() => setShowFoodDB(true)}
+                    className="flex-1 rounded-xl border border-blue-800 bg-blue-950/40 py-2 text-xs font-bold text-blue-400 hover:bg-blue-900/40 transition-colors"
+                  >
+                    Gıda Veritabanı
+                  </button>
+                  {AI_ENABLED && (
                     <button
-                      onClick={() => { resetForm(); setShowForm(false); }}
-                      className="rounded-xl bg-zinc-800 px-4 text-sm hover:bg-zinc-700 transition-colors"
+                      onClick={() => setShowAI(true)}
+                      className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-green-800 bg-green-950/40 py-2 text-xs font-bold text-green-400 hover:bg-green-900/40 transition-colors"
                     >
-                      Iptal
+                      ✨ AI Analiz
                     </button>
                   )}
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* Modals */}
-          {showFoodDB && (
-            <FoodDatabaseModal dateParam={dateParam} onClose={() => setShowFoodDB(false)} onAdded={fetchAll} />
-          )}
-          {showAI && (
-            <AIMealAnalyzer dateParam={dateParam} onClose={() => setShowAI(false)} onAdded={fetchAll} />
-          )}
-
-          {/* ── Meal list ── */}
-          <div className="space-y-1">
-
-            {/* Favorites section */}
-            {favMeals.length > 0 && (
-              <>
-                <p className="pb-1 pt-0.5 text-[10px] font-bold uppercase tracking-widest text-yellow-600">
-                  ★ Favoriler
-                </p>
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={makeDragEnd("fav")}
-                >
-                  <SortableContext items={favMeals.map((m) => m.id)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-1">
-                      {favMeals.map((meal) => (
-                        <SortableMealCard
-                          key={meal.id}
-                          meal={meal}
-                          expanded={expandedMeal === meal.id}
-                          onToggleExpand={() => setExpandedMeal((v) => v === meal.id ? null : meal.id)}
-                          onAddMeal={() => addMeal(meal)}
-                          amount={amounts[meal.id] ?? ""}
-                          onAmountChange={(v) => setAmounts((p) => ({ ...p, [meal.id]: v }))}
-                          added={!!added[meal.id]}
-                          onEdit={() => editMeal(meal)}
-                          onDelete={() => deleteMeal(meal.id)}
-                          onToggleFavorite={() => toggleFavorite(meal)}
-                          dateParam={dateParam}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              </>
-            )}
-
-            {/* Other meals section */}
-            {restMeals.length > 0 && (
-              <>
-                {favMeals.length > 0 && (
-                  <p className="pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest text-zinc-600">
-                    Diger
+              {/* ── New / Edit Meal Form (collapsible) ── */}
+              {showForm && (
+                <div className="mb-4 rounded-2xl border border-zinc-700 bg-zinc-900 p-3">
+                  <p className="mb-3 text-xs font-bold uppercase tracking-wider text-zinc-400">
+                    {editingId ? "Yemeği Düzenle" : "Yeni Yemek"}
                   </p>
-                )}
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={makeDragEnd("rest")}
-                >
-                  <SortableContext items={restMeals.map((m) => m.id)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-1">
-                      {restMeals.map((meal) => (
-                        <SortableMealCard
-                          key={meal.id}
-                          meal={meal}
-                          expanded={expandedMeal === meal.id}
-                          onToggleExpand={() => setExpandedMeal((v) => v === meal.id ? null : meal.id)}
-                          onAddMeal={() => addMeal(meal)}
-                          amount={amounts[meal.id] ?? ""}
-                          onAmountChange={(v) => setAmounts((p) => ({ ...p, [meal.id]: v }))}
-                          added={!!added[meal.id]}
-                          onEdit={() => editMeal(meal)}
-                          onDelete={() => deleteMeal(meal.id)}
-                          onToggleFavorite={() => toggleFavorite(meal)}
-                          dateParam={dateParam}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              </>
-            )}
+                  <div className="space-y-2">
+                    <input
+                      placeholder="Yemek adı"
+                      value={form.name}
+                      onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                      className="w-full rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-600 placeholder:text-zinc-600"
+                    />
 
-            {filteredMeals.length === 0 && (
-              <div className="py-12 text-center">
-                <p className="text-3xl">🥗</p>
-                <p className="mt-2 text-sm font-semibold text-zinc-400">
-                  {search ? "Sonuc bulunamadi" : "Henuz yemek yok"}
-                </p>
-                {!search && (
-                  <button
-                    onClick={() => setShowForm(true)}
-                    className="mt-3 rounded-xl bg-green-600 px-5 py-2 text-sm font-bold text-white hover:bg-green-500"
-                  >
-                    + Ilk yemegi ekle
-                  </button>
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        value={form.categoryId}
+                        onChange={(e) => setForm((p) => ({ ...p, categoryId: e.target.value }))}
+                        className="rounded-xl bg-zinc-800 px-3 py-2 text-sm text-zinc-300 outline-none"
+                      >
+                        <option value="">Kategori yok</option>
+                        {categories.map((cat) => (
+                          <option key={cat.id} value={cat.id}>{cat.emoji} {cat.name}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={form.servingType}
+                        onChange={(e) => setForm((p) => ({ ...p, servingType: e.target.value as ServingType }))}
+                        className="rounded-xl bg-zinc-800 px-3 py-2 text-sm text-zinc-300 outline-none"
+                      >
+                        <option value="piece">Adet başına</option>
+                        <option value="g">Gram (g)</option>
+                        <option value="ml">Mililitre (ml)</option>
+                      </select>
+                    </div>
+
+                    {form.servingType !== "piece" && (
+                      <div className="flex items-center gap-2 rounded-xl bg-zinc-800 px-3 py-2">
+                        <span className="text-xs text-zinc-500">Baz:</span>
+                        <input
+                          type="number"
+                          value={form.servingSize}
+                          onChange={(e) => setForm((p) => ({ ...p, servingSize: e.target.value }))}
+                          className="w-16 bg-transparent text-sm outline-none"
+                        />
+                        <span className="text-xs text-zinc-500">{form.servingType}</span>
+                        <span className="ml-auto text-[10px] text-zinc-600">makrolar bu miktar içindir</span>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="number" placeholder="Kalori (kcal)" value={form.calories}
+                        onChange={(e) => setForm((p) => ({ ...p, calories: e.target.value }))}
+                        className="rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none placeholder:text-zinc-600" />
+                      <input type="number" placeholder="Protein (g)" value={form.protein}
+                        onChange={(e) => setForm((p) => ({ ...p, protein: e.target.value }))}
+                        className="rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none placeholder:text-zinc-600" />
+                      <input type="number" placeholder="Karbonhidrat (g)" value={form.carbs}
+                        onChange={(e) => setForm((p) => ({ ...p, carbs: e.target.value }))}
+                        className="rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none placeholder:text-zinc-600" />
+                      <input type="number" placeholder="Yağ (g)" value={form.fat}
+                        onChange={(e) => setForm((p) => ({ ...p, fat: e.target.value }))}
+                        className="rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none placeholder:text-zinc-600" />
+                    </div>
+
+                    <input
+                      placeholder="Resim URL (opsiyonel)"
+                      value={form.imageUrl}
+                      onChange={(e) => setForm((p) => ({ ...p, imageUrl: e.target.value }))}
+                      className="w-full rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-600 placeholder:text-zinc-600"
+                    />
+
+                    <div className="flex items-center gap-2">
+                      <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-400">
+                        <input
+                          type="checkbox"
+                          checked={form.isFavorite}
+                          onChange={(e) => setForm((p) => ({ ...p, isFavorite: e.target.checked }))}
+                          className="rounded"
+                        />
+                        Favorilere ekle
+                      </label>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveMeal}
+                        className="flex-1 rounded-xl bg-green-600 py-2.5 text-sm font-bold text-white hover:bg-green-500 transition-colors"
+                      >
+                        {editingId ? "Güncelle" : "Kaydet"}
+                      </button>
+                      {editingId && (
+                        <button
+                          onClick={() => { resetForm(); setShowForm(false); }}
+                          className="rounded-xl bg-zinc-800 px-4 text-sm hover:bg-zinc-700 transition-colors"
+                        >
+                          İptal
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Modals */}
+              {showFoodDB && (
+                <FoodDatabaseModal dateParam={dateParam} onClose={() => setShowFoodDB(false)} onAdded={() => { fetchAll(); fetchTodayLog(); }} />
+              )}
+              {showAI && (
+                <AIMealAnalyzer dateParam={dateParam} onClose={() => setShowAI(false)} onAdded={() => { fetchAll(); fetchTodayLog(); }} />
+              )}
+
+              {/* Recently consumed quick-add */}
+              {recentMeals.length > 0 && filter === "ALL" && !search && !categoryFilter && (
+                <div className="mb-4">
+                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Son kullanılan</p>
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {recentMeals.map((meal) => (
+                      <button
+                        key={meal.id}
+                        onClick={() => quickAdd(meal)}
+                        className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-left transition ${
+                          added[meal.id]
+                            ? "border-green-700 bg-green-900/40"
+                            : "border-zinc-800 bg-zinc-900 hover:border-zinc-600"
+                        }`}
+                      >
+                        <MealAvatar meal={meal} />
+                        <div>
+                          <p className="max-w-[7rem] truncate text-xs font-semibold text-white">{meal.name}</p>
+                          <p className="text-[10px]" style={{ color: METRICS.calories.hex }}>
+                            {added[meal.id] ? "Eklendi ✓" : `${meal.calories} kcal`}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Meal list ── */}
+              <div className="space-y-1">
+                {/* Favorites section */}
+                {favMeals.length > 0 && (
+                  <>
+                    <p className="pb-1 pt-0.5 text-[10px] font-bold uppercase tracking-widest text-yellow-600">
+                      ★ Favoriler
+                    </p>
+                    {dndEnabled ? (
+                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={makeDragEnd("fav")}>
+                        <SortableContext items={favMeals.map((m) => m.id)} strategy={verticalListSortingStrategy}>
+                          <div className="space-y-1">
+                            {favMeals.map((meal) => (
+                              <SortableMealCard
+                                key={meal.id}
+                                meal={meal}
+                                expanded={expandedMeal === meal.id}
+                                onToggleExpand={() => setExpandedMeal((v) => (v === meal.id ? null : meal.id))}
+                                onAddMeal={() => addMeal(meal)}
+                                amount={amounts[meal.id] ?? ""}
+                                onAmountChange={(v) => setAmounts((p) => ({ ...p, [meal.id]: v }))}
+                                added={!!added[meal.id]}
+                                onEdit={() => editMeal(meal)}
+                                onDelete={() => deleteMeal(meal.id)}
+                                onToggleFavorite={() => toggleFavorite(meal)}
+                                dateParam={dateParam}
+                              />
+                            ))}
+                          </div>
+                        </SortableContext>
+                      </DndContext>
+                    ) : (
+                      <div className="space-y-1">
+                        {favMeals.map((meal) => (
+                          <MealCard
+                            key={meal.id}
+                            meal={meal}
+                            expanded={expandedMeal === meal.id}
+                            onToggleExpand={() => setExpandedMeal((v) => (v === meal.id ? null : meal.id))}
+                            onAddMeal={() => addMeal(meal)}
+                            amount={amounts[meal.id] ?? ""}
+                            onAmountChange={(v) => setAmounts((p) => ({ ...p, [meal.id]: v }))}
+                            added={!!added[meal.id]}
+                            onEdit={() => editMeal(meal)}
+                            onDelete={() => deleteMeal(meal.id)}
+                            onToggleFavorite={() => toggleFavorite(meal)}
+                            dateParam={dateParam}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Other meals section */}
+                {restMeals.length > 0 && (
+                  <>
+                    {favMeals.length > 0 && (
+                      <p className="pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest text-zinc-600">Diğer</p>
+                    )}
+                    {dndEnabled ? (
+                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={makeDragEnd("rest")}>
+                        <SortableContext items={restMeals.map((m) => m.id)} strategy={verticalListSortingStrategy}>
+                          <div className="space-y-1">
+                            {restMeals.map((meal) => (
+                              <SortableMealCard
+                                key={meal.id}
+                                meal={meal}
+                                expanded={expandedMeal === meal.id}
+                                onToggleExpand={() => setExpandedMeal((v) => (v === meal.id ? null : meal.id))}
+                                onAddMeal={() => addMeal(meal)}
+                                amount={amounts[meal.id] ?? ""}
+                                onAmountChange={(v) => setAmounts((p) => ({ ...p, [meal.id]: v }))}
+                                added={!!added[meal.id]}
+                                onEdit={() => editMeal(meal)}
+                                onDelete={() => deleteMeal(meal.id)}
+                                onToggleFavorite={() => toggleFavorite(meal)}
+                                dateParam={dateParam}
+                              />
+                            ))}
+                          </div>
+                        </SortableContext>
+                      </DndContext>
+                    ) : (
+                      <div className="space-y-1">
+                        {restMeals.map((meal) => (
+                          <MealCard
+                            key={meal.id}
+                            meal={meal}
+                            expanded={expandedMeal === meal.id}
+                            onToggleExpand={() => setExpandedMeal((v) => (v === meal.id ? null : meal.id))}
+                            onAddMeal={() => addMeal(meal)}
+                            amount={amounts[meal.id] ?? ""}
+                            onAmountChange={(v) => setAmounts((p) => ({ ...p, [meal.id]: v }))}
+                            added={!!added[meal.id]}
+                            onEdit={() => editMeal(meal)}
+                            onDelete={() => deleteMeal(meal.id)}
+                            onToggleFavorite={() => toggleFavorite(meal)}
+                            dateParam={dateParam}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {orderedFiltered.length === 0 && (
+                  <div className="py-12 text-center">
+                    <p className="text-3xl">🥗</p>
+                    <p className="mt-2 text-sm font-semibold text-zinc-400">
+                      {search || filter !== "ALL" || categoryFilter ? "Sonuç bulunamadı" : "Henüz yemek yok"}
+                    </p>
+                    {!search && filter === "ALL" && !categoryFilter && (
+                      <button
+                        onClick={() => setShowForm(true)}
+                        className="mt-3 rounded-xl bg-green-600 px-5 py-2 text-sm font-bold text-white hover:bg-green-500"
+                      >
+                        + İlk yemeği ekle
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
+            </>
+          )}
         </>
       )}
 
@@ -893,7 +1238,7 @@ function MealsContent() {
         <>
           <div className="mb-4 flex gap-2">
             <input
-              placeholder="Pack adi (orn. Sabah Paketi)"
+              placeholder="Pack adı (örn. Sabah Paketi)"
               value={newPackName}
               onChange={(e) => setNewPackName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && createPack()}
@@ -903,16 +1248,16 @@ function MealsContent() {
               onClick={createPack}
               className="rounded-xl bg-green-600 px-4 text-sm font-bold text-white hover:bg-green-500 transition-colors"
             >
-              + Olustur
+              + Oluştur
             </button>
           </div>
 
           <div className="space-y-3">
             {packs.length === 0 && (
-              <p className="py-10 text-center text-sm text-zinc-500">Henuz pack yok.</p>
+              <p className="py-10 text-center text-sm text-zinc-500">Henüz pack yok.</p>
             )}
             {packs.map((pack) => {
-              const totals     = packTotals(pack);
+              const totals = packTotals(pack);
               const isExpanded = expandedPack === pack.id;
               return (
                 <div key={pack.id} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
@@ -926,7 +1271,7 @@ function MealsContent() {
                         onClick={() => setExpandedPack(isExpanded ? null : pack.id)}
                         className="rounded-xl bg-zinc-800 px-3 py-1.5 text-xs hover:bg-zinc-700 transition-colors"
                       >
-                        {isExpanded ? "Kapat" : "Duzenle"}
+                        {isExpanded ? "Kapat" : "Düzenle"}
                       </button>
                       <button
                         onClick={() => logPack(pack.id)}
@@ -938,6 +1283,7 @@ function MealsContent() {
                       </button>
                       <button
                         onClick={() => deletePack(pack.id)}
+                        aria-label="Pack sil"
                         className="rounded-xl bg-zinc-800 px-2.5 py-1.5 text-xs hover:bg-red-900/60 transition-colors"
                       >
                         ✕
@@ -945,11 +1291,14 @@ function MealsContent() {
                     </div>
                   </div>
 
-                  <div className="mb-2 flex flex-wrap gap-1.5">
-                    <span className="rounded-full bg-zinc-800 px-2.5 py-0.5 text-[10px]">{Math.round(totals.calories)} kcal</span>
-                    <span className="rounded-full bg-blue-950 px-2.5 py-0.5 text-[10px] text-blue-300">P:{Math.round(totals.protein)}g</span>
-                    <span className="rounded-full bg-amber-950 px-2.5 py-0.5 text-[10px] text-amber-300">C:{Math.round(totals.carbs)}g</span>
-                    <span className="rounded-full bg-rose-950 px-2.5 py-0.5 text-[10px] text-rose-300">F:{Math.round(totals.fat)}g</span>
+                  <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-sm font-bold tabular-nums" style={{ color: METRICS.calories.hex }}>
+                      {Math.round(totals.calories)}
+                    </span>
+                    <span className="text-[10px] text-zinc-500">kcal</span>
+                    <MacroChip metric="protein" value={totals.protein} />
+                    <MacroChip metric="carbs" value={totals.carbs} />
+                    <MacroChip metric="fat" value={totals.fat} />
                   </div>
 
                   {pack.items.length > 0 && (
@@ -966,6 +1315,7 @@ function MealsContent() {
                               onClick={() => updatePackItemQuantity(pack.id, item.id,
                                 Math.max(item.meal.servingLabel === "piece" ? 1 : 0.5,
                                   item.quantity - (item.meal.servingLabel === "piece" ? 1 : 0.5)))}
+                              aria-label="Azalt"
                               className="rounded-lg bg-zinc-700 px-2 py-1 text-xs hover:bg-zinc-600"
                             >
                               −
@@ -978,6 +1328,7 @@ function MealsContent() {
                             <button
                               onClick={() => updatePackItemQuantity(pack.id, item.id,
                                 item.quantity + (item.meal.servingLabel === "piece" ? 1 : 0.5))}
+                              aria-label="Artır"
                               className="rounded-lg bg-zinc-700 px-2 py-1 text-xs hover:bg-zinc-600"
                             >
                               +
@@ -985,6 +1336,7 @@ function MealsContent() {
                             {isExpanded && (
                               <button
                                 onClick={() => removeMealFromPack(pack.id, item.id)}
+                                aria-label="Paketten çıkar"
                                 className="ml-1 text-[10px] text-zinc-600 hover:text-red-400 transition-colors"
                               >
                                 ✕
@@ -1007,9 +1359,7 @@ function MealsContent() {
                             className="flex w-full items-center justify-between rounded-xl bg-zinc-800 px-3 py-2 text-left hover:bg-zinc-700 transition-colors"
                           >
                             <span className="text-xs font-medium">{meal.name}</span>
-                            <span className="text-[10px] text-zinc-500">
-                              {meal.calories} kcal
-                            </span>
+                            <span className="text-[10px] text-zinc-500">{meal.calories} kcal</span>
                           </button>
                         ))}
                       </div>
@@ -1032,10 +1382,11 @@ function MealsContent() {
                 placeholder="🍽️"
                 value={newCatEmoji}
                 onChange={(e) => setNewCatEmoji(e.target.value)}
+                aria-label="Kategori emojisi"
                 className="w-14 rounded-xl bg-zinc-800 p-2 text-center text-lg outline-none"
               />
               <input
-                placeholder="Kategori adi"
+                placeholder="Kategori adı"
                 value={newCatName}
                 onChange={(e) => setNewCatName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && createCategory()}
@@ -1078,8 +1429,8 @@ function MealsContent() {
                       </span>
                     </div>
                     <div className="flex gap-1.5">
-                      <button onClick={() => setEditingCat(cat)} className="rounded-lg bg-zinc-800 px-2.5 py-1 text-xs hover:bg-zinc-700 transition-colors">✏</button>
-                      <button onClick={() => deleteCategory(cat.id)} className="rounded-lg bg-zinc-800 px-2.5 py-1 text-xs hover:bg-red-900/60 transition-colors">✕</button>
+                      <button onClick={() => setEditingCat(cat)} aria-label="Düzenle" className="rounded-lg bg-zinc-800 px-2.5 py-1 text-xs hover:bg-zinc-700 transition-colors">✏</button>
+                      <button onClick={() => deleteCategory(cat.id)} aria-label="Sil" className="rounded-lg bg-zinc-800 px-2.5 py-1 text-xs hover:bg-red-900/60 transition-colors">✕</button>
                     </div>
                   </div>
                 )}
@@ -1094,7 +1445,7 @@ function MealsContent() {
 
 export default function MealsPage() {
   return (
-    <Suspense fallback={<main className="p-4 text-zinc-400">Yukleniyor...</main>}>
+    <Suspense fallback={<main className="p-4 text-zinc-400">Yükleniyor...</main>}>
       <MealsContent />
     </Suspense>
   );
