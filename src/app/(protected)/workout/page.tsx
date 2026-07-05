@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { searchExercises } from "@/lib/exercises";
 import Link from "next/link";
 import { posthog } from "@/lib/posthog";
+import { Sparkline } from "@/components/ui/Sparkline";
+import { RestTimer } from "@/components/ui/RestTimer";
+import { METRICS, SEMANTIC } from "@/lib/metrics";
 import {
   DndContext,
   closestCenter,
@@ -58,6 +61,9 @@ interface OverloadData {
   prevBestSet: OverloadBest | null;
   suggestion: string | null;
   isPR: boolean;
+  est1RM?: number | null;
+  history?: { date: string; volume: number }[];
+  plateauWeeks?: number;
 }
 
 interface WorkoutAIRecap {
@@ -107,9 +113,27 @@ interface DragHandleProps {
   attributes: Record<string, any>;
 }
 
+// Compare an entered set against last session's best set → PR/down/neutral.
+function setTone(set: ExerciseSet, best: OverloadBest | null): "up" | "down" | "neutral" {
+  if (!best) return "neutral";
+  const w = Number(set.weight);
+  const r = Number(set.reps);
+  if (!w || !r) return "neutral";
+  const vol = w * r;
+  const bestVol = best.weight * best.reps;
+  if (vol > bestVol) return "up";
+  if (vol < bestVol) return "down";
+  return "neutral";
+}
+const TONE_BORDER: Record<"up" | "down" | "neutral", string> = {
+  up: SEMANTIC.success,
+  down: SEMANTIC.warning,
+  neutral: "#3f3f46",
+};
+
 function ExerciseCard({
   exercise, exIdx, overload,
-  onRemove, onAddSet, onRemoveSet, onUpdateSet,
+  onRemove, onAddSet, onRemoveSet, onUpdateSet, onRest,
   dragHandle,
 }: {
   exercise: Exercise;
@@ -119,9 +143,11 @@ function ExerciseCard({
   onAddSet: () => void;
   onRemoveSet: (setIdx: number) => void;
   onUpdateSet: (setIdx: number, field: keyof ExerciseSet, value: string) => void;
+  onRest: () => void;
   dragHandle?: DragHandleProps;
 }) {
   const acc = accentFor(exIdx);
+  const history = overload?.history?.map((h) => h.volume) ?? [];
 
   return (
     <div
@@ -137,7 +163,7 @@ function ExerciseCard({
             className="cursor-grab active:cursor-grabbing shrink-0 select-none text-[13px] leading-none text-zinc-600 hover:text-zinc-400"
             style={{ touchAction: "none" }}
             tabIndex={-1}
-            aria-label="Egzersizi sirala"
+            aria-label="Egzersizi sırala"
             {...dragHandle?.listeners}
             {...dragHandle?.attributes}
           >
@@ -148,22 +174,44 @@ function ExerciseCard({
         </div>
         <button
           onClick={onRemove}
+          aria-label="Egzersizi kaldır"
           className="ml-1 shrink-0 text-[10px] text-zinc-600 hover:text-red-400 transition-colors"
         >
           ✕
         </button>
       </div>
 
-      {/* Progressive overload badge */}
-      {overload?.isPR ? (
-        <div className="mx-2 mb-1 rounded bg-green-950/60 px-1.5 py-0.5 border border-green-900/40">
-          <span className="text-[9px] font-semibold text-green-400">PR</span>
+      {/* Previous performance + 1RM + trend sparkline */}
+      {overload?.lastBestSet && (
+        <div className="mx-2 mb-1 flex items-center justify-between gap-1">
+          <div className="min-w-0">
+            <p className="truncate text-[9px] text-zinc-400">
+              Geçen: <span className="font-semibold text-green-400">{overload.lastBestSet.weight}kg × {overload.lastBestSet.reps}</span>
+              {overload.est1RM ? <span className="text-zinc-600"> · 1RM ~{overload.est1RM}kg</span> : null}
+            </p>
+          </div>
+          {history.length >= 2 && (
+            <Sparkline data={history} color={acc.border} width={44} height={16} />
+          )}
         </div>
-      ) : overload?.suggestion && overload?.lastBestSet ? (
-        <div className="mx-2 mb-1 rounded bg-zinc-800/50 px-1.5 py-0.5">
-          <span className="text-[9px] text-zinc-400">
-            Gecen: {overload.lastBestSet.weight}kg x {overload.lastBestSet.reps} -{" "}
-            <span className="font-semibold text-blue-400">{overload.suggestion}</span>
+      )}
+
+      {/* PR / suggestion / plateau badges */}
+      {overload?.isPR ? (
+        <div className="mx-2 mb-1 inline-flex rounded bg-green-950/60 px-1.5 py-0.5 border border-green-900/40">
+          <span className="text-[9px] font-semibold text-green-400">🏆 PR</span>
+        </div>
+      ) : overload?.suggestion ? (
+        <div className="mx-2 mb-1 rounded bg-blue-950/40 px-1.5 py-0.5">
+          <span className="text-[9px]" style={{ color: METRICS.protein.hex }}>
+            💡 {overload.suggestion}
+          </span>
+        </div>
+      ) : null}
+      {overload?.plateauWeeks && overload.plateauWeeks >= 3 ? (
+        <div className="mx-2 mb-1 rounded bg-amber-950/40 px-1.5 py-0.5">
+          <span className="text-[9px] text-amber-400">
+            ⚠️ {overload.plateauWeeks} haftadır sabit — varyasyon dene
           </span>
         </div>
       ) : null}
@@ -177,31 +225,47 @@ function ExerciseCard({
 
       {/* Set rows */}
       <div className="space-y-0.5 px-2 pb-1.5">
-        {exercise.sets.map((set, setIdx) => (
-          <div key={setIdx} className="grid grid-cols-[1fr_1fr_1fr_1fr_14px] items-center gap-0.5">
-            <SetInput value={set.weight} placeholder="—" onChange={(v) => onUpdateSet(setIdx, "weight", v)} ringClass={acc.ring} />
-            <SetInput value={set.reps}   placeholder="—" onChange={(v) => onUpdateSet(setIdx, "reps",   v)} ringClass={acc.ring} />
-            <SetInput value={set.sets}   placeholder="1" onChange={(v) => onUpdateSet(setIdx, "sets",   v)} ringClass={acc.ring} />
-            <SetInput value={set.rpe}    placeholder="—" onChange={(v) => onUpdateSet(setIdx, "rpe",    v)} ringClass={acc.ring} />
-            <button
-              onClick={() => onRemoveSet(setIdx)}
-              className={`text-center text-[10px] leading-none transition-colors ${
-                exercise.sets.length > 1 ? "text-zinc-700 hover:text-red-400" : "invisible"
-              }`}
+        {exercise.sets.map((set, setIdx) => {
+          const tone = setTone(set, overload?.lastBestSet ?? null);
+          return (
+            <div
+              key={setIdx}
+              className="grid grid-cols-[1fr_1fr_1fr_1fr_14px] items-center gap-0.5 rounded pl-1"
+              style={{ borderLeft: `2px solid ${TONE_BORDER[tone]}` }}
             >
-              ✕
-            </button>
-          </div>
-        ))}
+              <SetInput value={set.weight} placeholder="—" onChange={(v) => onUpdateSet(setIdx, "weight", v)} ringClass={acc.ring} />
+              <SetInput value={set.reps}   placeholder="—" onChange={(v) => onUpdateSet(setIdx, "reps",   v)} ringClass={acc.ring} />
+              <SetInput value={set.sets}   placeholder="1" onChange={(v) => onUpdateSet(setIdx, "sets",   v)} ringClass={acc.ring} />
+              <SetInput value={set.rpe}    placeholder="—" onChange={(v) => onUpdateSet(setIdx, "rpe",    v)} ringClass={acc.ring} />
+              <button
+                onClick={() => onRemoveSet(setIdx)}
+                aria-label="Seti kaldır"
+                className={`text-center text-[10px] leading-none transition-colors ${
+                  exercise.sets.length > 1 ? "text-zinc-700 hover:text-red-400" : "invisible"
+                }`}
+              >
+                ✕
+              </button>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Add set */}
-      <button
-        onClick={onAddSet}
-        className="w-full rounded-b-2xl bg-zinc-800/40 py-1.5 text-[11px] font-medium text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors"
-      >
-        + add set
-      </button>
+      {/* Footer: add set + rest timer */}
+      <div className="grid grid-cols-2">
+        <button
+          onClick={onAddSet}
+          className="bg-zinc-800/40 py-1.5 text-[11px] font-medium text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors"
+        >
+          + set
+        </button>
+        <button
+          onClick={onRest}
+          className="border-l border-zinc-800 bg-zinc-800/40 py-1.5 text-[11px] font-medium text-zinc-500 hover:bg-zinc-800 hover:text-green-300 transition-colors"
+        >
+          ⏱ dinlen
+        </button>
+      </div>
     </div>
   );
 }
@@ -264,6 +328,11 @@ export default function WorkoutPage() {
   const [aiRecap, setAiRecap] = useState<WorkoutAIRecap | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [showRest, setShowRest] = useState(false);
+  const [showFinish, setShowFinish] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [sessionStarted, setSessionStarted] = useState(false);
+  const sessionStartRef = useRef<number | null>(null);
 
   const inputRef      = useRef<HTMLInputElement>(null);
   const isReadyRef    = useRef(false);
@@ -549,6 +618,58 @@ export default function WorkoutPage() {
     exercise.sets.some((set) => set.weight.trim() || set.reps.trim())
   );
 
+  // ── Live session stats (duration, volume, progress) ──
+  // The session clock starts the moment the first set gets real values.
+  const hasLoggedWork = exercises.some((ex) =>
+    ex.sets.some((s) => Number(s.weight) > 0 && Number(s.reps) > 0)
+  );
+
+  useEffect(() => {
+    if (isRestDay) return;
+    if (hasLoggedWork && sessionStartRef.current === null) {
+      sessionStartRef.current = Date.now();
+      setSessionStarted(true);
+    }
+    if (sessionStartRef.current === null) return;
+    const id = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - (sessionStartRef.current ?? Date.now())) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [hasLoggedWork, isRestDay]);
+
+  const sessionStats = useMemo(() => {
+    let volume = 0;
+    let completedSets = 0;
+    let loggedExercises = 0;
+    for (const ex of exercises) {
+      let exerciseHasWork = false;
+      for (const s of ex.sets) {
+        const w = Number(s.weight);
+        const r = Number(s.reps);
+        const count = Number(s.sets) || 1;
+        if (w > 0 && r > 0) {
+          volume += w * r * count;
+          completedSets += count;
+          exerciseHasWork = true;
+        }
+      }
+      if (exerciseHasWork) loggedExercises++;
+    }
+    return { volume, completedSets, loggedExercises, total: exercises.length };
+  }, [exercises]);
+
+  function triggerRest() {
+    setShowRest(false);
+    // Re-mount the timer so tapping "rest" again restarts the countdown.
+    requestAnimationFrame(() => setShowRest(true));
+  }
+
+  function fmtDuration(secs: number) {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  }
+
   async function generateAiRecap() {
     if (!canAnalyzeWorkout || isRestDay) {
       setAiError("Once you log at least one working set, AI recap can analyze the session.");
@@ -698,13 +819,45 @@ export default function WorkoutPage() {
         })}
       </div>
 
-      {/* ── Active split banner ── */}
+      {/* ── Active split / session bar ── */}
       {selectedSplitObj && !isRestDay && (
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2">
-          <span className="text-lg">{selectedSplitObj.emoji}</span>
-          <div>
-            <p className="text-xs font-bold text-zinc-200">{selectedSplitObj.name}</p>
-            <p className="text-[10px] text-zinc-600">{exercises.length} exercise{exercises.length !== 1 ? "s" : ""} logged</p>
+        <div className="mb-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">{selectedSplitObj.emoji}</span>
+              <p className="text-sm font-bold text-zinc-200">{selectedSplitObj.name}</p>
+            </div>
+            <div className="flex items-center gap-3 text-right">
+              <div>
+                <p className="text-[9px] uppercase tracking-wide text-zinc-600">Süre</p>
+                <p className="text-sm font-bold tabular-nums text-white">
+                  {sessionStarted ? fmtDuration(elapsed) : "0:00"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[9px] uppercase tracking-wide text-zinc-600">Hacim</p>
+                <p className="text-sm font-bold tabular-nums" style={{ color: METRICS.calories.hex }}>
+                  {Math.round(sessionStats.volume).toLocaleString()}
+                  <span className="text-[10px] font-normal text-zinc-600"> kg</span>
+                </p>
+              </div>
+            </div>
+          </div>
+          {/* Labeled progress bar */}
+          <div className="mt-2.5">
+            <div className="mb-1 flex justify-between text-[10px] text-zinc-500">
+              <span>{sessionStats.loggedExercises}/{sessionStats.total} egzersiz kaydedildi</span>
+              <span>{sessionStats.completedSets} set</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${sessionStats.total ? (sessionStats.loggedExercises / sessionStats.total) * 100 : 0}%`,
+                  backgroundColor: SEMANTIC.success,
+                }}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -847,6 +1000,7 @@ export default function WorkoutPage() {
                         onAddSet={() => addSet(exIdx)}
                         onRemoveSet={(setIdx) => removeSet(exIdx, setIdx)}
                         onUpdateSet={(setIdx, field, value) => updateSet(exIdx, setIdx, field, value)}
+                        onRest={triggerRest}
                       />
                     ))}
               </div>
@@ -863,7 +1017,75 @@ export default function WorkoutPage() {
               rows={2}
             />
           )}
+
+          {/* Finish workout */}
+          {hasLoggedWork && (
+            <button
+              onClick={() => { scheduleSave(0); setShowFinish(true); }}
+              className="mt-3 w-full rounded-2xl bg-green-600 py-3 text-sm font-bold text-white transition hover:bg-green-500"
+            >
+              Antrenmanı Bitir
+            </button>
+          )}
         </>
+      )}
+
+      {/* ── Rest timer ── */}
+      {showRest && <RestTimer initialDuration={90} onClose={() => setShowRest(false)} />}
+
+      {/* ── Finish summary modal ── */}
+      {showFinish && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center" onClick={() => setShowFinish(false)}>
+          <div
+            className="w-full max-w-md rounded-3xl border border-zinc-700 bg-zinc-900 p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 text-center">
+              <p className="text-4xl">🎉</p>
+              <h2 className="mt-2 text-xl font-bold text-white">İyi iş çıkardın!</h2>
+              <p className="text-sm text-zinc-400">{selectedSplitObj?.emoji} {selectedSplit}</p>
+            </div>
+
+            <div className="mb-4 grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-2xl bg-zinc-800/60 p-3">
+                <p className="text-lg font-bold tabular-nums text-white">{sessionStarted ? fmtDuration(elapsed) : "—"}</p>
+                <p className="text-[10px] uppercase tracking-wide text-zinc-500">Süre</p>
+              </div>
+              <div className="rounded-2xl bg-zinc-800/60 p-3">
+                <p className="text-lg font-bold tabular-nums" style={{ color: METRICS.calories.hex }}>
+                  {Math.round(sessionStats.volume).toLocaleString()}
+                </p>
+                <p className="text-[10px] uppercase tracking-wide text-zinc-500">Hacim (kg)</p>
+              </div>
+              <div className="rounded-2xl bg-zinc-800/60 p-3">
+                <p className="text-lg font-bold tabular-nums text-white">{sessionStats.completedSets}</p>
+                <p className="text-[10px] uppercase tracking-wide text-zinc-500">Set</p>
+              </div>
+            </div>
+
+            <p className="mb-4 text-center text-xs text-zinc-500">
+              {sessionStats.loggedExercises} egzersiz tamamlandı · otomatik kaydedildi ✓
+            </p>
+
+            <div className="flex gap-2">
+              {!isRestDay && (
+                <button
+                  onClick={() => { setShowFinish(false); void generateAiRecap(); }}
+                  disabled={aiLoading || !canAnalyzeWorkout}
+                  className="flex-1 rounded-xl bg-green-600 py-2.5 text-sm font-bold text-white transition hover:bg-green-500 disabled:opacity-40"
+                >
+                  ✨ AI Özeti Al
+                </button>
+              )}
+              <button
+                onClick={() => setShowFinish(false)}
+                className="flex-1 rounded-xl bg-zinc-800 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-zinc-700"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );

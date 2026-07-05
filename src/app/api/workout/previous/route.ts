@@ -83,13 +83,51 @@ export async function GET(request: Request) {
   const lastBestSet = getBestSet(workouts[0].sets);
   const prevBestSet = workouts.length > 1 ? getBestSet(workouts[1].sets) : null;
 
+  // Per-session best-set volume, oldest → newest, for the sparkline.
+  const history = [...workouts]
+    .reverse()
+    .map((w) => {
+      const best = getBestSet(w.sets);
+      return best ? { date: w.date, volume: best.weight * best.reps } : null;
+    })
+    .filter((h): h is { date: Date; volume: number } => h !== null)
+    .slice(-6);
+
   if (!lastBestSet) {
-    return NextResponse.json({ lastBestSet: null, prevBestSet: null, suggestion: null, isPR: false });
+    return NextResponse.json({
+      lastBestSet: null, prevBestSet: null, suggestion: null,
+      isPR: false, est1RM: null, history, plateauWeeks: 0,
+    });
   }
 
   const lastVolume = lastBestSet.weight * lastBestSet.reps;
   const prevVolume = prevBestSet ? prevBestSet.weight * prevBestSet.reps : null;
   const isPR = prevVolume !== null && lastVolume > prevVolume;
+
+  // Estimated 1-rep max — Epley formula.
+  const est1RM = Math.round(lastBestSet.weight * (1 + lastBestSet.reps / 30));
+
+  // Plateau: how long the best-set volume has failed to exceed its running max.
+  let plateauWeeks = 0;
+  if (history.length >= 3) {
+    let peak = 0;
+    let peakDate = history[0].date;
+    let stalledSince: Date | null = null;
+    for (const h of history) {
+      if (h.volume > peak) {
+        peak = h.volume;
+        peakDate = h.date;
+        stalledSince = null;
+      } else if (stalledSince === null) {
+        stalledSince = peakDate;
+      }
+    }
+    const newestVolume = history[history.length - 1].volume;
+    if (newestVolume <= peak && stalledSince) {
+      const days = Math.round((today.getTime() - new Date(stalledSince).getTime()) / 86400000);
+      plateauWeeks = Math.floor(days / 7);
+    }
+  }
 
   // Build suggestion only when we have 2+ workouts and it's NOT a PR
   let suggestion: string | null = null;
@@ -101,5 +139,8 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ exerciseName, lastBestSet, prevBestSet, suggestion, isPR });
+  return NextResponse.json({
+    exerciseName, lastBestSet, prevBestSet, suggestion, isPR,
+    est1RM, history, plateauWeeks,
+  });
 }
