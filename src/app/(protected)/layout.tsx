@@ -50,6 +50,15 @@ const navItems: NavItem[] = [
 
 // ── Layout ─────────────────────────────────────────────────────────────────
 
+// Keyboard shortcuts: press G then H/M/T/B/S to jump between sections.
+const SHORTCUTS: Record<string, string> = {
+  h: "/dashboard",
+  m: "/meals",
+  t: "/workout",
+  b: "/body",
+  s: "/analytics",
+};
+
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router   = useRouter();
@@ -67,6 +76,46 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
       .catch(() => {});
   }, [router]);
 
+  // ── G-chord keyboard navigation ──
+  useEffect(() => {
+    let awaitingKey = false;
+    let resetTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function isTyping(el: EventTarget | null) {
+      const node = el as HTMLElement | null;
+      if (!node) return false;
+      const tag = node.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || node.isContentEditable;
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
+      const key = e.key.toLowerCase();
+
+      if (awaitingKey) {
+        awaitingKey = false;
+        if (resetTimer) clearTimeout(resetTimer);
+        const dest = SHORTCUTS[key];
+        if (dest) {
+          e.preventDefault();
+          router.push(dest);
+        }
+        return;
+      }
+
+      if (key === "g") {
+        awaitingKey = true;
+        resetTimer = setTimeout(() => { awaitingKey = false; }, 1200);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (resetTimer) clearTimeout(resetTimer);
+    };
+  }, [router]);
+
   async function handleLogout() {
     await authClient.signOut();
     router.push("/login");
@@ -76,7 +125,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
     <PostHogProvider>
       <div className="min-h-screen bg-black text-white">
         {/* Desktop top nav */}
-        <nav className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
+        <nav aria-label="Ana menü" className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
           <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
             <Link href="/dashboard" className="text-xl font-bold">FitTrack</Link>
 
@@ -87,15 +136,14 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
                   <Link
                     key={item.href}
                     href={item.href}
+                    aria-current={active ? "page" : undefined}
                     className={`flex items-center gap-1.5 rounded-2xl px-4 py-2 text-sm transition ${
-                      active ? "bg-green-600 text-white" : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                      active
+                        ? "bg-green-600 text-white shadow-sm shadow-green-900/40 ring-1 ring-green-400/40"
+                        : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white"
                     }`}
                   >
-                    {item.svgIcon ? (
-                      <UsersIcon size={16} />
-                    ) : (
-                      <span>{item.icon}</span>
-                    )}
+                    {item.svgIcon ? <UsersIcon size={16} /> : <span aria-hidden>{item.icon}</span>}
                     {item.label}
                   </Link>
                 );
@@ -104,7 +152,8 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
 
             <button
               onClick={handleLogout}
-              className="rounded-2xl bg-zinc-800 px-4 py-2 text-sm hover:bg-zinc-700"
+              aria-label="Çıkış yap"
+              className="rounded-2xl bg-zinc-800 px-4 py-2 text-sm transition hover:bg-zinc-700 hover:text-white"
             >
               Logout
             </button>
@@ -121,7 +170,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Mobile bottom nav */}
-        <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-zinc-950 md:hidden">
+        <nav aria-label="Ana menü" className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-zinc-950 md:hidden">
           <div className="flex items-center justify-around py-1">
             {navItems.map((item) => {
               const active = pathname === item.href || pathname.startsWith(item.href + "/");
@@ -129,15 +178,14 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex flex-col items-center gap-0.5 px-1 py-2 transition ${
-                    active ? "text-green-400" : "text-zinc-500"
+                  aria-current={active ? "page" : undefined}
+                  className={`relative flex flex-col items-center gap-0.5 px-1 py-2 transition ${
+                    active ? "text-green-400" : "text-zinc-500 hover:text-zinc-300"
                   }`}
                 >
-                  {item.svgIcon ? (
-                    <UsersIcon size={22} />
-                  ) : (
-                    <span className="text-xl">{item.icon}</span>
-                  )}
+                  {/* Active top indicator bar */}
+                  {active && <span aria-hidden className="absolute -top-px h-0.5 w-8 rounded-full bg-green-400" />}
+                  {item.svgIcon ? <UsersIcon size={22} /> : <span aria-hidden className="text-xl">{item.icon}</span>}
                   <span className="text-[10px]">{item.label}</span>
                 </Link>
               );
