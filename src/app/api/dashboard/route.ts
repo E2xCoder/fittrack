@@ -31,7 +31,12 @@ export async function GET(request: Request) {
 
   if (dateParam) date.setHours(0, 0, 0, 0);
 
-  const [dailyLog, bodyLog, splits, latestWeightLog, latestMeasurementLog] = await Promise.all([
+  // 7-day window for the weekly glance + streak (ending on the viewed date).
+  const weekStart = new Date(date);
+  weekStart.setDate(date.getDate() - 6);
+  weekStart.setHours(0, 0, 0, 0);
+
+  const [dailyLog, bodyLog, splits, latestWeightLog, latestMeasurementLog, weekDailyLogs, weekBodyLogs, streakDailyLogs, streakBodyLogs] = await Promise.all([
     prisma.dailyLog.findFirst({
       where: { userId: session.user.id, date },
       include: {
@@ -71,7 +76,80 @@ export async function GET(request: Request) {
       orderBy: { date: "desc" },
       select: { date: true, waist: true, bodyFat: true },
     }),
+    prisma.dailyLog.findMany({
+      where: { userId: session.user.id, date: { gte: weekStart, lte: date } },
+      select: { date: true, totalCalories: true, isGymDay: true },
+    }),
+    prisma.bodyLog.findMany({
+      where: { userId: session.user.id, date: { gte: weekStart, lte: date } },
+      select: { date: true, weight: true, steps: true },
+    }),
+    prisma.dailyLog.findMany({
+      where: { userId: session.user.id },
+      select: { date: true },
+      orderBy: { date: "desc" },
+    }),
+    prisma.bodyLog.findMany({
+      where: { userId: session.user.id },
+      select: { date: true },
+      orderBy: { date: "desc" },
+    }),
   ]);
+
+  // ── Weekly glance: one entry per day (meals / workout / weigh-in dots) ──
+  const dayKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: userTz });
+  const week = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    const key = dayKey(d);
+    const dl = weekDailyLogs.find((l) => dayKey(new Date(l.date)) === key);
+    const bl = weekBodyLogs.find((l) => dayKey(new Date(l.date)) === key);
+    week.push({
+      date: key,
+      weekday: d.toLocaleDateString("en-GB", { weekday: "narrow", timeZone: userTz }),
+      hasMeals: (dl?.totalCalories ?? 0) > 0,
+      hasWorkout: dl?.isGymDay ?? false,
+      hasWeighIn: bl?.weight != null,
+    });
+  }
+
+  // ── Streak: consecutive logged days walking back from the viewed date ──
+  const loggedDates = new Set<string>();
+  for (const l of streakDailyLogs) loggedDates.add(dayKey(new Date(l.date)));
+  for (const l of streakBodyLogs) loggedDates.add(dayKey(new Date(l.date)));
+
+  const viewedKey = dayKey(date);
+  let currentStreak = 0;
+  const cursor = new Date(date);
+  while (true) {
+    const key = dayKey(cursor);
+    if (loggedDates.has(key)) {
+      currentStreak++;
+      cursor.setDate(cursor.getDate() - 1);
+    } else if (key === viewedKey) {
+      // Don't break the streak just because the viewed day isn't logged yet.
+      cursor.setDate(cursor.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+
+  const sortedDates = [...loggedDates].sort();
+  let longestStreak = 0;
+  let run = 0;
+  let prev: Date | null = null;
+  for (const ds of sortedDates) {
+    const d = new Date(ds);
+    if (prev) {
+      const diff = Math.round((d.getTime() - prev.getTime()) / 86400000);
+      run = diff === 1 ? run + 1 : 1;
+    } else {
+      run = 1;
+    }
+    longestStreak = Math.max(longestStreak, run);
+    prev = d;
+  }
 
   return NextResponse.json({
     totalCalories: dailyLog?.totalCalories ?? 0,
@@ -95,5 +173,7 @@ export async function GET(request: Request) {
     splits: splits ?? [],
     latestWeightLog,
     latestMeasurementLog,
+    week,
+    streak: { current: currentStreak, longest: longestStreak },
   });
 }

@@ -2,11 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { Card, LinkCard } from "@/components/ui/Card";
+import { ProgressBar, ProgressRing } from "@/components/ui/Progress";
+import { MacroChip } from "@/components/ui/MacroChip";
+import { SectionHeader, EmptyState, Skeleton } from "@/components/ui/Primitives";
+import { METRICS, SEMANTIC, scoreColor, percent } from "@/lib/metrics";
 
 interface MealInfo {
   name: string;
   servingLabel: string;
   servingSize: number;
+  imageUrl?: string | null;
 }
 
 interface MealLog {
@@ -16,7 +22,8 @@ interface MealLog {
   protein: number;
   carbs: number;
   fat: number;
-  meal: ({ id: string } & MealInfo) | null;
+  createdAt?: string;
+  meal: ({ id: string; imageUrl?: string | null } & MealInfo) | null;
   mealSnapshot: MealInfo | null;
 }
 
@@ -41,6 +48,14 @@ interface SnapshotLog {
   bodyFat?: number | null;
 }
 
+interface WeekDay {
+  date: string;
+  weekday: string;
+  hasMeals: boolean;
+  hasWorkout: boolean;
+  hasWeighIn: boolean;
+}
+
 interface DashboardData {
   totalCalories: number;
   totalProtein: number;
@@ -57,15 +72,30 @@ interface DashboardData {
   splits: UserSplit[];
   latestWeightLog?: SnapshotLog | null;
   latestMeasurementLog?: SnapshotLog | null;
+  week: WeekDay[];
+  streak: { current: number; longest: number };
 }
 
-type ActionCard = {
-  title: string;
-  description: string;
+type CoachType = "nutrition" | "workout" | "body" | "activity";
+
+interface CoachTip {
+  type: CoachType;
+  message: string;
+  cta: string;
   href?: string;
   onClick?: () => void;
-  tone: "sky" | "emerald" | "amber";
+}
+
+const COACH_ACCENT: Record<CoachType, string> = {
+  nutrition: METRICS.calories.hex,
+  workout: SEMANTIC.accent,
+  body: METRICS.steps.hex,
+  activity: METRICS.water.hex,
 };
+
+const WATER_TARGET_DEFAULT = 2.5;
+const SLEEP_TARGET_DEFAULT = 8;
+const WATER_STEP = 0.25;
 
 function toDateString(date: Date) {
   return date.toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
@@ -77,47 +107,13 @@ function differenceInDays(from: string, to: string) {
   return Math.round((end.getTime() - start.getTime()) / 86400000);
 }
 
-function formatRelativeDate(date?: string | null, fallback = "Not logged yet") {
-  if (!date) return fallback;
-
-  const days = differenceInDays(date.slice(0, 10), toDateString(new Date()));
-  if (days <= 0) return "Updated today";
-  if (days === 1) return "Updated yesterday";
-  return `Updated ${days} days ago`;
-}
-
-function percent(current: number, target: number) {
-  if (!target) return 0;
-  return Math.min((current / target) * 100, 100);
-}
-
-function scoreLabel(score: number) {
-  if (score >= 80) return "Strong day";
-  if (score >= 55) return "Good momentum";
-  if (score >= 35) return "A few things left";
-  return "Just getting started";
-}
-
-function scoreTone(score: number) {
-  if (score >= 80) return "text-emerald-300";
-  if (score >= 55) return "text-sky-300";
-  if (score >= 35) return "text-amber-200";
-  return "text-zinc-300";
-}
-
-function actionClasses(tone: ActionCard["tone"]) {
-  if (tone === "emerald") return "border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/15";
-  if (tone === "amber") return "border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15";
-  return "border-sky-500/20 bg-sky-500/10 hover:bg-sky-500/15";
-}
-
 function mealInfo(log: MealLog): MealInfo {
   if (log.meal) return log.meal;
-
   return {
     name: log.mealSnapshot?.name ?? "Unknown meal",
     servingLabel: log.mealSnapshot?.servingLabel ?? "g",
     servingSize: log.mealSnapshot?.servingSize ?? 100,
+    imageUrl: log.mealSnapshot?.imageUrl ?? null,
   };
 }
 
@@ -127,72 +123,23 @@ function formatQuantity(log: MealLog) {
   return `${Math.round(log.quantity * servingSize)}${servingLabel}`;
 }
 
-function MacroBar({
-  label,
-  current,
-  target,
-  unit,
-  color,
-}: {
-  label: string;
-  current: number;
-  target: number;
-  unit: string;
-  color: string;
-}) {
-  const pct = percent(current, target);
-  const remaining = Math.max(target - current, 0);
+// ── Meal-time grouping (by log time — best available signal) ────────────────
+type MealSlot = "Breakfast" | "Lunch" | "Dinner" | "Snack";
+const SLOT_ORDER: MealSlot[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
+const SLOT_ICON: Record<MealSlot, string> = {
+  Breakfast: "🌅",
+  Lunch: "☀️",
+  Dinner: "🌙",
+  Snack: "🍎",
+};
 
-  return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-      <div className="mb-1 flex items-center justify-between">
-        <span className="text-sm font-medium text-zinc-300">{label}</span>
-        <span className="text-xs text-zinc-500">{Math.round(remaining)} {unit} left</span>
-      </div>
-      <div className="mb-2 flex items-baseline gap-1">
-        <span className="text-2xl font-bold">{Math.round(current)}</span>
-        <span className="text-sm text-zinc-500">/ {target} {unit}</span>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
-        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  note,
-}: {
-  label: string;
-  value: string;
-  note: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-      <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
-      <p className="mt-1 text-xs text-zinc-400">{note}</p>
-    </div>
-  );
-}
-
-function QuickLinkCard({
-  href,
-  title,
-  description,
-}: {
-  href: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <Link href={href} className="block w-full rounded-2xl border border-zinc-800 bg-zinc-900 p-4 transition hover:border-zinc-700 hover:bg-zinc-800/80">
-      <p className="font-medium text-white">{title}</p>
-      <p className="mt-1 text-sm text-zinc-400">{description}</p>
-    </Link>
-  );
+function slotFor(log: MealLog): MealSlot {
+  if (!log.createdAt) return "Snack";
+  const hour = new Date(log.createdAt).getHours();
+  if (hour >= 4 && hour < 11) return "Breakfast";
+  if (hour >= 11 && hour < 16) return "Lunch";
+  if (hour >= 16 && hour < 22) return "Dinner";
+  return "Snack";
 }
 
 export default function DashboardPage() {
@@ -211,9 +158,7 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    queueMicrotask(() => {
-      void fetchData(selectedDate);
-    });
+    queueMicrotask(() => void fetchData(selectedDate));
   }, [selectedDate]);
 
   async function saveGymStatus(gymDay: boolean, split: string | null) {
@@ -221,41 +166,54 @@ export default function DashboardPage() {
     await fetch("/api/daily-log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        date: selectedDate,
-        isGymDay: gymDay,
-        gymSplit: split,
-      }),
+      body: JSON.stringify({ date: selectedDate, isGymDay: gymDay, gymSplit: split }),
     });
-
-    setData((previous) => previous ? { ...previous, isGymDay: gymDay, gymSplit: split } : previous);
+    setData((p) => (p ? { ...p, isGymDay: gymDay, gymSplit: split } : p));
     setShowGymPicker(false);
     setSavingGym(false);
+  }
+
+  async function addWater(delta: number) {
+    if (!data) return;
+    const next = Math.max(0, Math.round((data.water + delta) * 100) / 100);
+    setData((p) => (p ? { ...p, water: next } : p));
+    const response = await fetch("/api/body", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: selectedDate, water: next }),
+    });
+    if (!response.ok) setData((p) => (p ? { ...p, water: data.water } : p));
   }
 
   async function removeMeal(id: string) {
     const log = data?.mealLogs.find((entry) => entry.id === id);
     if (!log) return;
-
-    setData((previous) => previous ? {
-      ...previous,
-      mealLogs: previous.mealLogs.filter((entry) => entry.id !== id),
-      totalCalories: previous.totalCalories - log.calories,
-      totalProtein: previous.totalProtein - log.protein,
-      totalCarbs: previous.totalCarbs - log.carbs,
-      totalFat: previous.totalFat - log.fat,
-    } : previous);
-
+    setData((p) =>
+      p
+        ? {
+            ...p,
+            mealLogs: p.mealLogs.filter((e) => e.id !== id),
+            totalCalories: p.totalCalories - log.calories,
+            totalProtein: p.totalProtein - log.protein,
+            totalCarbs: p.totalCarbs - log.carbs,
+            totalFat: p.totalFat - log.fat,
+          }
+        : p
+    );
     const response = await fetch(`/api/log-meal/${id}`, { method: "DELETE" });
     if (!response.ok) {
-      setData((previous) => previous ? {
-        ...previous,
-        mealLogs: [...previous.mealLogs, log],
-        totalCalories: previous.totalCalories + log.calories,
-        totalProtein: previous.totalProtein + log.protein,
-        totalCarbs: previous.totalCarbs + log.carbs,
-        totalFat: previous.totalFat + log.fat,
-      } : previous);
+      setData((p) =>
+        p
+          ? {
+              ...p,
+              mealLogs: [...p.mealLogs, log],
+              totalCalories: p.totalCalories + log.calories,
+              totalProtein: p.totalProtein + log.protein,
+              totalCarbs: p.totalCarbs + log.carbs,
+              totalFat: p.totalFat + log.fat,
+            }
+          : p
+      );
     }
   }
 
@@ -263,49 +221,48 @@ export default function DashboardPage() {
     const info = mealInfo(log);
     const deltaQuantity = info.servingLabel === "piece" ? delta : delta / info.servingSize;
     const newQuantity = log.quantity + deltaQuantity;
-
     if (newQuantity <= 0) {
       await removeMeal(log.id);
       return;
     }
-
     const ratio = newQuantity / log.quantity;
-    const newCalories = log.calories * ratio;
-    const newProtein = log.protein * ratio;
-    const newCarbs = log.carbs * ratio;
-    const newFat = log.fat * ratio;
-
-    setData((previous) => previous ? {
-      ...previous,
-      mealLogs: previous.mealLogs.map((entry) => entry.id !== log.id ? entry : {
-        ...entry,
-        quantity: newQuantity,
-        calories: newCalories,
-        protein: newProtein,
-        carbs: newCarbs,
-        fat: newFat,
-      }),
-      totalCalories: previous.totalCalories - log.calories + newCalories,
-      totalProtein: previous.totalProtein - log.protein + newProtein,
-      totalCarbs: previous.totalCarbs - log.carbs + newCarbs,
-      totalFat: previous.totalFat - log.fat + newFat,
-    } : previous);
-
+    const patched = {
+      quantity: newQuantity,
+      calories: log.calories * ratio,
+      protein: log.protein * ratio,
+      carbs: log.carbs * ratio,
+      fat: log.fat * ratio,
+    };
+    setData((p) =>
+      p
+        ? {
+            ...p,
+            mealLogs: p.mealLogs.map((e) => (e.id !== log.id ? e : { ...e, ...patched })),
+            totalCalories: p.totalCalories - log.calories + patched.calories,
+            totalProtein: p.totalProtein - log.protein + patched.protein,
+            totalCarbs: p.totalCarbs - log.carbs + patched.carbs,
+            totalFat: p.totalFat - log.fat + patched.fat,
+          }
+        : p
+    );
     const response = await fetch(`/api/log-meal/${log.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ quantity: newQuantity }),
     });
-
     if (!response.ok) {
-      setData((previous) => previous ? {
-        ...previous,
-        mealLogs: previous.mealLogs.map((entry) => entry.id !== log.id ? entry : log),
-        totalCalories: previous.totalCalories - newCalories + log.calories,
-        totalProtein: previous.totalProtein - newProtein + log.protein,
-        totalCarbs: previous.totalCarbs - newCarbs + log.carbs,
-        totalFat: previous.totalFat - newFat + log.fat,
-      } : previous);
+      setData((p) =>
+        p
+          ? {
+              ...p,
+              mealLogs: p.mealLogs.map((e) => (e.id !== log.id ? e : log)),
+              totalCalories: p.totalCalories - patched.calories + log.calories,
+              totalProtein: p.totalProtein - patched.protein + log.protein,
+              totalCarbs: p.totalCarbs - patched.carbs + log.carbs,
+              totalFat: p.totalFat - patched.fat + log.fat,
+            }
+          : p
+      );
     }
   }
 
@@ -331,398 +288,579 @@ export default function DashboardPage() {
     const stepsPct = percent(data.steps, data.goals.steps);
     const gymPct = data.isGymDay ? 100 : 20;
     const score = Math.round((caloriePct + proteinPct + stepsPct + gymPct) / 4);
-    const netCalories = Math.round(data.totalCalories - data.caloriesBurned);
+
     const proteinLeft = Math.max(data.goals.protein - data.totalProtein, 0);
+    const caloriesLeft = Math.max(data.goals.calories - data.totalCalories, 0);
+    const stepsLeft = Math.max(data.goals.steps - data.steps, 0);
     const latestWeightDate = data.latestWeightLog?.date?.slice(0, 10);
-    const latestMeasurementDate = data.latestMeasurementLog?.date?.slice(0, 10);
     const weightDays = latestWeightDate ? differenceInDays(latestWeightDate, todayStr) : 99;
-    const measurementDays = latestMeasurementDate ? differenceInDays(latestMeasurementDate, todayStr) : 99;
+    const nextSplit = data.splits.find((s) => s.name !== "Rest Day");
 
-    const insights = [
-      proteinLeft > 0
-        ? `Protein is still ${Math.round(proteinLeft)}g short today.`
-        : "Protein target is covered today.",
-      data.isGymDay
-        ? `Workout is marked as ${data.gymSplit ?? "gym day"}.`
-        : "No workout marked yet today.",
-      weightDays >= 7
-        ? "Weekly weigh-in is due."
-        : latestWeightDate
-          ? `Weight check-in is still fresh. ${formatRelativeDate(latestWeightDate)}.`
-          : "No weigh-in yet. One weekly entry is enough to start.",
-    ];
-
-    const nextActions: ActionCard[] = [];
-
-    if (data.mealLogs.length === 0) {
-      nextActions.push({
-        title: "Log your first meal",
-        description: "Start the day with one meal entry.",
+    // ── AI Coach: actionable, positive-framed tips with CTAs ──
+    const tips: CoachTip[] = [];
+    if (proteinLeft > 0) {
+      tips.push({
+        type: "nutrition",
+        message: `Hit your protein — ${Math.round(proteinLeft)}g to go. Log a high-protein meal to close the gap.`,
+        cta: "Log protein",
         href: `/meals?date=${selectedDate}`,
-        tone: "sky",
       });
-    } else if (proteinLeft > 0) {
-      nextActions.push({
-        title: "Close the protein gap",
-        description: `${Math.round(proteinLeft)}g left to hit the target.`,
+    } else if (data.mealLogs.length > 0) {
+      tips.push({
+        type: "nutrition",
+        message: "Protein target is covered today — nice work staying on top of it.",
+        cta: "Review meals",
         href: `/meals?date=${selectedDate}`,
-        tone: "emerald",
       });
     }
-
     if (!data.isGymDay) {
-      nextActions.push({
-        title: "Mark your workout",
-        description: "Set today as gym day or rest day.",
+      tips.push({
+        type: "workout",
+        message: nextSplit
+          ? `No workout logged yet. ${nextSplit.emoji} ${nextSplit.name} is ready when you are.`
+          : "No workout logged yet. Mark today as a gym or rest day.",
+        cta: "Set training",
         onClick: () => setShowGymPicker(true),
-        tone: "amber",
       });
     }
-
     if (weightDays >= 7) {
-      nextActions.push({
-        title: "Do a quick weigh-in",
-        description: latestWeightDate ? `Last one was ${weightDays} days ago.` : "Body check-ins are still empty.",
+      tips.push({
+        type: "body",
+        message: latestWeightDate
+          ? `Weigh-in overdue (${weightDays} days). A quick log keeps your trend accurate.`
+          : "No weigh-in yet — one entry unlocks your weight trend.",
+        cta: "Quick log",
         href: `/body?date=${selectedDate}`,
-        tone: "sky",
       });
-    } else if (measurementDays >= 21) {
-      nextActions.push({
-        title: "Refresh measurements",
-        description: latestMeasurementDate ? `Last block was ${measurementDays} days ago.` : "Optional every few weeks.",
+    }
+    if (data.steps < data.goals.steps * 0.65 && data.goals.steps > 0) {
+      tips.push({
+        type: "activity",
+        message: `${stepsLeft.toLocaleString()} steps to your goal. A short walk gets you there.`,
+        cta: "Log steps",
         href: `/body?date=${selectedDate}`,
-        tone: "amber",
+      });
+    }
+    if (tips.length === 0) {
+      tips.push({
+        type: "nutrition",
+        message: "Everything's logged and on target today. Keep the momentum going! 🔥",
+        cta: "View stats",
+        href: "/analytics",
       });
     }
 
-    if (data.steps < data.goals.steps * 0.65) {
-      nextActions.push({
-        title: "Top up activity",
-        description: `${(data.goals.steps - data.steps).toLocaleString()} steps left to reach your goal.`,
-        href: `/body?date=${selectedDate}`,
-        tone: "emerald",
-      });
+    // ── Context-aware quick actions (max 3) ──
+    const actions: CoachTip[] = [];
+    if (data.mealLogs.length === 0) {
+      actions.push({ type: "nutrition", message: "Log Meal", cta: "", href: `/meals?date=${selectedDate}` });
+    } else if (proteinLeft > 0) {
+      actions.push({ type: "nutrition", message: "Add Meal", cta: "", href: `/meals?date=${selectedDate}` });
+    }
+    if (!data.isGymDay) {
+      actions.push({ type: "workout", message: "Start Workout", cta: "", href: "/workout" });
+    }
+    if (weightDays >= 7) {
+      actions.push({ type: "body", message: "Log Weight", cta: "", href: `/body?date=${selectedDate}` });
     }
 
     return {
       score,
-      netCalories,
       proteinLeft,
-      latestWeightDate,
-      latestMeasurementDate,
+      caloriesLeft,
+      stepsLeft,
       weightDays,
-      measurementDays,
-      insights,
-      nextActions: nextActions.slice(0, 3),
+      tips: tips.slice(0, 3),
+      actions: actions.slice(0, 3),
+      allDone: actions.length === 0,
     };
   }, [data, selectedDate, todayStr]);
 
+  const mealGroups = useMemo(() => {
+    if (!data) return [];
+    const groups = new Map<MealSlot, MealLog[]>();
+    for (const log of data.mealLogs) {
+      const slot = slotFor(log);
+      if (!groups.has(slot)) groups.set(slot, []);
+      groups.get(slot)!.push(log);
+    }
+    return SLOT_ORDER.filter((s) => groups.has(s)).map((slot) => {
+      const logs = groups.get(slot)!;
+      return {
+        slot,
+        logs,
+        calories: logs.reduce((sum, l) => sum + l.calories, 0),
+      };
+    });
+  }, [data]);
+
   return (
     <main className="mx-auto max-w-5xl p-4 pb-10">
-      <div className="mb-6 rounded-[28px] border border-zinc-800 bg-[radial-gradient(circle_at_top_left,_rgba(34,197,94,0.12),_transparent_32%),radial-gradient(circle_at_top_right,_rgba(56,189,248,0.14),_transparent_30%),linear-gradient(180deg,_rgba(24,24,27,0.96),_rgba(9,9,11,0.98))] p-5">
-        <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-emerald-300/80">Dashboard</p>
-            <h1 className="mt-2 text-3xl font-semibold text-white">Your day, in one clear view.</h1>
-            <p className="mt-2 max-w-2xl text-sm text-zinc-400">
-              Less log list, more direction. The top section now tells you how the day is going and what deserves attention next.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-2">
-            <button onClick={() => changeDate(-1)} className="rounded-xl bg-zinc-800 px-4 py-2 text-sm text-zinc-100 hover:bg-zinc-700">
-              Prev
-            </button>
-            <div className="min-w-[170px] text-center">
-              <p className="text-sm text-zinc-300">{displayDate}</p>
-              <p className="text-xs text-emerald-300">{isToday ? "Today" : "Past day"}</p>
-            </div>
-            <button
-              onClick={() => changeDate(1)}
-              disabled={isToday}
-              className="rounded-xl bg-zinc-800 px-4 py-2 text-sm text-zinc-100 hover:bg-zinc-700 disabled:opacity-30"
-            >
-              Next
-            </button>
-          </div>
+      {/* ── Header + date nav ── */}
+      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-green-400/80">
+            Dashboard
+          </p>
+          <h1 className="mt-1 text-2xl font-bold text-white sm:text-3xl">
+            {isToday ? "Today" : displayDate}
+          </h1>
+        </div>
+        <div className="flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-1.5">
+          <button
+            onClick={() => changeDate(-1)}
+            aria-label="Previous day"
+            className="rounded-xl bg-zinc-800 px-3 py-1.5 text-sm text-zinc-100 hover:bg-zinc-700"
+          >
+            ‹
+          </button>
+          <span className="min-w-[130px] text-center text-sm text-zinc-300">{displayDate}</span>
+          <button
+            onClick={() => changeDate(1)}
+            disabled={isToday}
+            aria-label="Next day"
+            className="rounded-xl bg-zinc-800 px-3 py-1.5 text-sm text-zinc-100 hover:bg-zinc-700 disabled:opacity-30"
+          >
+            ›
+          </button>
         </div>
       </div>
 
       {loading || !data || !summary ? (
         <div className="space-y-4">
-          {[1, 2, 3, 4].map((item) => (
-            <div key={item} className="h-24 animate-pulse rounded-2xl bg-zinc-800" />
-          ))}
+          <Skeleton className="h-40" />
+          <Skeleton className="h-28" />
+          <div className="grid gap-4 md:grid-cols-2">
+            <Skeleton className="h-40" />
+            <Skeleton className="h-40" />
+          </div>
         </div>
       ) : (
-        <>
-          <div className="mb-6 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-            <div className="rounded-[28px] border border-zinc-800 bg-zinc-950 p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Today&apos;s balance</p>
-                  <h2 className="mt-1 text-2xl font-semibold">{
-                    summary.score >= 80
-                      ? "Everything is moving in the right direction."
+        <div className="space-y-6">
+          {/* ── 1. Hero summary bar ── */}
+          <Card tier="primary">
+            <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center">
+              <ProgressRing value={summary.score} color={scoreColor(summary.score)} size={132} stroke={12}>
+                <span className="text-3xl font-bold tabular-nums" style={{ color: scoreColor(summary.score) }}>
+                  {summary.score}
+                </span>
+                <span className="text-[11px] uppercase tracking-wide text-zinc-500">score</span>
+              </ProgressRing>
+
+              <div className="flex-1 space-y-3">
+                {summary.score === 0 ? (
+                  <div>
+                    <p className="text-lg font-semibold text-white">Start your day 💪</p>
+                    <p className="text-sm text-zinc-400">Log a meal or workout to get your score moving.</p>
+                  </div>
+                ) : (
+                  <p className="text-lg font-semibold text-white">
+                    {summary.score >= 80
+                      ? "Strong day — everything's moving in the right direction."
                       : summary.score >= 55
-                        ? "You are on track with a few useful nudges."
-                        : "A couple of quick actions would clean this day up."
-                  }</h2>
-                  <p className={`mt-2 text-sm ${scoreTone(summary.score)}`}>{scoreLabel(summary.score)} • {summary.score}/100</p>
-                </div>
+                        ? "Good momentum. A couple of quick wins left."
+                        : "You're getting started — a few actions will lift your day."}
+                  </p>
+                )}
 
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-right">
-                  <p className="text-xs text-zinc-500">Net calories</p>
-                  <p className="text-3xl font-semibold">{summary.netCalories}</p>
-                  <p className="text-xs text-zinc-400">Target {data.goals.calories}</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <StatPill
+                    label="Calories"
+                    value={`${Math.round(data.totalCalories)}`}
+                    sub={`/ ${data.goals.calories}`}
+                    color={METRICS.calories.hex}
+                  />
+                  <StatPill
+                    label="Protein"
+                    value={`${Math.round(data.totalProtein)}g`}
+                    sub={`/ ${data.goals.protein}g`}
+                    color={METRICS.protein.hex}
+                  />
+                  <StatPill
+                    label="Workout"
+                    value={data.isGymDay ? "Logged" : "—"}
+                    sub={data.isGymDay ? (data.gymSplit ?? "Gym day") : "Not logged"}
+                    color={SEMANTIC.accent}
+                  />
                 </div>
-              </div>
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <StatCard
-                  label="Protein"
-                  value={`${Math.round(data.totalProtein)}g`}
-                  note={summary.proteinLeft > 0 ? `${Math.round(summary.proteinLeft)}g left today` : "Target reached"}
-                />
-                <StatCard
-                  label="Steps"
-                  value={data.steps ? data.steps.toLocaleString() : "--"}
-                  note={`${Math.max(data.goals.steps - data.steps, 0).toLocaleString()} left to goal`}
-                />
-                <StatCard
-                  label="Workout"
-                  value={data.isGymDay ? (data.gymSplit ?? "Gym day") : "Not marked"}
-                  note={data.isGymDay ? "Training is already set for today" : "Set gym or rest day"}
-                />
               </div>
             </div>
+          </Card>
 
-            <div className="rounded-[28px] border border-zinc-800 bg-zinc-950 p-5">
-              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Coach notes</p>
-              <h2 className="mt-1 text-xl font-semibold">What matters next</h2>
+          {/* ── 2. AI Coach ── */}
+          <section>
+            <SectionHeader eyebrow="AI Coach" title="What matters next" />
+            <div className="space-y-2.5">
+              {summary.tips.map((tip) => (
+                <Card key={tip.message} accent={COACH_ACCENT[tip.type]} className="flex items-center gap-3">
+                  <p className="flex-1 text-sm text-zinc-200">{tip.message}</p>
+                  {tip.href ? (
+                    <Link
+                      href={tip.href}
+                      className="shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+                      style={{ backgroundColor: COACH_ACCENT[tip.type] }}
+                    >
+                      {tip.cta}
+                    </Link>
+                  ) : (
+                    <button
+                      onClick={tip.onClick}
+                      className="shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+                      style={{ backgroundColor: COACH_ACCENT[tip.type] }}
+                    >
+                      {tip.cta}
+                    </button>
+                  )}
+                </Card>
+              ))}
+            </div>
+          </section>
 
-              <div className="mt-4 space-y-3">
-                {summary.insights.map((insight) => (
-                  <div key={insight} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-300">
-                    {insight}
-                  </div>
+          {/* ── 3. Quick actions ── */}
+          {!summary.allDone && (
+            <section>
+              <SectionHeader eyebrow="Quick actions" title="Fast moves for today" />
+              <div className="grid gap-3 sm:grid-cols-3">
+                {summary.actions.map((action, i) => (
+                  <Link
+                    key={action.message}
+                    href={action.href!}
+                    className={`rounded-2xl border p-4 text-center text-sm font-semibold transition hover:-translate-y-0.5 ${
+                      i === 0
+                        ? "border-transparent bg-green-600 text-white hover:bg-green-500"
+                        : "border-zinc-800 bg-zinc-900/70 text-zinc-200 hover:border-zinc-700 hover:bg-zinc-800/70"
+                    }`}
+                  >
+                    {action.message}
+                  </Link>
                 ))}
               </div>
-            </div>
-          </div>
+            </section>
+          )}
 
-          <div className="mb-6">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Next actions</p>
-                <h2 className="mt-1 text-xl font-semibold">Fast moves that improve the day</h2>
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              {summary.nextActions.map((action) => {
-                const classes = `rounded-2xl border p-4 text-left transition ${actionClasses(action.tone)}`;
-
-                if (action.href) {
-                  return (
-                    <Link key={action.title} href={action.href} className={classes}>
-                      <p className="font-medium text-white">{action.title}</p>
-                      <p className="mt-1 text-sm text-zinc-300">{action.description}</p>
-                    </Link>
-                  );
-                }
-
-                return (
-                  <button key={action.title} onClick={action.onClick} className={classes}>
-                    <p className="font-medium text-white">{action.title}</p>
-                    <p className="mt-1 text-sm text-zinc-300">{action.description}</p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="mb-6 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-            <div className="rounded-[28px] border border-zinc-800 bg-zinc-950 p-5">
-              <div className="mb-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Nutrition</p>
-                <h2 className="mt-1 text-xl font-semibold">Macro progress without the clutter</h2>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <MacroBar label="Calories" current={data.totalCalories} target={data.goals.calories} unit="kcal" color="bg-emerald-500" />
-                <MacroBar label="Protein" current={data.totalProtein} target={data.goals.protein} unit="g" color="bg-sky-500" />
-                <MacroBar label="Carbs" current={data.totalCarbs} target={data.goals.carbs} unit="g" color="bg-amber-500" />
-                <MacroBar label="Fat" current={data.totalFat} target={data.goals.fat} unit="g" color="bg-rose-500" />
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="rounded-[28px] border border-zinc-800 bg-zinc-950 p-5">
-                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Activity</p>
-                <h2 className="mt-1 text-xl font-semibold">Movement and training</h2>
-
-                <div className="mt-4 rounded-2xl bg-zinc-900 p-4">
-                  <div className="mb-2 flex items-center justify-between text-sm">
-                    <span className="text-zinc-300">{data.steps.toLocaleString()} steps</span>
-                    <span className="text-zinc-500">/ {data.goals.steps.toLocaleString()}</span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
-                    <div className="h-full rounded-full bg-emerald-500" style={{ width: `${percent(data.steps, data.goals.steps)}%` }} />
-                  </div>
-                  <p className="mt-3 text-xs text-zinc-400">
-                    {data.caloriesBurned > 0 ? `${data.caloriesBurned} kcal burned from steps.` : "No calorie burn from steps logged yet."}
-                  </p>
+          {/* ── 4 + 5. Nutrition & Activity overviews ── */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            {/* Nutrition */}
+            <LinkCard href={`/meals?date=${selectedDate}`} className="!p-5">
+              <SectionHeader eyebrow="Nutrition" title="Macros at a glance" />
+              <div className="mb-3">
+                <div className="mb-1.5 flex items-baseline justify-between">
+                  <span className="text-2xl font-bold tabular-nums" style={{ color: METRICS.calories.hex }}>
+                    {Math.round(data.totalCalories)}
+                    <span className="ml-1 text-sm font-medium text-zinc-500">/ {data.goals.calories} kcal</span>
+                  </span>
+                  <span className="text-xs text-zinc-500">{Math.round(summary.caloriesLeft)} left</span>
                 </div>
+                <ProgressBar value={data.totalCalories} target={data.goals.calories} color={METRICS.calories.hex} height={10} />
+              </div>
+              <div className="space-y-2.5">
+                <MacroRow label="Protein" metric="protein" current={data.totalProtein} target={data.goals.protein} />
+                <MacroRow label="Carbs" metric="carbs" current={data.totalCarbs} target={data.goals.carbs} />
+                <MacroRow label="Fat" metric="fat" current={data.totalFat} target={data.goals.fat} />
+              </div>
+            </LinkCard>
 
-                <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-                  <div className="flex items-center justify-between gap-4">
+            {/* Activity */}
+            <Card tier="secondary" className="!p-5">
+              <SectionHeader eyebrow="Activity" title="Movement & recovery" />
+              <div className="space-y-4">
+                {/* Steps */}
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between text-sm">
+                    <span className="text-zinc-300">Steps</span>
+                    <span className="tabular-nums text-zinc-400">
+                      {data.steps.toLocaleString()} / {data.goals.steps.toLocaleString()}
+                    </span>
+                  </div>
+                  <ProgressBar value={data.steps} target={data.goals.steps} color={METRICS.steps.hex} />
+                </div>
+                {/* Water with + button */}
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between text-sm">
+                    <span className="text-zinc-300">Water</span>
+                    <div className="flex items-center gap-2">
+                      <span className="tabular-nums text-zinc-400">
+                        {data.water.toFixed(2)} / {WATER_TARGET_DEFAULT} L
+                      </span>
+                      <button
+                        onClick={() => void addWater(-WATER_STEP)}
+                        disabled={data.water <= 0}
+                        aria-label="Remove a glass of water"
+                        className="h-6 w-6 rounded-lg bg-zinc-800 text-sm text-zinc-200 hover:bg-zinc-700 disabled:opacity-30"
+                      >
+                        −
+                      </button>
+                      <button
+                        onClick={() => void addWater(WATER_STEP)}
+                        aria-label="Add a glass of water"
+                        className="h-6 w-6 rounded-lg text-sm font-bold text-white hover:opacity-90"
+                        style={{ backgroundColor: METRICS.water.hex }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  <ProgressBar value={data.water} target={WATER_TARGET_DEFAULT} color={METRICS.water.hex} />
+                </div>
+                {/* Sleep */}
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between text-sm">
+                    <span className="text-zinc-300">Sleep</span>
+                    <span className="tabular-nums text-zinc-400">
+                      {data.sleep ? `${data.sleep} h` : "Not logged"}
+                    </span>
+                  </div>
+                  <ProgressBar value={data.sleep} target={SLEEP_TARGET_DEFAULT} color={METRICS.sleep.hex} />
+                </div>
+                {/* Workout status */}
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
+                  <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="font-medium">
-                        {data.isGymDay ? `${data.gymSplit ?? "Gym day"} is marked` : "Workout still not marked"}
+                      <p className="text-sm font-medium text-white">
+                        {data.isGymDay ? `${data.gymSplit ?? "Gym day"}` : "Rest day"}
                       </p>
                       <p className="text-xs text-zinc-500">
-                        {data.isGymDay ? "You can still switch the split if needed." : "Mark gym day or keep it as rest day."}
+                        {data.isGymDay ? "Training set for today" : "No workout marked yet"}
                       </p>
                     </div>
                     <button
-                      onClick={() => setShowGymPicker((previous) => !previous)}
-                      className="rounded-xl bg-zinc-800 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-700"
+                      onClick={() => setShowGymPicker((v) => !v)}
+                      className="rounded-xl bg-zinc-800 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700"
                     >
                       {data.isGymDay ? "Change" : "Set day"}
                     </button>
                   </div>
-
                   {showGymPicker && (
                     <div className="mt-3 space-y-2">
                       <button
                         onClick={() => void saveGymStatus(false, null)}
+                        disabled={savingGym}
                         className={`w-full rounded-xl px-3 py-2 text-left text-sm ${
                           !data.isGymDay ? "bg-zinc-600 text-white" : "bg-zinc-800 hover:bg-zinc-700"
                         }`}
                       >
                         Rest day
                       </button>
-                      {(data.splits ?? []).filter((split) => split.name !== "Rest Day").map((split) => (
-                        <button
-                          key={split.id}
-                          onClick={() => void saveGymStatus(true, split.name)}
-                          disabled={savingGym}
-                          className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${
-                            data.isGymDay && data.gymSplit === split.name
-                              ? "bg-emerald-600 text-white"
-                              : "bg-zinc-800 hover:bg-zinc-700"
-                          }`}
-                        >
-                          {split.emoji} {split.name}
-                        </button>
-                      ))}
+                      {data.splits
+                        .filter((s) => s.name !== "Rest Day")
+                        .map((split) => (
+                          <button
+                            key={split.id}
+                            onClick={() => void saveGymStatus(true, split.name)}
+                            disabled={savingGym}
+                            className={`w-full rounded-xl px-3 py-2 text-left text-sm transition ${
+                              data.isGymDay && data.gymSplit === split.name
+                                ? "bg-green-600 text-white"
+                                : "bg-zinc-800 hover:bg-zinc-700"
+                            }`}
+                          >
+                            {split.emoji} {split.name}
+                          </button>
+                        ))}
                     </div>
                   )}
                 </div>
               </div>
-
-              <div className="rounded-[28px] border border-zinc-800 bg-zinc-950 p-5">
-                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Quick access</p>
-                <h2 className="mt-1 text-xl font-semibold">Jump where the detail belongs</h2>
-
-                <div className="mt-4 space-y-3">
-                  <QuickLinkCard
-                    href={`/meals?date=${selectedDate}`}
-                    title="Meals"
-                    description={data.mealLogs.length > 0 ? `${data.mealLogs.length} meals logged today` : "Open meal logging and library"}
-                  />
-                  <QuickLinkCard
-                    href={`/workout`}
-                    title="Workout"
-                    description={data.isGymDay ? `Today is marked as ${data.gymSplit ?? "gym day"}` : "Open workout flow and history"}
-                  />
-                  <div className="rounded-2xl border border-dashed border-zinc-700 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium text-white">Body</p>
-                        <p className="mt-1 text-sm text-zinc-400">
-                          {summary.latestWeightDate
-                            ? `${data.latestWeightLog?.weight ?? "--"} kg • ${formatRelativeDate(summary.latestWeightDate)}`
-                            : "Weekly check-ins live in the body page"}
-                        </p>
-                        <p className="mt-2 text-xs text-zinc-500">
-                          {summary.latestMeasurementDate
-                            ? `Measurements: ${formatRelativeDate(summary.latestMeasurementDate)}`
-                            : "Measurements stay separate so this dashboard stays focused on today"}
-                        </p>
-                      </div>
-                      <Link href={`/body?date=${selectedDate}`} className="rounded-xl bg-zinc-800 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-700">
-                        Open
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            </Card>
           </div>
 
-          <div className="rounded-[28px] border border-zinc-800 bg-zinc-950 p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Meals</p>
-                <h2 className="mt-1 text-xl font-semibold">{isToday ? "Today’s food timeline" : `Meals for ${displayDate}`}</h2>
-              </div>
-              <div className="flex items-center gap-2">
+          {/* ── 6. Today's meals timeline ── */}
+          <section>
+            <SectionHeader
+              eyebrow="Meals"
+              title={isToday ? "Today's timeline" : "Meal timeline"}
+              action={
                 <Link
                   href={`/meals?date=${selectedDate}`}
-                  className="rounded-xl border border-dashed border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:border-zinc-500"
+                  className="rounded-xl bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-500"
                 >
-                  Add meal
+                  + Add meal
                 </Link>
-                <span className="text-xs text-zinc-500">{data.mealLogs.length} logged</span>
-              </div>
-            </div>
-
+              }
+            />
             {data.mealLogs.length === 0 ? (
-              <p className="text-sm text-zinc-500">No meals logged yet.</p>
+              <EmptyState
+                icon="🍽️"
+                title="No meals logged yet"
+                message={`${data.goals.calories} kcal to go — log your first meal to start the day.`}
+                ctaLabel="Log a meal"
+                ctaHref={`/meals?date=${selectedDate}`}
+              />
             ) : (
-              <div className="space-y-3">
-                {data.mealLogs.map((log) => {
-                  const info = mealInfo(log);
-                  const isPiece = info.servingLabel === "piece";
-                  const step = isPiece ? 1 : 0.5;
-
-                  return (
-                    <div key={log.id} className="rounded-2xl bg-zinc-900 p-4">
-                      <div className="mb-3 flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-medium">{info.name}</p>
-                          <p className="text-xs text-zinc-400">
-                            {Math.round(log.calories)} kcal • P:{Math.round(log.protein)}g • C:{Math.round(log.carbs)}g • F:{Math.round(log.fat)}g
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => void removeMeal(log.id)}
-                          className="rounded-lg bg-zinc-800 px-2 py-1 text-xs text-zinc-400 hover:bg-red-900 hover:text-red-300"
-                        >
-                          Remove
-                        </button>
-                      </div>
-
+              <div className="space-y-4">
+                {mealGroups.map((group) => (
+                  <Card key={group.slot} tier="secondary">
+                    <div className="mb-3 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => void adjustMeal(log, -step)} className="rounded-lg bg-zinc-800 px-3 py-1 text-sm hover:bg-zinc-700">
-                          -
-                        </button>
-                        <span className="min-w-16 text-center text-sm font-medium">{formatQuantity(log)}</span>
-                        <button onClick={() => void adjustMeal(log, step)} className="rounded-lg bg-zinc-800 px-3 py-1 text-sm hover:bg-zinc-700">
-                          +
-                        </button>
-                        <span className="text-xs text-zinc-500">{isPiece ? "pieces" : info.servingLabel}</span>
+                        <span className="text-lg">{SLOT_ICON[group.slot]}</span>
+                        <span className="text-sm font-semibold text-white">{group.slot}</span>
                       </div>
+                      <span className="text-sm font-semibold tabular-nums" style={{ color: METRICS.calories.hex }}>
+                        {Math.round(group.calories)} kcal
+                      </span>
                     </div>
-                  );
-                })}
+                    <div className="space-y-2.5">
+                      {group.logs.map((log) => {
+                        const info = mealInfo(log);
+                        const isPiece = info.servingLabel === "piece";
+                        const step = isPiece ? 1 : 0.5;
+                        return (
+                          <div key={log.id} className="rounded-xl bg-zinc-900/70 p-3">
+                            <div className="mb-2 flex items-start justify-between gap-3">
+                              <div className="flex items-center gap-2.5">
+                                {info.imageUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={info.imageUrl} alt="" className="h-9 w-9 rounded-lg object-cover" />
+                                ) : (
+                                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-800 text-sm">🍴</div>
+                                )}
+                                <div>
+                                  <p className="text-sm font-medium text-white">{info.name}</p>
+                                  <p className="text-xs tabular-nums" style={{ color: METRICS.calories.hex }}>
+                                    {Math.round(log.calories)} kcal
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => void removeMeal(log.id)}
+                                aria-label={`Remove ${info.name}`}
+                                className="rounded-lg bg-zinc-800 px-2 py-1 text-xs text-zinc-400 hover:bg-red-900 hover:text-red-300"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5">
+                                <MacroChip metric="protein" value={log.protein} />
+                                <MacroChip metric="carbs" value={log.carbs} />
+                                <MacroChip metric="fat" value={log.fat} />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => void adjustMeal(log, -step)}
+                                  aria-label="Decrease quantity"
+                                  className="h-7 w-7 rounded-lg bg-zinc-800 text-sm hover:bg-zinc-700"
+                                >
+                                  −
+                                </button>
+                                <span className="min-w-14 text-center text-xs font-medium tabular-nums">
+                                  {formatQuantity(log)}
+                                </span>
+                                <button
+                                  onClick={() => void adjustMeal(log, step)}
+                                  aria-label="Increase quantity"
+                                  className="h-7 w-7 rounded-lg bg-zinc-800 text-sm hover:bg-zinc-700"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                ))}
               </div>
             )}
-          </div>
-        </>
+          </section>
+
+          {/* ── 7. Weekly glance ── */}
+          <section>
+            <SectionHeader eyebrow="This week" title="Consistency at a glance" />
+            <Card tier="secondary">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex flex-1 justify-between">
+                  {data.week.map((day) => (
+                    <div key={day.date} className="flex flex-col items-center gap-1.5">
+                      <span className="text-[11px] uppercase text-zinc-500">{day.weekday}</span>
+                      <div className="flex flex-col gap-1">
+                        <Dot on={day.hasMeals} color={SEMANTIC.success} />
+                        <Dot on={day.hasWorkout} color={METRICS.calories.hex} />
+                        <Dot on={day.hasWeighIn} color={METRICS.protein.hex} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-l border-zinc-800 pl-4 text-center">
+                  <div className="flex items-center gap-1">
+                    <span className="text-2xl">🔥</span>
+                    <span className="text-3xl font-bold tabular-nums" style={{ color: METRICS.calories.hex }}>
+                      {data.streak.current}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-500">day streak</p>
+                  {data.streak.longest > 0 && (
+                    <p className="mt-1 text-[11px] text-zinc-600">Best: {data.streak.longest}</p>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-4 border-t border-zinc-800 pt-3 text-[11px] text-zinc-500">
+                <Legend color={SEMANTIC.success} label="Meals" />
+                <Legend color={METRICS.calories.hex} label="Workout" />
+                <Legend color={METRICS.protein.hex} label="Weigh-in" />
+              </div>
+            </Card>
+          </section>
+        </div>
       )}
     </main>
+  );
+}
+
+// ── Small local presentational helpers ──────────────────────────────────────
+
+function StatPill({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-2.5">
+      <p className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="text-lg font-bold leading-tight tabular-nums" style={{ color }}>
+        {value}
+      </p>
+      <p className="text-[10px] text-zinc-500">{sub}</p>
+    </div>
+  );
+}
+
+function MacroRow({
+  label,
+  metric,
+  current,
+  target,
+}: {
+  label: string;
+  metric: "protein" | "carbs" | "fat";
+  current: number;
+  target: number;
+}) {
+  const remaining = Math.max(target - current, 0);
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-xs">
+        <span className="text-zinc-400">{label}</span>
+        <span className="tabular-nums text-zinc-500">
+          {Math.round(current)} / {target}g · {Math.round(remaining)} left
+        </span>
+      </div>
+      <ProgressBar value={current} target={target} color={METRICS[metric].hex} height={6} />
+    </div>
+  );
+}
+
+function Dot({ on, color }: { on: boolean; color: string }) {
+  return (
+    <div
+      className="h-2.5 w-2.5 rounded-full"
+      style={{ backgroundColor: on ? color : "#27272a" }}
+    />
+  );
+}
+
+function Legend({ color, label }: { color: string; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+      <span>{label}</span>
+    </div>
   );
 }
