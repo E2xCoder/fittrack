@@ -1,34 +1,62 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
+import { METRICS } from "@/lib/metrics";
 
-const TIMEZONES = [
-  { value: "Europe/Istanbul",     label: "İstanbul (UTC+3)" },
-  { value: "Europe/Berlin",       label: "Berlin / Orta Avrupa (UTC+1/+2)" },
-  { value: "Europe/London",       label: "Londra (UTC+0/+1)" },
-  { value: "Europe/Paris",        label: "Paris (UTC+1/+2)" },
-  { value: "Europe/Moscow",       label: "Moskova (UTC+3)" },
-  { value: "America/New_York",    label: "New York (UTC-5/-4)" },
-  { value: "America/Chicago",     label: "Chicago (UTC-6/-5)" },
-  { value: "America/Los_Angeles", label: "Los Angeles (UTC-8/-7)" },
-  { value: "America/Sao_Paulo",   label: "São Paulo (UTC-3)" },
-  { value: "Africa/Cairo",        label: "Kahire (UTC+2)" },
-  { value: "Asia/Dubai",          label: "Dubai (UTC+4)" },
-  { value: "Asia/Kolkata",        label: "Hindistan (UTC+5:30)" },
-  { value: "Asia/Tokyo",          label: "Tokyo (UTC+9)" },
-  { value: "Asia/Shanghai",       label: "Çin (UTC+8)" },
-  { value: "Australia/Sydney",    label: "Sidney (UTC+10/+11)" },
+const TIMEZONE_OPTIONS = [
+  "Europe/Istanbul", "Europe/Berlin", "Europe/London", "Europe/Paris",
+  "Europe/Rome", "Europe/Moscow", "Europe/Athens", "America/New_York",
+  "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Sao_Paulo",
+  "Africa/Cairo", "Asia/Dubai", "Asia/Karachi", "Asia/Kolkata", "Asia/Dhaka",
+  "Asia/Bangkok", "Asia/Shanghai", "Asia/Tokyo", "Australia/Sydney", "Pacific/Auckland",
 ];
 
 function validateUsername(val: string): string | null {
   if (!val) return null; // empty is allowed (no username)
   if (val.length < 3) return "En az 3 karakter";
   if (val.length > 20) return "En fazla 20 karakter";
-  if (!/^[a-zA-Z0-9_]+$/.test(val)) return "Sadece harf, rakam ve _ kullanilabilir";
+  if (!/^[a-zA-Z0-9_]+$/.test(val)) return "Sadece harf, rakam ve _ kullanılabilir";
   return null;
+}
+
+// ── Collapsible settings section ──
+function Section({
+  title,
+  subtitle,
+  icon,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between px-4 py-3.5 text-left transition hover:bg-zinc-800/40"
+      >
+        <div className="flex items-center gap-2.5">
+          {icon && <span className="text-base">{icon}</span>}
+          <div>
+            <p className="text-sm font-semibold text-zinc-200">{title}</p>
+            {subtitle && <p className="text-[11px] text-zinc-500">{subtitle}</p>}
+          </div>
+        </div>
+        <span className={`text-zinc-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`}>▾</span>
+      </button>
+      {open && <div className="border-t border-zinc-800 p-4">{children}</div>}
+    </div>
+  );
 }
 
 export default function ProfilePage() {
@@ -79,7 +107,6 @@ export default function ProfilePage() {
   const [testSending, setTestSending] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
 
-  // Detect current notification state (supported / denied / subscribed / unsubscribed)
   const refreshNotifState = useCallback(async () => {
     if (!("Notification" in window) || !("serviceWorker" in navigator)) {
       setNotifState("unsupported");
@@ -132,7 +159,7 @@ export default function ProfilePage() {
       .then((r) => r.json())
       .then((data) => setIsAdmin(data?.role === "ADMIN"));
 
-    refreshNotifState();
+    queueMicrotask(() => void refreshNotifState());
   }, [refreshNotifState]);
 
   useEffect(() => {
@@ -190,9 +217,7 @@ export default function ProfilePage() {
 
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(
-          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!
-        ),
+        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
       });
 
       await fetch("/api/notifications/subscribe", {
@@ -287,136 +312,103 @@ export default function ProfilePage() {
 
   if (loading) return <main className="p-6 text-zinc-400">Loading...</main>;
 
+  const inputClass =
+    "w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600 placeholder:text-zinc-600";
+
+  // Merged targets (nutrition + daily), each tinted with its metric color.
+  const targets = [
+    { key: "calorieTarget", label: "Calories", placeholder: "2400", unit: "kcal", color: METRICS.calories.hex, step: "1" },
+    { key: "proteinTarget", label: "Protein", placeholder: "150", unit: "g", color: METRICS.protein.hex, step: "1" },
+    { key: "carbTarget", label: "Carbs", placeholder: "200", unit: "g", color: METRICS.carbs.hex, step: "1" },
+    { key: "fatTarget", label: "Fat", placeholder: "70", unit: "g", color: METRICS.fat.hex, step: "1" },
+    { key: "stepTarget", label: "Steps", placeholder: "10000", unit: "adım", color: METRICS.steps.hex, step: "1" },
+    { key: "waterTarget", label: "Water", placeholder: "2.5", unit: "L", color: METRICS.water.hex, step: "0.1" },
+    { key: "sleepTarget", label: "Sleep", placeholder: "8", unit: "saat", color: METRICS.sleep.hex, step: "0.5" },
+  ] as const;
+
   return (
-    <main className="mx-auto max-w-lg p-4">
+    <main className="mx-auto max-w-lg p-4 pb-24">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Profile</h1>
-        <p className="text-sm text-zinc-400">Set your targets and body info</p>
+        <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-green-400/80">Ayarlar</p>
+        <h1 className="mt-1 text-2xl font-bold">Profile</h1>
+        <p className="text-sm text-zinc-400">Hedeflerini ve hesap ayarlarını yönet</p>
       </div>
 
-      <div className="space-y-4">
-        {/* Personal */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-          <h2 className="mb-3 text-sm font-semibold text-zinc-300">Personal Info</h2>
+      {/* Save status — sticky-ish indicator */}
+      {(saving || saved || saveError) && (
+        <p className={`mb-3 text-right text-xs ${saveError ? "text-red-400" : saved ? "text-green-400" : "text-zinc-500"}`} aria-live="polite">
+          {saveError ? "Kaydedilemedi" : saved ? "Kaydedildi ✓" : "Kaydediliyor…"}
+        </p>
+      )}
+
+      <div className="space-y-3">
+        {/* 1. Personal */}
+        <Section title="Kişisel Bilgiler" subtitle="İsim, boy, kilo" icon="👤" defaultOpen>
           <div className="space-y-3">
             <div>
               <label className="mb-1 block text-xs text-zinc-400">Name</label>
-              <input value={form.name}
-                onChange={(e) => updateForm({ name: e.target.value })}
-                className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
-                placeholder="Your name" />
+              <input value={form.name} onChange={(e) => updateForm({ name: e.target.value })} className={inputClass} placeholder="Your name" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-xs text-zinc-400">Height (cm)</label>
-                <input type="number" value={form.height}
-                  onChange={(e) => updateForm({ height: e.target.value })}
-                  className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
-                  placeholder="175" />
+                <input type="number" value={form.height} onChange={(e) => updateForm({ height: e.target.value })} className={inputClass} placeholder="175" />
               </div>
               <div>
                 <label className="mb-1 block text-xs text-zinc-400">Weight (kg)</label>
-                <input type="number" step="0.1" value={form.weight}
-                  onChange={(e) => updateForm({ weight: e.target.value })}
-                  className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
-                  placeholder="75" />
+                <input type="number" step="0.1" value={form.weight} onChange={(e) => updateForm({ weight: e.target.value })} className={inputClass} placeholder="75" />
               </div>
             </div>
           </div>
-        </div>
+        </Section>
 
-        {/* Nutrition */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-          <h2 className="mb-3 text-sm font-semibold text-zinc-300">Nutrition Targets</h2>
+        {/* 2. Targets (merged nutrition + daily) */}
+        <Section title="Hedefler" subtitle="Beslenme ve günlük hedefler" icon="🎯" defaultOpen>
           <div className="grid grid-cols-2 gap-3">
-            {[
-              { key: "calorieTarget", label: "Calories", placeholder: "2400", unit: "kcal" },
-              { key: "proteinTarget", label: "Protein", placeholder: "150", unit: "g" },
-              { key: "carbTarget", label: "Carbs", placeholder: "200", unit: "g" },
-              { key: "fatTarget", label: "Fat", placeholder: "70", unit: "g" },
-            ].map(({ key, label, placeholder, unit }) => (
+            {targets.map(({ key, label, placeholder, unit, color, step }) => (
               <div key={key}>
-                <label className="mb-1 block text-xs text-zinc-400">{label} ({unit})</label>
-                <input type="number" value={form[key as keyof typeof form] as string}
+                <label className="mb-1 flex items-center gap-1.5 text-xs text-zinc-400">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+                  {label} ({unit})
+                </label>
+                <input
+                  type="number"
+                  step={step}
+                  value={form[key as keyof typeof form] as string}
                   onChange={(e) => updateForm({ [key]: e.target.value })}
-                  className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
-                  placeholder={placeholder} />
+                  className={inputClass}
+                  placeholder={placeholder}
+                />
               </div>
             ))}
           </div>
-        </div>
+        </Section>
 
-        {/* Daily targets */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-          <h2 className="mb-3 text-sm font-semibold text-zinc-300">Daily Targets</h2>
-          <div className="space-y-3">
-            {[
-              { key: "stepTarget", label: "Step Goal", placeholder: "10000", unit: "steps" },
-              { key: "waterTarget", label: "Water Goal", placeholder: "2.5", unit: "L" },
-              { key: "sleepTarget", label: "Sleep Goal", placeholder: "8", unit: "hrs" },
-            ].map(({ key, label, placeholder, unit }) => (
-              <div key={key}>
-                <label className="mb-1 block text-xs text-zinc-400">{label} ({unit})</label>
-                <input type="number" step="0.1" value={form[key as keyof typeof form] as string}
-                  onChange={(e) => updateForm({ [key]: e.target.value })}
-                  className="w-full rounded-xl bg-zinc-800 p-3 outline-none focus:ring-1 focus:ring-zinc-600"
-                  placeholder={placeholder} />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Timezone */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-          <h2 className="mb-1 text-sm font-semibold text-zinc-300">Saat Dilimi</h2>
-          <p className="mb-3 text-xs text-zinc-500">Sabah bildirimleri bu saate gore gonderilir.</p>
+        {/* 3. Timezone */}
+        <Section title="Saat Dilimi" subtitle="Bildirim zamanlaması" icon="🕑">
+          <p className="mb-3 text-xs text-zinc-500">Sabah bildirimleri bu saate göre gönderilir.</p>
           <select
             value={form.timezone ?? "Europe/Berlin"}
             onChange={(e) => updateForm({ timezone: e.target.value })}
             className="w-full rounded-xl bg-zinc-800 p-3 text-sm text-white outline-none focus:ring-1 focus:ring-zinc-600"
           >
-            <option value="Europe/Istanbul">Europe/Istanbul (UTC+3)</option>
-            <option value="Europe/Berlin">Europe/Berlin (UTC+1/+2)</option>
-            <option value="Europe/London">Europe/London (UTC+0/+1)</option>
-            <option value="Europe/Paris">Europe/Paris (UTC+1/+2)</option>
-            <option value="Europe/Rome">Europe/Rome (UTC+1/+2)</option>
-            <option value="Europe/Moscow">Europe/Moscow (UTC+3)</option>
-            <option value="Europe/Athens">Europe/Athens (UTC+2/+3)</option>
-            <option value="America/New_York">America/New_York (UTC-5/-4)</option>
-            <option value="America/Chicago">America/Chicago (UTC-6/-5)</option>
-            <option value="America/Denver">America/Denver (UTC-7/-6)</option>
-            <option value="America/Los_Angeles">America/Los_Angeles (UTC-8/-7)</option>
-            <option value="America/Sao_Paulo">America/Sao_Paulo (UTC-3)</option>
-            <option value="Africa/Cairo">Africa/Cairo (UTC+2)</option>
-            <option value="Asia/Dubai">Asia/Dubai (UTC+4)</option>
-            <option value="Asia/Karachi">Asia/Karachi (UTC+5)</option>
-            <option value="Asia/Kolkata">Asia/Kolkata (UTC+5:30)</option>
-            <option value="Asia/Dhaka">Asia/Dhaka (UTC+6)</option>
-            <option value="Asia/Bangkok">Asia/Bangkok (UTC+7)</option>
-            <option value="Asia/Shanghai">Asia/Shanghai (UTC+8)</option>
-            <option value="Asia/Tokyo">Asia/Tokyo (UTC+9)</option>
-            <option value="Australia/Sydney">Australia/Sydney (UTC+10/+11)</option>
-            <option value="Pacific/Auckland">Pacific/Auckland (UTC+12/+13)</option>
+            {TIMEZONE_OPTIONS.map((tz) => (
+              <option key={tz} value={tz}>{tz}</option>
+            ))}
           </select>
-        </div>
+        </Section>
 
-        {/* Social Profile */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-zinc-300">Sosyal Profil</h2>
-            {form.username && (
-              <Link
-                href={`/social/${form.username}`}
-                className="text-xs text-green-400 hover:text-green-300 transition-colors"
-              >
+        {/* 4. Social profile */}
+        <Section title="Sosyal Profil" subtitle="Kullanıcı adı ve gizlilik" icon="🌐">
+          {form.username && (
+            <div className="mb-3 text-right">
+              <Link href={`/social/${form.username}`} className="text-xs text-green-400 transition-colors hover:text-green-300">
                 Profilimi Gör →
               </Link>
-            )}
-          </div>
-
-          {/* Username */}
+            </div>
+          )}
           <div className="mb-3">
-            <label className="mb-1 block text-xs text-zinc-400">Kullanici adi</label>
+            <label className="mb-1 block text-xs text-zinc-400">Kullanıcı adı</label>
             <div className="flex items-center rounded-xl bg-zinc-800 px-3 py-2 focus-within:ring-1 focus-within:ring-zinc-600">
               <span className="mr-1 text-sm text-zinc-500">@</span>
               <input
@@ -430,71 +422,50 @@ export default function ProfilePage() {
                 className="flex-1 bg-transparent text-sm outline-none placeholder:text-zinc-600"
               />
             </div>
-            {usernameError && (
-              <p className="mt-1 text-xs text-red-400">{usernameError}</p>
-            )}
+            {usernameError && <p className="mt-1 text-xs text-red-400">{usernameError}</p>}
             <p className="mt-1 text-[11px] text-zinc-600">Min 3, max 20 karakter. Harf, rakam ve _</p>
           </div>
 
-          {/* Privacy toggles */}
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Gizlilik</p>
           <div className="space-y-2">
             {[
-              { key: "isPublic",      label: "Profilim herkese acik" },
-              { key: "shareSteps",    label: "Adim sayimi paylasın" },
-              { key: "shareCalories", label: "Kalori bilgimi paylasın" },
-              { key: "shareWorkout",  label: "Antrenman bilgimi paylasın" },
-              { key: "shareStreak",   label: "Streak bilgimi paylasın" },
+              { key: "isPublic",      label: "Profilim herkese açık" },
+              { key: "shareSteps",    label: "Adım sayımı paylaş" },
+              { key: "shareCalories", label: "Kalori bilgimi paylaş" },
+              { key: "shareWorkout",  label: "Antrenman bilgimi paylaş" },
+              { key: "shareStreak",   label: "Streak bilgimi paylaş" },
             ].map(({ key, label }) => (
               <label key={key} className="flex cursor-pointer items-center justify-between rounded-xl bg-zinc-800/50 px-3 py-2">
                 <span className="text-xs text-zinc-300">{label}</span>
                 <button
                   type="button"
+                  role="switch"
+                  aria-checked={!!form[key as keyof typeof form]}
+                  aria-label={label}
                   onClick={() => updateForm({ [key]: !form[key as keyof typeof form] })}
-                  className={`relative h-5 w-9 rounded-full transition-colors ${
-                    form[key as keyof typeof form] ? "bg-green-600" : "bg-zinc-700"
-                  }`}
+                  className={`relative h-5 w-9 rounded-full transition-colors ${form[key as keyof typeof form] ? "bg-green-600" : "bg-zinc-700"}`}
                 >
-                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                    form[key as keyof typeof form] ? "translate-x-4" : "translate-x-0.5"
-                  }`} />
+                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${form[key as keyof typeof form] ? "translate-x-4" : "translate-x-0.5"}`} />
                 </button>
               </label>
             ))}
           </div>
-        </div>
+        </Section>
 
-        {(saving || saved || saveError) && (
-          <p className={`text-right text-xs ${saveError ? "text-red-400" : saved ? "text-green-400" : "text-zinc-500"}`} aria-live="polite">
-            {saveError ? "Save failed" : saved ? "Saved ✓" : "Saving..."}
-          </p>
-        )}
-
-        {/* Push Notifications */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-          <h2 className="mb-1 text-sm font-semibold text-zinc-300">🔔 Bildirimler</h2>
-          <p className="mb-3 text-xs text-zinc-500">
-            Günlük hatırlatıcılar: öğün logu ve antrenman takibi
-          </p>
-
+        {/* 5. Notifications */}
+        <Section title="Bildirimler" subtitle="Günlük hatırlatıcılar" icon="🔔">
           {notifState === "unsupported" && (
-            <p className="rounded-xl bg-zinc-800 px-3 py-2 text-xs text-zinc-500">
-              Bu tarayıcı push bildirimlerini desteklemiyor.
-            </p>
+            <p className="rounded-xl bg-zinc-800 px-3 py-2 text-xs text-zinc-500">Bu tarayıcı push bildirimlerini desteklemiyor.</p>
           )}
-
           {notifState === "denied" && (
-            <div className="rounded-xl bg-red-950/40 px-3 py-2 text-xs text-red-400">
-              Bildirim izni engellendi. Tarayıcı ayarlarından fittrack için izin ver.
-            </div>
+            <div className="rounded-xl bg-red-950/40 px-3 py-2 text-xs text-red-400">Bildirim izni engellendi. Tarayıcı ayarlarından fittrack için izin ver.</div>
           )}
-
           {notifState === "loading" && (
             <div className="flex items-center gap-2 text-xs text-zinc-500">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-700 border-t-green-500" />
               Kontrol ediliyor…
             </div>
           )}
-
           {(notifState === "unsubscribed" || notifState === "subscribed") && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -503,39 +474,29 @@ export default function ProfilePage() {
                     {notifState === "subscribed" ? "✅ Bildirimler açık" : "Bildirimler kapalı"}
                   </p>
                   <p className="text-[11px] text-zinc-500">
-                    {notifState === "subscribed"
-                      ? "Her gün 20:00'de öğün & antrenman hatırlatıcısı"
-                      : "Aç ve günlük hatırlatıcılar al"}
+                    {notifState === "subscribed" ? "Her gün 20:00'de öğün & antrenman hatırlatıcısı" : "Aç ve günlük hatırlatıcılar al"}
                   </p>
                 </div>
                 <button
                   onClick={notifState === "subscribed" ? disableNotifications : enableNotifications}
                   className={`rounded-xl px-4 py-2 text-xs font-semibold transition-colors ${
-                    notifState === "subscribed"
-                      ? "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
-                      : "bg-green-600 text-white hover:bg-green-500"
+                    notifState === "subscribed" ? "bg-zinc-700 text-zinc-300 hover:bg-zinc-600" : "bg-green-600 text-white hover:bg-green-500"
                   }`}
                 >
                   {notifState === "subscribed" ? "Kapat" : "Bildirimleri Aç"}
                 </button>
               </div>
 
-              {notifState === "subscribed" && (
+              {notifState === "subscribed" && isAdmin && (
                 <div className="space-y-1">
-                  {isAdmin && (
-                    <>
                   <button
                     onClick={sendTestNotification}
                     disabled={testSending}
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-700 disabled:opacity-50 transition-colors"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-700 disabled:opacity-50"
                   >
                     {testSending ? "Gönderiliyor…" : "🔔 Test Bildirimi Gönder"}
                   </button>
-                  {testResult && (
-                    <p className="text-center text-xs text-green-400">{testResult}</p>
-                  )}
-                    </>
-                  )}
+                  {testResult && <p className="text-center text-xs text-green-400">{testResult}</p>}
                 </div>
               )}
 
@@ -550,79 +511,74 @@ export default function ProfilePage() {
               )}
             </div>
           )}
-        </div>
+        </Section>
 
-        {/* API Token */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-          <h2 className="mb-1 text-sm font-semibold text-zinc-300">📱 iPhone Steps Sync</h2>
-          <p className="mb-3 text-xs text-zinc-500">
-            Auto-sync your steps from iPhone Health every 3 hours
-          </p>
-
+        {/* 6. Connected devices — iPhone Steps Sync */}
+        <Section title="Bağlı Cihazlar" subtitle="iPhone adım senkronizasyonu" icon="📱">
+          <p className="mb-3 text-xs text-zinc-500">iPhone Sağlık verisinden adımlarını her 3 saatte bir otomatik eşitle.</p>
           {apiToken ? (
             <div className="space-y-3">
               <div className="rounded-xl bg-zinc-800 p-3">
-                <p className="mb-1 text-xs text-zinc-500">Your API Token</p>
+                <p className="mb-1 text-xs text-zinc-500">API Token</p>
                 <p className="break-all font-mono text-xs text-zinc-300">{apiToken}</p>
               </div>
               <div className="flex gap-2">
-                <button onClick={copyToken}
-                  className={`flex-1 rounded-xl py-2 text-sm font-medium transition ${
-                    tokenCopied ? "bg-green-800 text-green-300" : "bg-zinc-800 hover:bg-zinc-700"
-                  }`}>
-                  {tokenCopied ? "Copied ✓" : "Copy Token"}
+                <button
+                  onClick={copyToken}
+                  className={`flex-1 rounded-xl py-2 text-sm font-medium transition ${tokenCopied ? "bg-green-800 text-green-300" : "bg-zinc-800 hover:bg-zinc-700"}`}
+                >
+                  {tokenCopied ? "Kopyalandı ✓" : "Token'ı Kopyala"}
                 </button>
-                <button onClick={generateToken} disabled={generatingToken}
-                  className="rounded-xl bg-zinc-800 px-4 text-sm hover:bg-zinc-700 disabled:opacity-50">
-                  Refresh
+                <button onClick={generateToken} disabled={generatingToken} className="rounded-xl bg-zinc-800 px-4 text-sm hover:bg-zinc-700 disabled:opacity-50">
+                  Yenile
                 </button>
               </div>
-              <div className="rounded-xl bg-zinc-800/50 p-3">
-                <p className="mb-2 text-xs font-medium text-zinc-300">Setup Instructions:</p>
-                <ol className="space-y-1 text-xs text-zinc-500">
-                  <li>1. Copy your token above</li>
-                  <li>2. Open iPhone Shortcuts app</li>
-                  <li>3. Create new shortcut with automation</li>
-                  <li>4. Set trigger: Time of Day, every 3 hours</li>
-                  <li>5. Add action: Get Health Sample (Steps)</li>
-                  <li>6. Add action: Get Contents of URL</li>
-                  <li>7. URL: <span className="text-zinc-300 break-all">https://fittrack-ten-umber.vercel.app/api/sync/steps</span></li>
-                  <li>8. Method: POST, Body: JSON</li>
-                  <li>9. Add header: Authorization: Bearer YOUR_TOKEN</li>
-                  <li>10. Body: {`{"steps": [Health Sample Value]}`}</li>
+              {/* Setup steps tucked behind a disclosure to keep the section light */}
+              <details className="rounded-xl bg-zinc-800/50 p-3">
+                <summary className="cursor-pointer text-xs font-medium text-zinc-300">Kurulum adımları (Shortcuts)</summary>
+                <ol className="mt-2 space-y-1 text-xs text-zinc-500">
+                  <li>1. Yukarıdaki token&apos;ı kopyala</li>
+                  <li>2. iPhone Kısayollar (Shortcuts) uygulamasını aç</li>
+                  <li>3. Yeni bir otomasyon oluştur</li>
+                  <li>4. Tetikleyici: Günün Saati, her 3 saatte bir</li>
+                  <li>5. Eylem: Sağlık Örneği Al (Adımlar)</li>
+                  <li>6. Eylem: URL İçeriğini Al</li>
+                  <li>7. URL: <span className="break-all text-zinc-300">https://fittrack-ten-umber.vercel.app/api/sync/steps</span></li>
+                  <li>8. Yöntem: POST, Gövde: JSON</li>
+                  <li>9. Başlık: Authorization: Bearer YOUR_TOKEN</li>
+                  <li>10. Gövde: {`{"steps": [Health Sample Value]}`}</li>
                 </ol>
-              </div>
+              </details>
             </div>
           ) : (
-            <button onClick={generateToken} disabled={generatingToken}
-              className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
-              {generatingToken ? "Generating..." : "Generate API Token"}
+            <button onClick={generateToken} disabled={generatingToken} className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
+              {generatingToken ? "Oluşturuluyor..." : "API Token Oluştur"}
             </button>
           )}
-        </div>
-        {/* GDPR — Data & Privacy */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-          <h2 className="mb-1 text-sm font-semibold text-zinc-300">🔒 Veri & Gizlilik</h2>
+        </Section>
+
+        {/* 7. Data & privacy (danger zone) */}
+        <Section title="Veri & Gizlilik" subtitle="Dışa aktar veya hesabı sil" icon="🔒">
           <p className="mb-3 text-xs text-zinc-500">
-            GDPR kapsamında verilerinizi indirebilir veya hesabınızı kalıcı olarak silebilirsiniz.{" "}
+            GDPR kapsamında verilerini indirebilir veya hesabını kalıcı olarak silebilirsin.{" "}
             <Link href="/privacy" className="text-green-400 hover:underline">Gizlilik Politikası →</Link>
           </p>
           <div className="flex gap-2">
             <button
               onClick={exportData}
               disabled={exporting}
-              className="flex-1 rounded-xl bg-zinc-800 py-2.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-700 disabled:opacity-50 transition-colors"
+              className="flex-1 rounded-xl bg-zinc-800 py-2.5 text-xs font-semibold text-zinc-200 transition-colors hover:bg-zinc-700 disabled:opacity-50"
             >
               {exporting ? "İndiriliyor…" : "⬇ Verilerimi İndir"}
             </button>
             <button
               onClick={() => { setShowDeleteModal(true); setDeleteConfirm(""); }}
-              className="flex-1 rounded-xl bg-red-950/60 py-2.5 text-xs font-semibold text-red-400 hover:bg-red-900/60 border border-red-900/40 transition-colors"
+              className="flex-1 rounded-xl border border-red-900/40 bg-red-950/60 py-2.5 text-xs font-semibold text-red-400 transition-colors hover:bg-red-900/60"
             >
               🗑 Hesabımı Sil
             </button>
           </div>
-        </div>
+        </Section>
       </div>
 
       {/* Delete confirmation modal */}
@@ -632,7 +588,7 @@ export default function ProfilePage() {
             <h2 className="mb-1 text-base font-bold text-white">Hesabı Sil</h2>
             <p className="mb-4 text-sm text-zinc-400">
               Bu işlem <span className="font-semibold text-red-400">geri alınamaz.</span>{" "}
-              Tüm verileriniz (antrenmanlar, öğünler, ölçümler) kalıcı olarak silinir.
+              Tüm verilerin (antrenmanlar, öğünler, ölçümler) kalıcı olarak silinir.
             </p>
             <p className="mb-2 text-xs text-zinc-500">
               Onaylamak için <span className="font-mono text-zinc-300">SİL</span> yazın:
@@ -644,16 +600,13 @@ export default function ProfilePage() {
               className="mb-4 w-full rounded-xl bg-zinc-800 p-3 text-sm outline-none focus:ring-1 focus:ring-red-800 placeholder:text-zinc-600"
             />
             <div className="flex gap-2">
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                className="flex-1 rounded-xl bg-zinc-800 py-2.5 text-sm font-medium hover:bg-zinc-700"
-              >
+              <button onClick={() => setShowDeleteModal(false)} className="flex-1 rounded-xl bg-zinc-800 py-2.5 text-sm font-medium hover:bg-zinc-700">
                 İptal
               </button>
               <button
                 onClick={deleteAccount}
                 disabled={deleteConfirm !== "SİL" || deleting}
-                className="flex-1 rounded-xl bg-red-700 py-2.5 text-sm font-bold text-white hover:bg-red-600 disabled:opacity-40 transition-colors"
+                className="flex-1 rounded-xl bg-red-700 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-600 disabled:opacity-40"
               >
                 {deleting ? "Siliniyor…" : "Hesabı Kalıcı Sil"}
               </button>
