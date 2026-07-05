@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { METRICS } from "@/lib/metrics";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -131,8 +132,7 @@ function FriendCard({ friend }: { friend: FriendData }) {
               <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                 friend.streak > 0 ? "bg-orange-950/60 text-orange-400" : "bg-zinc-800 text-zinc-500"
               }`}>
-                {/* flame: ↑ unicode approximation */}
-                {friend.streak > 0 ? `+${friend.streak} gun` : "Streak yok"}
+                {friend.streak > 0 ? `🔥 ${friend.streak} gün` : "Streak yok"}
               </span>
             )}
             {friend.isGymDay !== null && (
@@ -150,12 +150,12 @@ function FriendCard({ friend }: { friend: FriendData }) {
           <div className="flex items-center gap-3">
             {friend.weeklyStepsAvg !== null && (
               <span className="text-[10px] text-zinc-400">
-                <span className="font-semibold text-zinc-200">{friend.weeklyStepsAvg.toLocaleString()}</span> adim/gun
+                <span className="font-semibold tabular-nums" style={{ color: METRICS.steps.hex }}>{friend.weeklyStepsAvg.toLocaleString()}</span> adım/gün
               </span>
             )}
             {friend.weeklyCaloriesAvg !== null && (
               <span className="text-[10px] text-zinc-400">
-                <span className="font-semibold text-zinc-200">{friend.weeklyCaloriesAvg}</span> kcal/gun
+                <span className="font-semibold tabular-nums" style={{ color: METRICS.calories.hex }}>{friend.weeklyCaloriesAvg}</span> kcal/gün
               </span>
             )}
           </div>
@@ -224,7 +224,12 @@ export default function SocialPage() {
     }
   }
 
-  useEffect(() => { fetchFriends(); fetchChallenge(); }, []);
+  useEffect(() => {
+    queueMicrotask(() => {
+      void fetchFriends();
+      void fetchChallenge();
+    });
+  }, []);
 
   // ── Search ─────────────────────────────────────────────────────────────────
 
@@ -278,9 +283,9 @@ export default function SocialPage() {
   // ── Leaderboard rank badge ─────────────────────────────────────────────────
 
   function RankBadge({ rank }: { rank: number }) {
-    if (rank === 1) return <span className="text-base">1</span>;
-    if (rank === 2) return <span className="text-base">2</span>;
-    if (rank === 3) return <span className="text-base">3</span>;
+    if (rank === 1) return <span className="text-base" aria-label="1. sıra">🥇</span>;
+    if (rank === 2) return <span className="text-base" aria-label="2. sıra">🥈</span>;
+    if (rank === 3) return <span className="text-base" aria-label="3. sıra">🥉</span>;
     return <span className="text-xs font-bold text-zinc-400">{rank}</span>;
   }
 
@@ -292,8 +297,9 @@ export default function SocialPage() {
     <main className="mx-auto max-w-2xl p-4 pb-28">
       {/* Header */}
       <div className="mb-5">
-        <h1 className="text-2xl font-black tracking-tight text-white">Social</h1>
-        <p className="text-xs text-zinc-500">Arkadaşlar & haftalık meydan okuma</p>
+        <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-green-400/80">Topluluk</p>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight text-white">Social</h1>
+        <p className="text-xs text-zinc-500">Arkadaşlar &amp; haftalık meydan okuma</p>
       </div>
 
       {/* Tabs */}
