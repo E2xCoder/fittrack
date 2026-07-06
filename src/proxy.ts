@@ -58,20 +58,19 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── Auth guard for protected page routes (TEMPORARILY DISABLED) ───────────
-  // const isProtected = protectedRoutes.some((route) =>
-  //   pathname.startsWith(route)
-  // );
-  //
-  // if (!isProtected) return NextResponse.next();
-  //
-  // const sessionToken =
-  //   request.cookies.get("better-auth.session_token")?.value ??
-  //   request.cookies.get("__Secure-better-auth.session_token")?.value;
-  //
-  // if (!sessionToken) {
-  //   return NextResponse.redirect(new URL("/login", request.url));
-  // }
+  const isProtected = protectedRoutes.some((route) =>
+    pathname.startsWith(route)
+  );
+
+  if (!isProtected) return NextResponse.next();
+
+  const sessionToken =
+    request.cookies.get("better-auth.session_token")?.value ??
+    request.cookies.get("__Secure-better-auth.session_token")?.value;
+
+  if (!sessionToken) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
 
   return NextResponse.next();
 }
