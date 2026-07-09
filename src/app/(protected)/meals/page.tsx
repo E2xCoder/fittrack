@@ -554,33 +554,38 @@ function MealsContent() {
     });
   }
 
-  async function addMeal(meal: Meal) {
+  // Optimistic logging: flip the button instantly, send the request in the
+  // background, roll back with an alert only if it fails.
+  function logMealOptimistic(meal: Meal, quantity: number) {
+    setAdded((p) => ({ ...p, [meal.id]: true }));
+    setTimeout(() => setAdded((p) => ({ ...p, [meal.id]: false })), 1500);
+    posthog.capture("meal_logged", { mealName: meal.name, calories: meal.calories });
+    fetch("/api/log-meal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mealId: meal.id, quantity, date: dateParam }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("log failed");
+        fetchTodayLog();
+      })
+      .catch(() => {
+        setAdded((p) => ({ ...p, [meal.id]: false }));
+        alert(`Could not add "${meal.name}" — please try again.`);
+      });
+  }
+
+  function addMeal(meal: Meal) {
     const rawAmount = amounts[meal.id];
     const amount = rawAmount ? Number(rawAmount) : meal.servingLabel === "piece" ? 1 : meal.servingSize;
     if (!amount || amount <= 0) { alert("Enter a valid amount"); return; }
     const multiplier = meal.servingLabel === "piece" ? amount : amount / meal.servingSize;
-    await fetch("/api/log-meal", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mealId: meal.id, quantity: multiplier, date: dateParam }),
-    });
-    posthog.capture("meal_logged", { mealName: meal.name, calories: meal.calories });
-    setAdded((p) => ({ ...p, [meal.id]: true }));
-    setTimeout(() => setAdded((p) => ({ ...p, [meal.id]: false })), 1500);
-    fetchTodayLog();
+    logMealOptimistic(meal, multiplier);
   }
 
   // Quick-add one serving straight from the recently-consumed row.
-  async function quickAdd(meal: Meal) {
-    await fetch("/api/log-meal", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mealId: meal.id, quantity: 1, date: dateParam }),
-    });
-    posthog.capture("meal_logged", { mealName: meal.name, calories: meal.calories });
-    setAdded((p) => ({ ...p, [meal.id]: true }));
-    setTimeout(() => setAdded((p) => ({ ...p, [meal.id]: false })), 1500);
-    fetchTodayLog();
+  function quickAdd(meal: Meal) {
+    logMealOptimistic(meal, 1);
   }
 
   async function removeLoggedMeal(id: string) {

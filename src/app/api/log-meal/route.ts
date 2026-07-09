@@ -22,10 +22,16 @@ export async function POST(request: Request) {
     servingLabel: string; servingSize: number;
   };
 
+  // Meal and timezone lookups are independent — run them in parallel.
+  const [mealRow, userTzRow] = await Promise.all([
+    body.mealId
+      ? prisma.meal.findFirst({ where: { id: body.mealId, userId: user.id } })
+      : Promise.resolve(null),
+    prisma.user.findUnique({ where: { id: user.id }, select: { timezone: true } }),
+  ]);
+
   if (body.mealId) {
-    const meal = await prisma.meal.findFirst({
-      where: { id: body.mealId, userId: user.id },
-    });
+    const meal = mealRow;
     if (!meal) return NextResponse.json({ error: "Meal not found" }, { status: 404 });
     mealId = meal.id;
     base = { calories: meal.calories, protein: meal.protein, carbs: meal.carbs, fat: meal.fat };
@@ -55,10 +61,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing mealId or meal data" }, { status: 400 });
   }
 
-  const userTzRow = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { timezone: true },
-  });
   const userTz = userTzRow?.timezone ?? "Europe/Berlin";
 
   let logDate: Date;
@@ -69,15 +71,11 @@ export async function POST(request: Request) {
     logDate = getTodayInTimezone(userTz);
   }
 
-  let dailyLog = await prisma.dailyLog.findFirst({
-    where: { userId: user.id, date: logDate },
+  const dailyLog = await prisma.dailyLog.upsert({
+    where: { userId_date: { userId: user.id, date: logDate } },
+    update: {},
+    create: { userId: user.id, date: logDate },
   });
-
-  if (!dailyLog) {
-    dailyLog = await prisma.dailyLog.create({
-      data: { userId: user.id, date: logDate },
-    });
-  }
 
   const calories = base.calories * quantity;
   const protein = base.protein * quantity;
@@ -96,44 +94,45 @@ export async function POST(request: Request) {
       })
     : null;
 
-  if (existing) {
-    // Merge: add to existing entry
-    await prisma.mealLog.update({
-      where: { id: existing.id },
-      data: {
-        quantity: existing.quantity + quantity,
-        calories: existing.calories + calories,
-        protein: existing.protein + protein,
-        carbs: existing.carbs + carbs,
-        fat: existing.fat + fat,
-      },
-    });
-  } else {
-    // New entry
-    await prisma.mealLog.create({
-      data: {
-        mealId,
-        userId: user.id,
-        dailyLogId: dailyLog.id,
-        quantity,
-        calories,
-        protein,
-        carbs,
-        fat,
-        mealSnapshot: snapshot,
-      },
-    });
-  }
+  // The mealLog write and the dailyLog totals update are independent —
+  // run them in parallel to save a round trip.
+  const mealLogWrite = existing
+    ? prisma.mealLog.update({
+        where: { id: existing.id },
+        data: {
+          quantity: existing.quantity + quantity,
+          calories: existing.calories + calories,
+          protein: existing.protein + protein,
+          carbs: existing.carbs + carbs,
+          fat: existing.fat + fat,
+        },
+      })
+    : prisma.mealLog.create({
+        data: {
+          mealId,
+          userId: user.id,
+          dailyLogId: dailyLog.id,
+          quantity,
+          calories,
+          protein,
+          carbs,
+          fat,
+          mealSnapshot: snapshot,
+        },
+      });
 
-  await prisma.dailyLog.update({
-    where: { id: dailyLog.id },
-    data: {
-      totalCalories: { increment: calories },
-      totalProtein: { increment: protein },
-      totalCarbs: { increment: carbs },
-      totalFat: { increment: fat },
-    },
-  });
+  await Promise.all([
+    mealLogWrite,
+    prisma.dailyLog.update({
+      where: { id: dailyLog.id },
+      data: {
+        totalCalories: { increment: calories },
+        totalProtein: { increment: protein },
+        totalCarbs: { increment: carbs },
+        totalFat: { increment: fat },
+      },
+    }),
+  ]);
 
   return NextResponse.json({ success: true });
 }
