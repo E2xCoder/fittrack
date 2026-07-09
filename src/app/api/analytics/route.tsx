@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTodayInTimezone } from "@/lib/date";
+import { currentStreak as computeCurrentStreak, longestStreak as computeLongestStreak, pctChange } from "@/lib/fitness";
 
 export async function GET(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -149,48 +150,8 @@ export async function GET(req: NextRequest) {
     loggedDateSet.add(new Date(b.date).toLocaleDateString("en-CA", { timeZone: userTz }));
 
   const todayStr = today.toLocaleDateString("en-CA", { timeZone: userTz });
-
-  // Current streak — walk back from today
-  let currentStreak = 0;
-  {
-    const cur = new Date(today);
-    while (true) {
-      const ds = cur.toLocaleDateString("en-CA", { timeZone: userTz });
-      if (loggedDateSet.has(ds)) {
-        currentStreak++;
-        cur.setDate(cur.getDate() - 1);
-      } else {
-        // Allow today to be unlogged (don't break streak if today hasn't been logged yet)
-        if (ds === todayStr) {
-          cur.setDate(cur.getDate() - 1);
-          continue;
-        }
-        break;
-      }
-    }
-  }
-
-  // Longest streak — iterate sorted dates
-  const sortedDates = [...loggedDateSet].sort();
-  let longestStreak = 0;
-  let runStreak = 0;
-  let prevDate: Date | null = null;
-  for (const ds of sortedDates) {
-    const d = new Date(ds);
-    if (prevDate) {
-      const diff = Math.round((d.getTime() - prevDate.getTime()) / 86400000);
-      if (diff === 1) {
-        runStreak++;
-      } else {
-        longestStreak = Math.max(longestStreak, runStreak);
-        runStreak = 1;
-      }
-    } else {
-      runStreak = 1;
-    }
-    prevDate = d;
-  }
-  longestStreak = Math.max(longestStreak, runStreak);
+  const currentStreak = computeCurrentStreak(loggedDateSet, todayStr);
+  const longestStreak = computeLongestStreak(loggedDateSet);
 
   // ── Week-over-week: trailing 7 days vs the 7 before, independent of period ──
   const wowStart = new Date(today);
@@ -228,8 +189,6 @@ export async function GET(req: NextRequest) {
 
   const thisWeek = avgOver(6, 0);
   const lastWeek = avgOver(13, 7);
-  const pctChange = (cur: number, prev: number) =>
-    prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null;
 
   const wow = {
     calories: pctChange(thisWeek.calories, lastWeek.calories),

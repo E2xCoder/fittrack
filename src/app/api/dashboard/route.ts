@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTodayInTimezone } from "@/lib/date";
+import { currentStreak as computeCurrentStreak, longestStreak as computeLongestStreak } from "@/lib/fitness";
 
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -119,37 +120,8 @@ export async function GET(request: Request) {
   for (const l of streakDailyLogs) loggedDates.add(dayKey(new Date(l.date)));
   for (const l of streakBodyLogs) loggedDates.add(dayKey(new Date(l.date)));
 
-  const viewedKey = dayKey(date);
-  let currentStreak = 0;
-  const cursor = new Date(date);
-  while (true) {
-    const key = dayKey(cursor);
-    if (loggedDates.has(key)) {
-      currentStreak++;
-      cursor.setDate(cursor.getDate() - 1);
-    } else if (key === viewedKey) {
-      // Don't break the streak just because the viewed day isn't logged yet.
-      cursor.setDate(cursor.getDate() - 1);
-    } else {
-      break;
-    }
-  }
-
-  const sortedDates = [...loggedDates].sort();
-  let longestStreak = 0;
-  let run = 0;
-  let prev: Date | null = null;
-  for (const ds of sortedDates) {
-    const d = new Date(ds);
-    if (prev) {
-      const diff = Math.round((d.getTime() - prev.getTime()) / 86400000);
-      run = diff === 1 ? run + 1 : 1;
-    } else {
-      run = 1;
-    }
-    longestStreak = Math.max(longestStreak, run);
-    prev = d;
-  }
+  const currentStreak = computeCurrentStreak(loggedDates, dayKey(date));
+  const longestStreak = computeLongestStreak(loggedDates);
 
   return NextResponse.json({
     totalCalories: dailyLog?.totalCalories ?? 0,

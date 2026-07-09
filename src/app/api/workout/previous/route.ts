@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTodayInTimezone } from "@/lib/date";
+import { getBestSet, epley1RM, computePlateauWeeks } from "@/lib/fitness";
 
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -54,32 +55,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ lastBestSet: null, prevBestSet: null, suggestion: null, isPR: false });
   }
 
-  /**
-   * Given the sets of one workout session, return the single best set:
-   * - Exclude warmup sets: any set whose weight < 70 % of the session's max weight
-   * - Among the remaining sets pick the one with the highest weight × reps volume
-   */
-  function getBestSet(sets: (typeof occurrences)[0]["sets"]): { weight: number; reps: number } | null {
-    const valid = sets.filter((s) => s.weight && s.reps);
-    if (valid.length === 0) return null;
-
-    const maxWeight = Math.max(...valid.map((s) => s.weight!));
-    const threshold = maxWeight * 0.7;
-    const workSets = valid.filter((s) => s.weight! >= threshold);
-    if (workSets.length === 0) return null;
-
-    let best: { weight: number; reps: number } | null = null;
-    let bestVolume = 0;
-    for (const s of workSets) {
-      const volume = s.weight! * s.reps!;
-      if (volume > bestVolume) {
-        bestVolume = volume;
-        best = { weight: s.weight!, reps: s.reps! };
-      }
-    }
-    return best;
-  }
-
   const lastBestSet = getBestSet(workouts[0].sets);
   const prevBestSet = workouts.length > 1 ? getBestSet(workouts[1].sets) : null;
 
@@ -104,38 +79,16 @@ export async function GET(request: Request) {
   const prevVolume = prevBestSet ? prevBestSet.weight * prevBestSet.reps : null;
   const isPR = prevVolume !== null && lastVolume > prevVolume;
 
-  // Estimated 1-rep max — Epley formula.
-  const est1RM = Math.round(lastBestSet.weight * (1 + lastBestSet.reps / 30));
-
-  // Plateau: how long the best-set volume has failed to exceed its running max.
-  let plateauWeeks = 0;
-  if (history.length >= 3) {
-    let peak = 0;
-    let peakDate = history[0].date;
-    let stalledSince: Date | null = null;
-    for (const h of history) {
-      if (h.volume > peak) {
-        peak = h.volume;
-        peakDate = h.date;
-        stalledSince = null;
-      } else if (stalledSince === null) {
-        stalledSince = peakDate;
-      }
-    }
-    const newestVolume = history[history.length - 1].volume;
-    if (newestVolume <= peak && stalledSince) {
-      const days = Math.round((today.getTime() - new Date(stalledSince).getTime()) / 86400000);
-      plateauWeeks = Math.floor(days / 7);
-    }
-  }
+  const est1RM = epley1RM(lastBestSet.weight, lastBestSet.reps);
+  const plateauWeeks = computePlateauWeeks(history, today);
 
   // Build suggestion only when we have 2+ workouts and it's NOT a PR
   let suggestion: string | null = null;
   if (prevBestSet && !isPR) {
     if (lastBestSet.reps < 10) {
-      suggestion = `${lastBestSet.weight}kg x ${lastBestSet.reps + 2} tekrar dene`;
+      suggestion = `try ${lastBestSet.weight}kg x ${lastBestSet.reps + 2} reps`;
     } else {
-      suggestion = `${lastBestSet.weight + 2}kg x 8 tekrar dene`;
+      suggestion = `try ${lastBestSet.weight + 2}kg x 8 reps`;
     }
   }
 
