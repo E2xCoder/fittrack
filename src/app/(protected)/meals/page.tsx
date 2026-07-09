@@ -154,7 +154,7 @@ function slotFor(log: LoggedMeal): MealSlot {
 function loggedInfo(log: LoggedMeal) {
   const info = log.meal ?? log.mealSnapshot;
   return {
-    name: info?.name ?? "Bilinmeyen",
+    name: info?.name ?? "Unknown",
     servingLabel: info?.servingLabel ?? "g",
     servingSize: info?.servingSize ?? 100,
     imageUrl: info?.imageUrl ?? null,
@@ -207,11 +207,17 @@ function MealCard({
 
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 transition hover:border-zinc-700">
-      {/* Main row */}
-      <div className="flex items-center gap-2 px-2 py-2">
+      {/* Main row — clicking anywhere on it toggles the panel */}
+      <div
+        onClick={onToggleExpand}
+        role="button"
+        aria-expanded={expanded}
+        className="flex cursor-pointer items-center gap-2 px-2 py-2"
+      >
         {/* Drag handle */}
         <button
           type="button"
+          onClick={(e) => e.stopPropagation()}
           className="shrink-0 cursor-grab active:cursor-grabbing select-none text-[13px] leading-none text-zinc-600 hover:text-zinc-400"
           style={{ touchAction: "none" }}
           tabIndex={-1}
@@ -245,20 +251,15 @@ function MealCard({
         {/* Right controls */}
         <div className="flex items-center gap-0.5 shrink-0">
           <button
-            onClick={onToggleFavorite}
+            onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
             aria-label={meal.isFavorite ? "Remove from favorites" : "Add to favorites"}
             className={`px-1.5 py-1 text-lg transition-colors ${meal.isFavorite ? "text-yellow-400" : "text-zinc-600 hover:text-zinc-400"}`}
           >
             {meal.isFavorite ? "★" : "☆"}
           </button>
-          <button
-            onClick={onToggleExpand}
-            aria-label={expanded ? "Collapse" : "Expand"}
-            aria-expanded={expanded}
-            className="px-1 py-1 text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
-          >
+          <span aria-hidden className="px-1 py-1 text-[10px] text-zinc-500">
             {expanded ? "▲" : "▼"}
-          </button>
+          </span>
         </div>
       </div>
 
@@ -270,7 +271,7 @@ function MealCard({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => onAmountChange(String(Math.max(1, Number(amount || 1) - 1)))}
-                  aria-label="Azalt"
+                  aria-label="Decrease"
                   className="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm font-bold hover:bg-zinc-700"
                 >
                   −
@@ -283,7 +284,7 @@ function MealCard({
                 >
                   +
                 </button>
-                <span className="text-xs text-zinc-500">adet</span>
+                <span className="text-xs text-zinc-500">pc</span>
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -292,7 +293,7 @@ function MealCard({
                   placeholder={`${meal.servingSize}`}
                   value={amount}
                   onChange={(e) => onAmountChange(e.target.value)}
-                  aria-label="Miktar"
+                  aria-label="Amount"
                   className="w-24 rounded-xl bg-zinc-800 px-3 py-1.5 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600"
                 />
                 <span className="text-xs text-zinc-500">{meal.servingLabel}</span>
@@ -815,7 +816,7 @@ function MealsContent() {
               <div className="rounded-2xl border border-zinc-700/70 bg-zinc-900 p-4">
                 <div className="flex items-baseline justify-between">
                   <div>
-                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">Today's total</p>
+                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">Today&apos;s total</p>
                     <p className="text-2xl font-bold tabular-nums" style={{ color: METRICS.calories.hex }}>
                       {Math.round(todayTotals.calories)}
                       {todayGoals && <span className="ml-1 text-sm font-medium text-zinc-500">/ {todayGoals.calories} kcal</span>}
@@ -1260,21 +1261,24 @@ function MealsContent() {
               const totals = packTotals(pack);
               const isExpanded = expandedPack === pack.id;
               return (
-                <div key={pack.id} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
+                <div
+                  key={pack.id}
+                  onClick={() => setExpandedPack(isExpanded ? null : pack.id)}
+                  role="button"
+                  aria-expanded={isExpanded}
+                  className="cursor-pointer rounded-2xl border border-zinc-800 bg-zinc-900 p-3 transition-colors hover:border-zinc-700"
+                >
                   <div className="mb-2 flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-bold">{pack.name}</p>
-                      <p className="text-[10px] text-zinc-500">{pack.items.length} yemek</p>
+                    <div className="flex items-center gap-2">
+                      <span aria-hidden className={`text-xs text-zinc-500 transition-transform ${isExpanded ? "rotate-90" : ""}`}>▸</span>
+                      <div>
+                        <p className="text-sm font-bold">{pack.name}</p>
+                        <p className="text-[10px] text-zinc-500">{pack.items.length} meals</p>
+                      </div>
                     </div>
                     <div className="flex gap-1.5">
                       <button
-                        onClick={() => setExpandedPack(isExpanded ? null : pack.id)}
-                        className="rounded-xl bg-zinc-800 px-3 py-1.5 text-xs hover:bg-zinc-700 transition-colors"
-                      >
-                        {isExpanded ? "Close" : "Edit"}
-                      </button>
-                      <button
-                        onClick={() => logPack(pack.id)}
+                        onClick={(e) => { e.stopPropagation(); logPack(pack.id); }}
                         className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${
                           loggedPack[pack.id] ? "bg-green-800 text-green-300" : "bg-green-600 text-white hover:bg-green-500"
                         }`}
@@ -1282,8 +1286,8 @@ function MealsContent() {
                         {loggedPack[pack.id] ? "Added ✓" : "Add All"}
                       </button>
                       <button
-                        onClick={() => deletePack(pack.id)}
-                        aria-label="Pack sil"
+                        onClick={(e) => { e.stopPropagation(); deletePack(pack.id); }}
+                        aria-label="Delete pack"
                         className="rounded-xl bg-zinc-800 px-2.5 py-1.5 text-xs hover:bg-red-900/60 transition-colors"
                       >
                         ✕
@@ -1291,7 +1295,7 @@ function MealsContent() {
                     </div>
                   </div>
 
-                  <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                  <div className={`flex flex-wrap items-center gap-1.5 ${isExpanded ? "mb-2" : ""}`}>
                     <span className="text-sm font-bold tabular-nums" style={{ color: METRICS.calories.hex }}>
                       {Math.round(totals.calories)}
                     </span>
@@ -1301,7 +1305,7 @@ function MealsContent() {
                     <MacroChip metric="fat" value={totals.fat} />
                   </div>
 
-                  {pack.items.length > 0 && (
+                  {isExpanded && pack.items.length > 0 && (
                     <div className="mb-2 space-y-1">
                       {pack.items.map((item) => (
                         <div key={item.id} className="flex items-center gap-2 rounded-xl bg-zinc-800 px-2.5 py-2">
@@ -1312,36 +1316,34 @@ function MealsContent() {
                           </div>
                           <div className="flex items-center gap-1">
                             <button
-                              onClick={() => updatePackItemQuantity(pack.id, item.id,
+                              onClick={(e) => { e.stopPropagation(); updatePackItemQuantity(pack.id, item.id,
                                 Math.max(item.meal.servingLabel === "piece" ? 1 : 0.5,
-                                  item.quantity - (item.meal.servingLabel === "piece" ? 1 : 0.5)))}
-                              aria-label="Azalt"
+                                  item.quantity - (item.meal.servingLabel === "piece" ? 1 : 0.5))); }}
+                              aria-label="Decrease"
                               className="rounded-lg bg-zinc-700 px-2 py-1 text-xs hover:bg-zinc-600"
                             >
                               −
                             </button>
                             <span className="min-w-[3rem] text-center text-xs">
                               {item.meal.servingLabel === "piece"
-                                ? `${item.quantity} adet`
+                                ? `${item.quantity} pc`
                                 : `${Math.round(item.quantity * item.meal.servingSize)}${item.meal.servingLabel}`}
                             </span>
                             <button
-                              onClick={() => updatePackItemQuantity(pack.id, item.id,
-                                item.quantity + (item.meal.servingLabel === "piece" ? 1 : 0.5))}
+                              onClick={(e) => { e.stopPropagation(); updatePackItemQuantity(pack.id, item.id,
+                                item.quantity + (item.meal.servingLabel === "piece" ? 1 : 0.5)); }}
                               aria-label="Increase"
                               className="rounded-lg bg-zinc-700 px-2 py-1 text-xs hover:bg-zinc-600"
                             >
                               +
                             </button>
-                            {isExpanded && (
-                              <button
-                                onClick={() => removeMealFromPack(pack.id, item.id)}
-                                aria-label="Remove from pack"
-                                className="ml-1 text-[10px] text-zinc-600 hover:text-red-400 transition-colors"
-                              >
-                                ✕
-                              </button>
-                            )}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); removeMealFromPack(pack.id, item.id); }}
+                              aria-label="Remove from pack"
+                              className="ml-1 text-[10px] text-zinc-600 hover:text-red-400 transition-colors"
+                            >
+                              ✕
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -1355,7 +1357,7 @@ function MealsContent() {
                         {meals.filter((m) => !pack.items.some((i) => i.mealId === m.id)).map((meal) => (
                           <button
                             key={meal.id}
-                            onClick={() => addMealToPack(pack.id, meal.id)}
+                            onClick={(e) => { e.stopPropagation(); addMealToPack(pack.id, meal.id); }}
                             className="flex w-full items-center justify-between rounded-xl bg-zinc-800 px-3 py-2 text-left hover:bg-zinc-700 transition-colors"
                           >
                             <span className="text-xs font-medium">{meal.name}</span>
