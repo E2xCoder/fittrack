@@ -34,36 +34,36 @@ interface FormData {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const GOALS = [
-  { id: "lose_weight", label: "Kilo Ver", emoji: "🔥", desc: "Yağ yakarak form al" },
-  { id: "muscle_gain", label: "Kas Kazan", emoji: "💪", desc: "Kas kütlesi artır" },
-  { id: "maintain", label: "Form Koru", emoji: "⚖️", desc: "Mevcut formu koru" },
-  { id: "bulk", label: "Bulk", emoji: "🏗️", desc: "Kalori fazlasıyla hacim al" },
+  { id: "lose_weight", label: "Lose Weight", emoji: "🔥", desc: "Burn fat and get lean" },
+  { id: "muscle_gain", label: "Build Muscle", emoji: "💪", desc: "Increase muscle mass" },
+  { id: "maintain", label: "Maintain", emoji: "⚖️", desc: "Keep your current shape" },
+  { id: "bulk", label: "Bulk", emoji: "🏗️", desc: "Gain size with a calorie surplus" },
 ];
 
 const TIMEZONES = [
-  { value: "Europe/Istanbul",    label: "İstanbul (UTC+3)" },
-  { value: "Europe/Berlin",      label: "Berlin / Orta Avrupa (UTC+1/+2)" },
-  { value: "Europe/London",      label: "Londra (UTC+0/+1)" },
+  { value: "Europe/Istanbul",    label: "Istanbul (UTC+3)" },
+  { value: "Europe/Berlin",      label: "Berlin / Central Europe (UTC+1/+2)" },
+  { value: "Europe/London",      label: "London (UTC+0/+1)" },
   { value: "Europe/Paris",       label: "Paris (UTC+1/+2)" },
-  { value: "Europe/Moscow",      label: "Moskova (UTC+3)" },
+  { value: "Europe/Moscow",      label: "Moscow (UTC+3)" },
   { value: "America/New_York",   label: "New York (UTC-5/-4)" },
   { value: "America/Chicago",    label: "Chicago (UTC-6/-5)" },
   { value: "America/Los_Angeles",label: "Los Angeles (UTC-8/-7)" },
   { value: "America/Sao_Paulo",  label: "São Paulo (UTC-3)" },
-  { value: "Africa/Cairo",       label: "Kahire (UTC+2)" },
+  { value: "Africa/Cairo",       label: "Cairo (UTC+2)" },
   { value: "Asia/Dubai",         label: "Dubai (UTC+4)" },
-  { value: "Asia/Kolkata",       label: "Hindistan (UTC+5:30)" },
+  { value: "Asia/Kolkata",       label: "India (UTC+5:30)" },
   { value: "Asia/Tokyo",         label: "Tokyo (UTC+9)" },
-  { value: "Asia/Shanghai",      label: "Çin (UTC+8)" },
-  { value: "Australia/Sydney",   label: "Sidney (UTC+10/+11)" },
+  { value: "Asia/Shanghai",      label: "China (UTC+8)" },
+  { value: "Australia/Sydney",   label: "Sydney (UTC+10/+11)" },
 ];
 
 const ACTIVITY_LEVELS = [
-  { id: "sedentary",   label: "Sedanter",      emoji: "🛋️",  desc: "Masa başı iş, neredeyse hiç egzersiz yok" },
-  { id: "light",       label: "Hafif Aktif",   emoji: "🚶",  desc: "Haftada 1-3 gün hafif egzersiz" },
-  { id: "moderate",    label: "Orta Aktif",    emoji: "🏃",  desc: "Haftada 3-5 gün orta yoğunlukta egzersiz" },
-  { id: "very_active", label: "Çok Aktif",     emoji: "⚡",  desc: "Haftada 6-7 gün yoğun egzersiz" },
-  { id: "athlete",     label: "Sporcu",        emoji: "🏆",  desc: "Günde 2x antrenman veya profesyonel sporcu" },
+  { id: "sedentary",   label: "Sedentary",     emoji: "🛋️",  desc: "Desk job, little to no exercise" },
+  { id: "light",       label: "Lightly Active", emoji: "🚶",  desc: "Light exercise 1-3 days a week" },
+  { id: "moderate",    label: "Moderately Active", emoji: "🏃",  desc: "Moderate exercise 3-5 days a week" },
+  { id: "very_active", label: "Very Active",   emoji: "⚡",  desc: "Intense exercise 6-7 days a week" },
+  { id: "athlete",     label: "Athlete",       emoji: "🏆",  desc: "2x daily training or professional athlete" },
 ];
 
 const ACTIVITY_MULTIPLIERS: Record<string, number> = {
@@ -76,10 +76,10 @@ const ACTIVITY_MULTIPLIERS: Record<string, number> = {
 
 const DIETARY = [
   { id: "normal",    label: "Normal",               emoji: "🍽️" },
-  { id: "vegetarian",label: "Vejetaryen",           emoji: "🥦" },
+  { id: "vegetarian",label: "Vegetarian",           emoji: "🥦" },
   { id: "vegan",     label: "Vegan",                emoji: "🌱" },
-  { id: "gluten_free",label: "Glutensiz",           emoji: "🌾" },
-  { id: "lactose_free",label: "Laktoz İntoleranslı",emoji: "🥛" },
+  { id: "gluten_free",label: "Gluten-Free",          emoji: "🌾" },
+  { id: "lactose_free",label: "Lactose-Free",         emoji: "🥛" },
 ];
 
 const DEFAULT_SPLITS: Record<number, { name: string; emoji: string }[]> = {
@@ -151,7 +151,7 @@ function ProgressBar({ step, total }: { step: number; total: number }) {
   return (
     <div className="mb-8">
       <div className="mb-2 flex justify-between text-xs text-zinc-500">
-        <span>Adım {step} / {total}</span>
+        <span>Step {step} / {total}</span>
         <span>{Math.round((step / total) * 100)}%</span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
@@ -289,17 +289,17 @@ function Step1({ data, update }: { data: FormData; update: (d: Partial<FormData>
     <div className="space-y-6">
       <div className="text-center">
         <div className="mb-4 text-6xl">👋</div>
-        <h2 className="text-2xl font-black text-white">Hoş geldin!</h2>
-        <p className="mt-2 text-zinc-400">Sana özel bir plan oluşturalım.</p>
+        <h2 className="text-2xl font-black text-white">Welcome!</h2>
+        <p className="mt-2 text-zinc-400">Let's build a plan just for you.</p>
       </div>
       <Field
-        label="Adın ne?"
+        label="What's your name?"
         value={data.name}
         onChange={(v) => update({ name: v })}
-        placeholder="Adın"
+        placeholder="Your name"
       />
       <div>
-        <p className="mb-3 text-xs font-semibold text-zinc-400">Hedefin nedir?</p>
+        <p className="mb-3 text-xs font-semibold text-zinc-400">What's your goal?</p>
         <div className="grid grid-cols-2 gap-2">
           {GOALS.map((g) => (
             <OptionCard
@@ -314,7 +314,7 @@ function Step1({ data, update }: { data: FormData; update: (d: Partial<FormData>
         </div>
       </div>
       <div>
-        <p className="mb-2 text-xs font-semibold text-zinc-400">Saat Dilimi</p>
+        <p className="mb-2 text-xs font-semibold text-zinc-400">Timezone</p>
         <select
           value={data.timezone}
           onChange={(e) => update({ timezone: e.target.value })}
@@ -328,7 +328,7 @@ function Step1({ data, update }: { data: FormData; update: (d: Partial<FormData>
           ))}
         </select>
         <p className="mt-1.5 text-[11px] text-zinc-500">
-          Tarayıcıdan otomatik algılandı. Sabah 08:00 bildirimleri bu saate göre gönderilir.
+          Auto-detected from your browser. Morning 08:00 notifications follow this timezone.
         </p>
       </div>
     </div>
@@ -340,22 +340,22 @@ function Step2({ data, update }: { data: FormData; update: (d: Partial<FormData>
   const w = Number(data.weight) || 0;
   const bmi = h > 0 && w > 0 ? w / ((h / 100) ** 2) : 0;
   const bmiColor = bmi < 18.5 ? "text-blue-400" : bmi < 25 ? "text-green-400" : bmi < 30 ? "text-amber-400" : "text-red-400";
-  const bmiLabel = bmi < 18.5 ? "Zayıf" : bmi < 25 ? "Normal" : bmi < 30 ? "Fazla Kilolu" : "Obez";
+  const bmiLabel = bmi < 18.5 ? "Underweight" : bmi < 25 ? "Normal" : bmi < 30 ? "Overweight" : "Obese";
 
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-2xl font-black text-white">Vücut Bilgilerin</h2>
-        <p className="mt-1 text-sm text-zinc-400">Kalori hesabı için kullanılacak.</p>
+        <h2 className="text-2xl font-black text-white">Your Body Stats</h2>
+        <p className="mt-1 text-sm text-zinc-400">Used to calculate your calories.</p>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Boy" value={data.height} onChange={(v) => update({ height: v })} type="number" unit="cm" placeholder="175" />
-        <Field label="Kilo" value={data.weight} onChange={(v) => update({ weight: v })} type="number" unit="kg" placeholder="75" />
-        <Field label="Yaş" value={data.age} onChange={(v) => update({ age: v })} type="number" unit="yıl" placeholder="25" />
+        <Field label="Height" value={data.height} onChange={(v) => update({ height: v })} type="number" unit="cm" placeholder="175" />
+        <Field label="Weight" value={data.weight} onChange={(v) => update({ weight: v })} type="number" unit="kg" placeholder="75" />
+        <Field label="Age" value={data.age} onChange={(v) => update({ age: v })} type="number" unit="yrs" placeholder="25" />
         <div>
-          <label className="mb-1.5 block text-xs font-semibold text-zinc-400">Cinsiyet</label>
+          <label className="mb-1.5 block text-xs font-semibold text-zinc-400">Gender</label>
           <div className="grid grid-cols-2 gap-2">
-            {[{ id: "male", label: "Erkek", emoji: "♂️" }, { id: "female", label: "Kadın", emoji: "♀️" }].map((g) => (
+            {[{ id: "male", label: "Male", emoji: "♂️" }, { id: "female", label: "Female", emoji: "♀️" }].map((g) => (
               <button
                 key={g.id}
                 onClick={() => update({ gender: g.id })}
@@ -371,7 +371,7 @@ function Step2({ data, update }: { data: FormData; update: (d: Partial<FormData>
       </div>
       {bmi > 0 && (
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-center">
-          <p className="text-xs text-zinc-500">Vücut Kitle İndeksi (BMI)</p>
+          <p className="text-xs text-zinc-500">Body Mass Index (BMI)</p>
           <p className={`mt-1 text-4xl font-black ${bmiColor}`}>{bmi.toFixed(1)}</p>
           <p className={`text-sm font-semibold ${bmiColor}`}>{bmiLabel}</p>
         </div>
@@ -384,8 +384,8 @@ function Step3({ data, update }: { data: FormData; update: (d: Partial<FormData>
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-2xl font-black text-white">Aktivite Seviyesi</h2>
-        <p className="mt-1 text-sm text-zinc-400">Günlük kalori hesabını etkiler.</p>
+        <h2 className="text-2xl font-black text-white">Activity Level</h2>
+        <p className="mt-1 text-sm text-zinc-400">Affects your daily calorie calculation.</p>
       </div>
       <div className="space-y-2">
         {ACTIVITY_LEVELS.map((a) => (
@@ -421,8 +421,8 @@ function Step4({ data, update }: { data: FormData; update: (d: Partial<FormData>
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-black text-white">Beslenme Tercihleri</h2>
-        <p className="mt-1 text-sm text-zinc-400">Birden fazla seçebilirsin.</p>
+        <h2 className="text-2xl font-black text-white">Dietary Preferences</h2>
+        <p className="mt-1 text-sm text-zinc-400">You can pick more than one.</p>
       </div>
       <div className="grid grid-cols-2 gap-2">
         {DIETARY.map((d) => {
@@ -442,7 +442,7 @@ function Step4({ data, update }: { data: FormData; update: (d: Partial<FormData>
         })}
       </div>
       <div>
-        <p className="mb-3 text-xs font-semibold text-zinc-400">Günlük kaç öğün?</p>
+        <p className="mb-3 text-xs font-semibold text-zinc-400">How many meals a day?</p>
         <div className="flex gap-2">
           {[2, 3, 4, 5].map((n) => (
             <button
@@ -478,13 +478,13 @@ function Step5({ data, update }: { data: FormData; update: (d: Partial<FormData>
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-2xl font-black text-white">Kalori & Makro Hedeflerin</h2>
-        <p className="mt-1 text-sm text-zinc-400">Mifflin-St Jeor formülüyle hesaplandı. İstersen değiştirebilirsin.</p>
+        <h2 className="text-2xl font-black text-white">Your Calorie & Macro Targets</h2>
+        <p className="mt-1 text-sm text-zinc-400">Calculated with the Mifflin-St Jeor formula. Adjust if you like.</p>
       </div>
 
       {/* Calorie card */}
       <div className="rounded-2xl border border-green-900/40 bg-green-950/20 p-4 text-center">
-        <p className="text-xs text-green-600">Günlük Kalori Hedefi</p>
+        <p className="text-xs text-green-600">Daily Calorie Target</p>
         <div className="flex items-center justify-center gap-3 mt-1">
           <button onClick={() => update({ calorieTarget: Math.max(1200, total - 50) })}
             className="rounded-lg bg-zinc-800 px-3 py-1 text-lg font-bold text-zinc-400 hover:bg-zinc-700">−</button>
@@ -492,15 +492,15 @@ function Step5({ data, update }: { data: FormData; update: (d: Partial<FormData>
           <button onClick={() => update({ calorieTarget: total + 50 })}
             className="rounded-lg bg-zinc-800 px-3 py-1 text-lg font-bold text-zinc-400 hover:bg-zinc-700">+</button>
         </div>
-        <p className="text-xs text-zinc-500 mt-1">kcal / gün</p>
+        <p className="text-xs text-zinc-500 mt-1">kcal / day</p>
       </div>
 
       {/* Macro sliders */}
       <div className="space-y-4">
         {[
           { key: "proteinTarget" as const, label: "Protein", unit: "g", color: "#60a5fa", cal: pCal, val: data.proteinTarget, max: 300 },
-          { key: "carbTarget"   as const, label: "Karbonhidrat", unit: "g", color: "#fbbf24", cal: cCal, val: data.carbTarget, max: 500 },
-          { key: "fatTarget"    as const, label: "Yağ", unit: "g", color: "#f87171", cal: fCal, val: data.fatTarget, max: 200 },
+          { key: "carbTarget"   as const, label: "Carbs", unit: "g", color: "#fbbf24", cal: cCal, val: data.carbTarget, max: 500 },
+          { key: "fatTarget"    as const, label: "Fat", unit: "g", color: "#f87171", cal: fCal, val: data.fatTarget, max: 200 },
         ].map(({ key, label, unit, color, cal, val, max }) => (
           <div key={key}>
             <div className="mb-1.5 flex justify-between text-xs">
@@ -522,7 +522,7 @@ function Step5({ data, update }: { data: FormData; update: (d: Partial<FormData>
 
       {/* Macro bars */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3">
-        <p className="mb-2 text-xs text-zinc-500">Makro Dağılımı</p>
+        <p className="mb-2 text-xs text-zinc-500">Macro Split</p>
         <div className="h-3 flex rounded-full overflow-hidden gap-0.5">
           {[
             { w: pct(pCal, pCal + cCal + fCal), color: "#60a5fa" },
@@ -535,8 +535,8 @@ function Step5({ data, update }: { data: FormData; update: (d: Partial<FormData>
         </div>
         <div className="mt-2 flex justify-between text-[10px]">
           <span className="text-blue-400">P {pct(pCal, pCal + cCal + fCal)}%</span>
-          <span className="text-amber-400">K {pct(cCal, pCal + cCal + fCal)}%</span>
-          <span className="text-red-400">Y {pct(fCal, pCal + cCal + fCal)}%</span>
+          <span className="text-amber-400">C {pct(cCal, pCal + cCal + fCal)}%</span>
+          <span className="text-red-400">F {pct(fCal, pCal + cCal + fCal)}%</span>
         </div>
       </div>
     </div>
@@ -552,12 +552,12 @@ function Step6({ data, update }: { data: FormData; update: (d: Partial<FormData>
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-black text-white">Antrenman Tercihleri</h2>
-        <p className="mt-1 text-sm text-zinc-400">Varsayılan split'ler otomatik oluşturulacak.</p>
+        <h2 className="text-2xl font-black text-white">Training Preferences</h2>
+        <p className="mt-1 text-sm text-zinc-400">Default splits will be created automatically.</p>
       </div>
 
       <div>
-        <p className="mb-3 text-xs font-semibold text-zinc-400">Haftada kaç gün gym?</p>
+        <p className="mb-3 text-xs font-semibold text-zinc-400">How many gym days a week?</p>
         <div className="grid grid-cols-5 gap-2">
           {[2, 3, 4, 5, 6].map((n) => (
             <button
@@ -577,7 +577,7 @@ function Step6({ data, update }: { data: FormData; update: (d: Partial<FormData>
 
       {data.splits.length > 0 && (
         <div>
-          <p className="mb-3 text-xs font-semibold text-zinc-400">Oluşturulacak split'ler</p>
+          <p className="mb-3 text-xs font-semibold text-zinc-400">Splits to create</p>
           <div className="space-y-2">
             {data.splits.map((s, i) => (
               <div key={i} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5">
@@ -615,22 +615,22 @@ function Step7({ data }: { data: FormData }) {
       <div className="text-6xl">🎉</div>
       <div>
         <h2 className="text-2xl font-black text-white">
-          Hazırsın{data.name ? `, ${data.name}` : ""}!
+          You're all set{data.name ? `, ${data.name}` : ""}!
         </h2>
-        <p className="mt-2 text-zinc-400">İşte planının özeti</p>
+        <p className="mt-2 text-zinc-400">Here's a summary of your plan</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 text-left">
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
-          <p className="text-xs text-zinc-500">Hedef</p>
+          <p className="text-xs text-zinc-500">Goal</p>
           <p className="font-bold text-white">{GOALS.find(g => g.id === data.goal)?.emoji} {GOALS.find(g => g.id === data.goal)?.label ?? "—"}</p>
         </div>
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
-          <p className="text-xs text-zinc-500">Kalori</p>
+          <p className="text-xs text-zinc-500">Calories</p>
           <p className="font-bold text-green-400">{data.calorieTarget} kcal</p>
         </div>
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
-          <p className="text-xs text-zinc-500">Protein / Karb / Yağ</p>
+          <p className="text-xs text-zinc-500">Protein / Carbs / Fat</p>
           <p className="text-xs font-bold text-white">
             <span className="text-blue-400">{data.proteinTarget}g</span>
             {" / "}
@@ -641,13 +641,13 @@ function Step7({ data }: { data: FormData }) {
         </div>
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
           <p className="text-xs text-zinc-500">Gym</p>
-          <p className="font-bold text-white">Haftada {data.gymDays} gün</p>
+          <p className="font-bold text-white">{data.gymDays} days a week</p>
         </div>
       </div>
 
       {data.splits.length > 0 && (
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3 text-left">
-          <p className="mb-2 text-xs text-zinc-500">Split Programı</p>
+          <p className="mb-2 text-xs text-zinc-500">Split Program</p>
           <div className="flex flex-wrap gap-2">
             {data.splits.map((s, i) => (
               <span key={i} className="rounded-full bg-zinc-800 px-3 py-1 text-xs font-semibold text-zinc-300">
@@ -789,7 +789,7 @@ export default function OnboardingPage() {
               onClick={goBack}
               className="rounded-xl border border-zinc-800 bg-zinc-900 px-6 py-3 text-sm font-semibold text-zinc-400 hover:text-white transition-colors"
             >
-              ← Geri
+              ← Back
             </button>
           )}
 
@@ -799,7 +799,7 @@ export default function OnboardingPage() {
               disabled={!canNext()}
               className="flex-1 rounded-xl bg-green-600 py-3 text-sm font-bold text-white shadow-lg shadow-green-900/40 hover:bg-green-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {step === 6 ? "Hesapla ve Devam Et →" : "Devam Et →"}
+              {step === 6 ? "Calculate & Continue →" : "Continue →"}
             </button>
           ) : (
             <button
@@ -807,7 +807,7 @@ export default function OnboardingPage() {
               disabled={saving}
               className="flex-1 rounded-xl bg-green-600 py-3 text-sm font-bold text-white shadow-lg shadow-green-900/40 hover:bg-green-500 transition-colors disabled:opacity-50"
             >
-              {saving ? "Kaydediliyor…" : "🚀 Hadi Başlayalım!"}
+              {saving ? "Saving…" : "🚀 Let's Go!"}
             </button>
           )}
         </div>
@@ -826,7 +826,7 @@ export default function OnboardingPage() {
             }}
             className="mt-4 w-full text-center text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
           >
-            Şimdilik atla
+            Skip for now
           </button>
         )}
       </div>

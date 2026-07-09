@@ -163,7 +163,7 @@ function ExerciseCard({
             className="cursor-grab active:cursor-grabbing shrink-0 select-none text-[13px] leading-none text-zinc-600 hover:text-zinc-400"
             style={{ touchAction: "none" }}
             tabIndex={-1}
-            aria-label="Egzersizi sırala"
+            aria-label="Reorder exercise"
             {...dragHandle?.listeners}
             {...dragHandle?.attributes}
           >
@@ -174,7 +174,7 @@ function ExerciseCard({
         </div>
         <button
           onClick={onRemove}
-          aria-label="Egzersizi kaldır"
+          aria-label="Remove exercise"
           className="ml-1 shrink-0 text-[10px] text-zinc-600 hover:text-red-400 transition-colors"
         >
           ✕
@@ -186,7 +186,7 @@ function ExerciseCard({
         <div className="mx-2 mb-1 flex items-center justify-between gap-1">
           <div className="min-w-0">
             <p className="truncate text-[9px] text-zinc-400">
-              Geçen: <span className="font-semibold text-green-400">{overload.lastBestSet.weight}kg × {overload.lastBestSet.reps}</span>
+              Last: <span className="font-semibold text-green-400">{overload.lastBestSet.weight}kg × {overload.lastBestSet.reps}</span>
               {overload.est1RM ? <span className="text-zinc-600"> · 1RM ~{overload.est1RM}kg</span> : null}
             </p>
           </div>
@@ -211,7 +211,7 @@ function ExerciseCard({
       {overload?.plateauWeeks && overload.plateauWeeks >= 3 ? (
         <div className="mx-2 mb-1 rounded bg-amber-950/40 px-1.5 py-0.5">
           <span className="text-[9px] text-amber-400">
-            ⚠️ {overload.plateauWeeks} haftadır sabit — varyasyon dene
+            ⚠️ Stuck for {overload.plateauWeeks} weeks — try a variation
           </span>
         </div>
       ) : null}
@@ -239,7 +239,7 @@ function ExerciseCard({
               <SetInput value={set.rpe}    placeholder="—" onChange={(v) => onUpdateSet(setIdx, "rpe",    v)} ringClass={acc.ring} />
               <button
                 onClick={() => onRemoveSet(setIdx)}
-                aria-label="Seti kaldır"
+                aria-label="Remove set"
                 className={`text-center text-[10px] leading-none transition-colors ${
                   exercise.sets.length > 1 ? "text-zinc-700 hover:text-red-400" : "invisible"
                 }`}
@@ -263,7 +263,7 @@ function ExerciseCard({
           onClick={onRest}
           className="border-l border-zinc-800 bg-zinc-800/40 py-1.5 text-[11px] font-medium text-zinc-500 hover:bg-zinc-800 hover:text-green-300 transition-colors"
         >
-          ⏱ dinlen
+          ⏱ rest
         </button>
       </div>
     </div>
@@ -829,7 +829,7 @@ export default function WorkoutPage() {
             </div>
             <div className="flex items-center gap-3 text-right">
               <div>
-                <p className="text-[9px] uppercase tracking-wide text-zinc-600">Süre</p>
+                <p className="text-[9px] uppercase tracking-wide text-zinc-600">Time</p>
                 <p className="text-sm font-bold tabular-nums text-white">
                   {sessionStarted ? fmtDuration(elapsed) : "0:00"}
                 </p>
@@ -846,7 +846,7 @@ export default function WorkoutPage() {
           {/* Labeled progress bar */}
           <div className="mt-2.5">
             <div className="mb-1 flex justify-between text-[10px] text-zinc-500">
-              <span>{sessionStats.loggedExercises}/{sessionStats.total} egzersiz kaydedildi</span>
+              <span>{sessionStats.loggedExercises}/{sessionStats.total} exercises logged</span>
               <span>{sessionStats.completedSets} set</span>
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
@@ -1024,7 +1024,7 @@ export default function WorkoutPage() {
               onClick={() => { scheduleSave(0); setShowFinish(true); }}
               className="mt-3 w-full rounded-2xl bg-green-600 py-3 text-sm font-bold text-white transition hover:bg-green-500"
             >
-              Antrenmanı Bitir
+              Finish Workout
             </button>
           )}
         </>
@@ -1042,14 +1042,14 @@ export default function WorkoutPage() {
           >
             <div className="mb-4 text-center">
               <p className="text-4xl">🎉</p>
-              <h2 className="mt-2 text-xl font-bold text-white">İyi iş çıkardın!</h2>
+              <h2 className="mt-2 text-xl font-bold text-white">Great work!</h2>
               <p className="text-sm text-zinc-400">{selectedSplitObj?.emoji} {selectedSplit}</p>
             </div>
 
             <div className="mb-4 grid grid-cols-3 gap-2 text-center">
               <div className="rounded-2xl bg-zinc-800/60 p-3">
                 <p className="text-lg font-bold tabular-nums text-white">{sessionStarted ? fmtDuration(elapsed) : "—"}</p>
-                <p className="text-[10px] uppercase tracking-wide text-zinc-500">Süre</p>
+                <p className="text-[10px] uppercase tracking-wide text-zinc-500">Duration</p>
               </div>
               <div className="rounded-2xl bg-zinc-800/60 p-3">
                 <p className="text-lg font-bold tabular-nums" style={{ color: METRICS.calories.hex }}>
@@ -1064,7 +1064,7 @@ export default function WorkoutPage() {
             </div>
 
             <p className="mb-4 text-center text-xs text-zinc-500">
-              {sessionStats.loggedExercises} egzersiz tamamlandı · otomatik kaydedildi ✓
+              {sessionStats.loggedExercises} exercises completed · saved automatically ✓
             </p>
 
             <div className="flex gap-2">
@@ -1074,7 +1074,7 @@ export default function WorkoutPage() {
                   disabled={aiLoading || !canAnalyzeWorkout}
                   className="flex-1 rounded-xl bg-green-600 py-2.5 text-sm font-bold text-white transition hover:bg-green-500 disabled:opacity-40"
                 >
-                  ✨ AI Özeti Al
+                  ✨ Get AI Recap
                 </button>
               )}
               <button

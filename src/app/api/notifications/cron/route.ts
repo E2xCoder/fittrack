@@ -80,8 +80,8 @@ export async function POST(request: Request) {
 
     if (!mealLog) {
       notifications.push({
-        title: "🍽️ Öğün takibini unuttun!",
-        body: "Bugün henüz yemek logleemedin. Günlük takibini korumak için bir öğün ekle.",
+        title: "🍽️ Don't forget to log your meals!",
+        body: "You haven't logged any food today. Add a meal to keep your streak going.",
         url: "/meals",
         tag: "fittrack-meal-reminder",
       });
@@ -89,8 +89,8 @@ export async function POST(request: Request) {
 
     if (!recentWorkout) {
       notifications.push({
-        title: "💪 Antrenman zamanı!",
-        body: "3 gündür antrenman logu yok. Bugün bir seans yapmak ister misin?",
+        title: "💪 Time to train!",
+        body: "No workout logged for 3 days. How about a session today?",
         url: "/workout",
         tag: "fittrack-workout-reminder",
       });

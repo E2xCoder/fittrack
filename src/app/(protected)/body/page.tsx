@@ -498,7 +498,7 @@ function HabitCard({
           <span className="text-sm font-medium text-zinc-300">{label}</span>
         </div>
         <span className="text-xs tabular-nums text-zinc-500">
-          {value >= target && value > 0 ? "✓ hedef" : `${fmt(Math.max(target - value, 0))} ${unit} kaldı`}
+          {value >= target && value > 0 ? "✓ target" : `${fmt(Math.max(target - value, 0))} ${unit} to go`}
         </span>
       </div>
       <div className="mb-3 flex items-baseline gap-1">
@@ -524,12 +524,12 @@ function HabitCard({
           value={value > 0 ? fmt(value) : ""}
           onChange={(e) => onChange(e.target.value)}
           placeholder="0"
-          aria-label={`${label} değeri`}
+          aria-label={`${label} value`}
           className="h-8 flex-1 rounded-lg bg-zinc-800 text-center text-sm outline-none focus:ring-1 focus:ring-zinc-600"
         />
         <button
           onClick={() => bump(step)}
-          aria-label={`${label} artır`}
+          aria-label={`Increase ${label}`}
           className="h-8 w-8 rounded-lg text-sm font-bold text-white hover:opacity-90"
           style={{ backgroundColor: color }}
         >
@@ -935,7 +935,7 @@ function BodyContent() {
                 label="Steps"
                 value={stepsValue}
                 target={userProfile.stepTarget ?? 10000}
-                unit="adım"
+                unit="steps"
                 color={METRICS.steps.hex}
                 step={500}
                 onChange={(value) => updateForm("steps", value)}
@@ -964,7 +964,7 @@ function BodyContent() {
               />
             </div>
             <p className="mt-4 text-xs text-zinc-600">
-              Tek dokunuşla ekle ya da tam değeri elle gir — otomatik kaydedilir. Ağırlık ve ölçümler Check-in sekmesinde.
+              Tap to add or type the exact value — saved automatically. Weight and measurements live in the Check-in tab.
             </p>
           </div>
         </div>

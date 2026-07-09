@@ -16,9 +16,9 @@ const TIMEZONE_OPTIONS = [
 
 function validateUsername(val: string): string | null {
   if (!val) return null; // empty is allowed (no username)
-  if (val.length < 3) return "En az 3 karakter";
+  if (val.length < 3) return "At least 3 characters";
   if (val.length > 20) return "En fazla 20 karakter";
-  if (!/^[a-zA-Z0-9_]+$/.test(val)) return "Sadece harf, rakam ve _ kullanılabilir";
+  if (!/^[a-zA-Z0-9_]+$/.test(val)) return "Only letters, numbers and _ are allowed";
   return null;
 }
 
@@ -257,9 +257,9 @@ export default function ProfilePage() {
     try {
       const res = await fetch("/api/notifications/test", { method: "POST" });
       const data = await res.json();
-      setTestResult(data.sent > 0 ? "✓ Test bildirimi gönderildi!" : "Bildirim gönderilemedi.");
+      setTestResult(data.sent > 0 ? "✓ Test notification sent!" : "Could not send notification.");
     } catch {
-      setTestResult("Hata oluştu.");
+      setTestResult("Something went wrong.");
     } finally {
       setTestSending(false);
       setTimeout(() => setTestResult(null), 4000);
@@ -321,7 +321,7 @@ export default function ProfilePage() {
     { key: "proteinTarget", label: "Protein", placeholder: "150", unit: "g", color: METRICS.protein.hex, step: "1" },
     { key: "carbTarget", label: "Carbs", placeholder: "200", unit: "g", color: METRICS.carbs.hex, step: "1" },
     { key: "fatTarget", label: "Fat", placeholder: "70", unit: "g", color: METRICS.fat.hex, step: "1" },
-    { key: "stepTarget", label: "Steps", placeholder: "10000", unit: "adım", color: METRICS.steps.hex, step: "1" },
+    { key: "stepTarget", label: "Steps", placeholder: "10000", unit: "steps", color: METRICS.steps.hex, step: "1" },
     { key: "waterTarget", label: "Water", placeholder: "2.5", unit: "L", color: METRICS.water.hex, step: "0.1" },
     { key: "sleepTarget", label: "Sleep", placeholder: "8", unit: "saat", color: METRICS.sleep.hex, step: "0.5" },
   ] as const;
@@ -331,7 +331,7 @@ export default function ProfilePage() {
       <div className="mb-6">
         <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-green-400/80">Ayarlar</p>
         <h1 className="mt-1 text-2xl font-bold">Profile</h1>
-        <p className="text-sm text-zinc-400">Hedeflerini ve hesap ayarlarını yönet</p>
+        <p className="text-sm text-zinc-400">Manage your targets and account settings</p>
       </div>
 
       {/* Save status — sticky-ish indicator */}
@@ -343,7 +343,7 @@ export default function ProfilePage() {
 
       <div className="space-y-3">
         {/* 1. Personal */}
-        <Section title="Kişisel Bilgiler" subtitle="İsim, boy, kilo" icon="👤" defaultOpen>
+        <Section title="Personal Info" subtitle="Name, height, weight" icon="👤" defaultOpen>
           <div className="space-y-3">
             <div>
               <label className="mb-1 block text-xs text-zinc-400">Name</label>
@@ -363,7 +363,7 @@ export default function ProfilePage() {
         </Section>
 
         {/* 2. Targets (merged nutrition + daily) */}
-        <Section title="Hedefler" subtitle="Beslenme ve günlük hedefler" icon="🎯" defaultOpen>
+        <Section title="Targets" subtitle="Nutrition and daily targets" icon="🎯" defaultOpen>
           <div className="grid grid-cols-2 gap-3">
             {targets.map(({ key, label, placeholder, unit, color, step }) => (
               <div key={key}>
@@ -385,8 +385,8 @@ export default function ProfilePage() {
         </Section>
 
         {/* 3. Timezone */}
-        <Section title="Saat Dilimi" subtitle="Bildirim zamanlaması" icon="🕑">
-          <p className="mb-3 text-xs text-zinc-500">Sabah bildirimleri bu saate göre gönderilir.</p>
+        <Section title="Timezone" subtitle="Notification timing" icon="🕑">
+          <p className="mb-3 text-xs text-zinc-500">Morning notifications follow this timezone.</p>
           <select
             value={form.timezone ?? "Europe/Berlin"}
             onChange={(e) => updateForm({ timezone: e.target.value })}
@@ -399,16 +399,16 @@ export default function ProfilePage() {
         </Section>
 
         {/* 4. Social profile */}
-        <Section title="Sosyal Profil" subtitle="Kullanıcı adı ve gizlilik" icon="🌐">
+        <Section title="Social Profile" subtitle="Username and privacy" icon="🌐">
           {form.username && (
             <div className="mb-3 text-right">
               <Link href={`/social/${form.username}`} className="text-xs text-green-400 transition-colors hover:text-green-300">
-                Profilimi Gör →
+                View My Profile →
               </Link>
             </div>
           )}
           <div className="mb-3">
-            <label className="mb-1 block text-xs text-zinc-400">Kullanıcı adı</label>
+            <label className="mb-1 block text-xs text-zinc-400">Username</label>
             <div className="flex items-center rounded-xl bg-zinc-800 px-3 py-2 focus-within:ring-1 focus-within:ring-zinc-600">
               <span className="mr-1 text-sm text-zinc-500">@</span>
               <input
@@ -418,22 +418,22 @@ export default function ProfilePage() {
                   updateForm({ username: v });
                   setUsernameError(validateUsername(v));
                 }}
-                placeholder="kullanici_adi"
+                placeholder="username"
                 className="flex-1 bg-transparent text-sm outline-none placeholder:text-zinc-600"
               />
             </div>
             {usernameError && <p className="mt-1 text-xs text-red-400">{usernameError}</p>}
-            <p className="mt-1 text-[11px] text-zinc-600">Min 3, max 20 karakter. Harf, rakam ve _</p>
+            <p className="mt-1 text-[11px] text-zinc-600">Min 3, max 20 characters. Letters, numbers and _</p>
           </div>
 
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Gizlilik</p>
           <div className="space-y-2">
             {[
-              { key: "isPublic",      label: "Profilim herkese açık" },
-              { key: "shareSteps",    label: "Adım sayımı paylaş" },
-              { key: "shareCalories", label: "Kalori bilgimi paylaş" },
-              { key: "shareWorkout",  label: "Antrenman bilgimi paylaş" },
-              { key: "shareStreak",   label: "Streak bilgimi paylaş" },
+              { key: "isPublic",      label: "My profile is public" },
+              { key: "shareSteps",    label: "Share my step count" },
+              { key: "shareCalories", label: "Share my calories" },
+              { key: "shareWorkout",  label: "Share my workouts" },
+              { key: "shareStreak",   label: "Share my streak" },
             ].map(({ key, label }) => (
               <label key={key} className="flex cursor-pointer items-center justify-between rounded-xl bg-zinc-800/50 px-3 py-2">
                 <span className="text-xs text-zinc-300">{label}</span>
@@ -453,12 +453,12 @@ export default function ProfilePage() {
         </Section>
 
         {/* 5. Notifications */}
-        <Section title="Bildirimler" subtitle="Günlük hatırlatıcılar" icon="🔔">
+        <Section title="Notifications" subtitle="Daily reminders" icon="🔔">
           {notifState === "unsupported" && (
-            <p className="rounded-xl bg-zinc-800 px-3 py-2 text-xs text-zinc-500">Bu tarayıcı push bildirimlerini desteklemiyor.</p>
+            <p className="rounded-xl bg-zinc-800 px-3 py-2 text-xs text-zinc-500">This browser doesn't support push notifications.</p>
           )}
           {notifState === "denied" && (
-            <div className="rounded-xl bg-red-950/40 px-3 py-2 text-xs text-red-400">Bildirim izni engellendi. Tarayıcı ayarlarından fittrack için izin ver.</div>
+            <div className="rounded-xl bg-red-950/40 px-3 py-2 text-xs text-red-400">Notification permission blocked. Allow FitTrack in your browser settings.</div>
           )}
           {notifState === "loading" && (
             <div className="flex items-center gap-2 text-xs text-zinc-500">
@@ -471,10 +471,10 @@ export default function ProfilePage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-medium text-zinc-200">
-                    {notifState === "subscribed" ? "✅ Bildirimler açık" : "Bildirimler kapalı"}
+                    {notifState === "subscribed" ? "✅ Notifications on" : "Notifications off"}
                   </p>
                   <p className="text-[11px] text-zinc-500">
-                    {notifState === "subscribed" ? "Her gün 20:00'de öğün & antrenman hatırlatıcısı" : "Aç ve günlük hatırlatıcılar al"}
+                    {notifState === "subscribed" ? "Daily meal & workout reminder at 20:00" : "Turn on to get daily reminders"}
                   </p>
                 </div>
                 <button
@@ -483,7 +483,7 @@ export default function ProfilePage() {
                     notifState === "subscribed" ? "bg-zinc-700 text-zinc-300 hover:bg-zinc-600" : "bg-green-600 text-white hover:bg-green-500"
                   }`}
                 >
-                  {notifState === "subscribed" ? "Kapat" : "Bildirimleri Aç"}
+                  {notifState === "subscribed" ? "Turn Off" : "Turn On Notifications"}
                 </button>
               </div>
 
@@ -494,7 +494,7 @@ export default function ProfilePage() {
                     disabled={testSending}
                     className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-2 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-700 disabled:opacity-50"
                   >
-                    {testSending ? "Gönderiliyor…" : "🔔 Test Bildirimi Gönder"}
+                    {testSending ? "Sending…" : "🔔 Send Test Notification"}
                   </button>
                   {testResult && <p className="text-center text-xs text-green-400">{testResult}</p>}
                 </div>
@@ -502,10 +502,10 @@ export default function ProfilePage() {
 
               {notifState === "unsubscribed" && (
                 <div className="rounded-xl bg-zinc-800/50 px-3 py-2">
-                  <p className="mb-1.5 text-[11px] font-medium text-zinc-300">Günlük hatırlatıcılar:</p>
+                  <p className="mb-1.5 text-[11px] font-medium text-zinc-300">Daily reminders:</p>
                   <ul className="space-y-0.5 text-[11px] text-zinc-500">
-                    <li>🍽️ Öğün logu olmayan günler saat 20:00&apos;de</li>
-                    <li>💪 3 gündür antrenman logu yoksa</li>
+                    <li>🍽️ At 20:00 on days with no meal log</li>
+                    <li>💪 When no workout is logged for 3 days</li>
                   </ul>
                 </div>
               )}
@@ -514,8 +514,8 @@ export default function ProfilePage() {
         </Section>
 
         {/* 6. Connected devices — iPhone Steps Sync */}
-        <Section title="Bağlı Cihazlar" subtitle="iPhone adım senkronizasyonu" icon="📱">
-          <p className="mb-3 text-xs text-zinc-500">iPhone Sağlık verisinden adımlarını her 3 saatte bir otomatik eşitle.</p>
+        <Section title="Connected Devices" subtitle="iPhone step sync" icon="📱">
+          <p className="mb-3 text-xs text-zinc-500">Automatically sync your steps from iPhone Health every 3 hours.</p>
           {apiToken ? (
             <div className="space-y-3">
               <div className="rounded-xl bg-zinc-800 p-3">
@@ -527,7 +527,7 @@ export default function ProfilePage() {
                   onClick={copyToken}
                   className={`flex-1 rounded-xl py-2 text-sm font-medium transition ${tokenCopied ? "bg-green-800 text-green-300" : "bg-zinc-800 hover:bg-zinc-700"}`}
                 >
-                  {tokenCopied ? "Kopyalandı ✓" : "Token'ı Kopyala"}
+                  {tokenCopied ? "Copied ✓" : "Copy Token"}
                 </button>
                 <button onClick={generateToken} disabled={generatingToken} className="rounded-xl bg-zinc-800 px-4 text-sm hover:bg-zinc-700 disabled:opacity-50">
                   Yenile
@@ -535,33 +535,33 @@ export default function ProfilePage() {
               </div>
               {/* Setup steps tucked behind a disclosure to keep the section light */}
               <details className="rounded-xl bg-zinc-800/50 p-3">
-                <summary className="cursor-pointer text-xs font-medium text-zinc-300">Kurulum adımları (Shortcuts)</summary>
+                <summary className="cursor-pointer text-xs font-medium text-zinc-300">Setup steps (Shortcuts)</summary>
                 <ol className="mt-2 space-y-1 text-xs text-zinc-500">
-                  <li>1. Yukarıdaki token&apos;ı kopyala</li>
-                  <li>2. iPhone Kısayollar (Shortcuts) uygulamasını aç</li>
-                  <li>3. Yeni bir otomasyon oluştur</li>
-                  <li>4. Tetikleyici: Günün Saati, her 3 saatte bir</li>
-                  <li>5. Eylem: Sağlık Örneği Al (Adımlar)</li>
-                  <li>6. Eylem: URL İçeriğini Al</li>
+                  <li>1. Copy the token above</li>
+                  <li>2. Open the iPhone Shortcuts app</li>
+                  <li>3. Create a new automation</li>
+                  <li>4. Trigger: Time of Day, every 3 hours</li>
+                  <li>5. Action: Get Health Sample (Steps)</li>
+                  <li>6. Action: Get Contents of URL</li>
                   <li>7. URL: <span className="break-all text-zinc-300">https://fittrack-ten-umber.vercel.app/api/sync/steps</span></li>
-                  <li>8. Yöntem: POST, Gövde: JSON</li>
-                  <li>9. Başlık: Authorization: Bearer YOUR_TOKEN</li>
-                  <li>10. Gövde: {`{"steps": [Health Sample Value]}`}</li>
+                  <li>8. Method: POST, Body: JSON</li>
+                  <li>9. Header: Authorization: Bearer YOUR_TOKEN</li>
+                  <li>10. Body: {`{"steps": [Health Sample Value]}`}</li>
                 </ol>
               </details>
             </div>
           ) : (
             <button onClick={generateToken} disabled={generatingToken} className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
-              {generatingToken ? "Oluşturuluyor..." : "API Token Oluştur"}
+              {generatingToken ? "Generating..." : "Generate API Token"}
             </button>
           )}
         </Section>
 
         {/* 7. Data & privacy (danger zone) */}
-        <Section title="Veri & Gizlilik" subtitle="Dışa aktar veya hesabı sil" icon="🔒">
+        <Section title="Data & Privacy" subtitle="Export or delete account" icon="🔒">
           <p className="mb-3 text-xs text-zinc-500">
-            GDPR kapsamında verilerini indirebilir veya hesabını kalıcı olarak silebilirsin.{" "}
-            <Link href="/privacy" className="text-green-400 hover:underline">Gizlilik Politikası →</Link>
+            Under GDPR you can download your data or permanently delete your account.{" "}
+            <Link href="/privacy" className="text-green-400 hover:underline">Privacy Policy →</Link>
           </p>
           <div className="flex gap-2">
             <button
@@ -569,13 +569,13 @@ export default function ProfilePage() {
               disabled={exporting}
               className="flex-1 rounded-xl bg-zinc-800 py-2.5 text-xs font-semibold text-zinc-200 transition-colors hover:bg-zinc-700 disabled:opacity-50"
             >
-              {exporting ? "İndiriliyor…" : "⬇ Verilerimi İndir"}
+              {exporting ? "Downloading…" : "⬇ Download My Data"}
             </button>
             <button
               onClick={() => { setShowDeleteModal(true); setDeleteConfirm(""); }}
               className="flex-1 rounded-xl border border-red-900/40 bg-red-950/60 py-2.5 text-xs font-semibold text-red-400 transition-colors hover:bg-red-900/60"
             >
-              🗑 Hesabımı Sil
+              🗑 Delete My Account
             </button>
           </div>
         </Section>
@@ -585,30 +585,30 @@ export default function ProfilePage() {
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-sm rounded-2xl border border-red-900/50 bg-zinc-900 p-6">
-            <h2 className="mb-1 text-base font-bold text-white">Hesabı Sil</h2>
+            <h2 className="mb-1 text-base font-bold text-white">Delete Account</h2>
             <p className="mb-4 text-sm text-zinc-400">
-              Bu işlem <span className="font-semibold text-red-400">geri alınamaz.</span>{" "}
-              Tüm verilerin (antrenmanlar, öğünler, ölçümler) kalıcı olarak silinir.
+              This action <span className="font-semibold text-red-400">cannot be undone.</span>{" "}
+              All your data (workouts, meals, measurements) will be permanently deleted.
             </p>
             <p className="mb-2 text-xs text-zinc-500">
-              Onaylamak için <span className="font-mono text-zinc-300">SİL</span> yazın:
+              Type <span className="font-mono text-zinc-300">DELETE</span> to confirm:
             </p>
             <input
               value={deleteConfirm}
               onChange={(e) => setDeleteConfirm(e.target.value)}
-              placeholder="SİL"
+              placeholder="DELETE"
               className="mb-4 w-full rounded-xl bg-zinc-800 p-3 text-sm outline-none focus:ring-1 focus:ring-red-800 placeholder:text-zinc-600"
             />
             <div className="flex gap-2">
               <button onClick={() => setShowDeleteModal(false)} className="flex-1 rounded-xl bg-zinc-800 py-2.5 text-sm font-medium hover:bg-zinc-700">
-                İptal
+                Cancel
               </button>
               <button
                 onClick={deleteAccount}
-                disabled={deleteConfirm !== "SİL" || deleting}
+                disabled={deleteConfirm !== "DELETE" || deleting}
                 className="flex-1 rounded-xl bg-red-700 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-600 disabled:opacity-40"
               >
-                {deleting ? "Siliniyor…" : "Hesabı Kalıcı Sil"}
+                {deleting ? "Deleting…" : "Permanently Delete Account"}
               </button>
             </div>
           </div>

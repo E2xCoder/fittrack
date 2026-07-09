@@ -125,7 +125,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
     <PostHogProvider>
       <div className="min-h-screen bg-black text-white">
         {/* Desktop top nav */}
-        <nav aria-label="Ana menü" className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
+        <nav aria-label="Main menu" className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
           <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
             <Link href="/dashboard" className="text-xl font-bold">FitTrack</Link>
 
@@ -152,7 +152,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
 
             <button
               onClick={handleLogout}
-              aria-label="Çıkış yap"
+              aria-label="Log out"
               className="rounded-2xl bg-zinc-800 px-4 py-2 text-sm transition hover:bg-zinc-700 hover:text-white"
             >
               Logout
@@ -170,7 +170,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Mobile bottom nav */}
-        <nav aria-label="Ana menü" className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-zinc-950 md:hidden">
+        <nav aria-label="Main menu" className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-zinc-950 md:hidden">
           <div className="flex items-center justify-around py-1">
             {navItems.map((item) => {
               const active = pathname === item.href || pathname.startsWith(item.href + "/");

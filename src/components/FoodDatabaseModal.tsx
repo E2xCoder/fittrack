@@ -161,7 +161,7 @@ function AddQuantityModal({
           <button onClick={onCancel} className="ml-3 text-zinc-500 hover:text-white">✕</button>
         </div>
 
-        {/* Birim seçimi */}
+        {/* Unit selection */}
         <div className="mb-3 flex gap-1.5">
           {(["g", "ml", "piece"] as Unit[]).map((u) => (
             <button
@@ -194,7 +194,7 @@ function AddQuantityModal({
 
         <div className="mb-4 rounded-xl bg-zinc-800 p-3">
           <p className="mb-1 text-[11px] text-zinc-500">
-            Önizleme ({numAmount} {unitLabel})
+            Preview ({numAmount} {unitLabel})
           </p>
           <div className="flex flex-wrap gap-1.5">
             <span className="rounded-full bg-zinc-700 px-2.5 py-0.5 text-xs font-bold text-white">{preview.calories} kcal</span>
@@ -210,17 +210,17 @@ function AddQuantityModal({
             disabled={saving}
             className="w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white shadow-lg shadow-green-900/30 hover:bg-green-500 transition-colors disabled:opacity-50"
           >
-            {savingMode === "today" ? "Ekleniyor…" : "Bugünkü Loga Ekle"}
+            {savingMode === "today" ? "Adding…" : "Add to Today's Log"}
           </button>
           <button
             onClick={() => handleSave("library")}
             disabled={saving}
             className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-3 text-sm font-semibold text-zinc-200 hover:border-green-600 hover:text-green-400 transition-colors disabled:opacity-50"
           >
-            {savingMode === "library" ? "Kaydediliyor…" : "Kütüphaneye Ekle"}
+            {savingMode === "library" ? "Saving…" : "Add to Library"}
           </button>
           <p className="px-1 text-center text-[11px] leading-snug text-zinc-600">
-            "Bugünkü Loga Ekle" yalnızca güne loglar; "Kütüphaneye Ekle" yalnızca kütüphaneye kaydeder, güne eklemez.
+            "Add to Today's Log" only logs it for today; "Add to Library" only saves it to your library without logging it.
           </p>
         </div>
       </div>
@@ -300,14 +300,14 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
       const res  = await fetch(`/api/food-barcode?code=${encodeURIComponent(trimmed)}`);
       const data = await res.json();
       if (data.status !== 1 || !data.product) {
-        setBarcodeError("Ürün bulunamadı.");
+        setBarcodeError("Product not found.");
         return;
       }
       const p = normalize({ code: trimmed, ...data.product });
-      if (!p) { setBarcodeError("Ürün bilgileri eksik."); return; }
+      if (!p) { setBarcodeError("Product information is incomplete."); return; }
       setBarcodeProduct(p);
     } catch {
-      setBarcodeError("Bağlantı hatası.");
+      setBarcodeError("Connection error.");
     } finally {
       setBarcodeLoading(false);
     }
@@ -377,7 +377,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
       }
       if (isActive()) scan();
     } catch {
-      if (isActive()) { setBarcodeError("Kamera erişimi reddedildi."); setIsScanning(false); }
+      if (isActive()) { setBarcodeError("Camera access denied."); setIsScanning(false); }
     }
   }
 
@@ -457,7 +457,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
           onClick={() => setAddingProduct(product)}
           className="shrink-0 rounded-xl bg-green-600 px-3 py-2 text-xs font-bold text-white shadow-md shadow-green-900/30 hover:bg-green-500 transition-colors"
         >
-          + Ekle
+          + Add
         </button>
       </div>
     );
@@ -521,7 +521,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                   <input
                     autoFocus
                     type="text"
-                    placeholder="Ürün adı yaz…"
+                    placeholder="Type a product name…"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     className="w-full rounded-xl border border-zinc-800 bg-zinc-900 py-3 pl-9 pr-4 text-sm text-white outline-none focus:border-green-600 placeholder:text-zinc-600"
@@ -534,10 +534,10 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                   </div>
                 )}
                 {!searching && noResults && query.trim() && (
-                  <p className="py-6 text-center text-sm text-zinc-500">"{query}" için sonuç bulunamadı.</p>
+                  <p className="py-6 text-center text-sm text-zinc-500">No results found for "{query}".</p>
                 )}
                 {!searching && results.length === 0 && !noResults && (
-                  <p className="py-10 text-center text-sm text-zinc-600">Aramak istediğin ürünü yaz…</p>
+                  <p className="py-10 text-center text-sm text-zinc-600">Type a product to search…</p>
                 )}
                 <div className="space-y-2">
                   {results.map((p) => <ProductCard key={p.code} product={p} />)}
@@ -553,7 +553,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                   <input
                     type="text"
                     inputMode="numeric"
-                    placeholder="Barkod numarası…"
+                    placeholder="Barcode number…"
                     value={barcodeInput}
                     onChange={(e) => setBarcodeInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && fetchBarcode(barcodeInput)}
@@ -587,7 +587,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                       className={`absolute right-2 top-2 rounded-full p-2.5 text-xl backdrop-blur transition-colors ${
                         torchOn ? "bg-yellow-400/90 text-black" : "bg-black/60 text-white hover:bg-black/80"
                       }`}
-                      title={torchOn ? "Flaşı Kapat" : "Flaşı Aç"}
+                      title={torchOn ? "Turn Off Flash" : "Turn On Flash"}
                     >
                       🔦
                     </button>
@@ -596,7 +596,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props
                   {/* status hint while scanning */}
                   {isScanning && (
                     <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-4 py-1.5 text-xs font-semibold text-white backdrop-blur">
-                      Barkodu çerçeveye getir…
+                      Line the barcode up in the frame…
                     </div>
                   )}
                 </div>

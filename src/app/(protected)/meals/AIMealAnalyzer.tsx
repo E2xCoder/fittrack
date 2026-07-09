@@ -128,14 +128,14 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
       const resized = await fileToResizedDataUrl(file);
       setImage(resized);
     } catch {
-      setError("Fotograf yuklenemedi, baska bir gorsel deneyin.");
+      setError("Could not load the photo, try another image.");
     }
   }
 
   async function analyze() {
     setError("");
     if (!image && !message.trim()) {
-      setError("Lutfen bir aciklama yazin veya fotograf ekleyin.");
+      setError("Please write a description or attach a photo.");
       return;
     }
     setAnalyzing(true);
@@ -149,7 +149,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data) {
-        setError(data?.error ?? "Analiz basarisiz oldu, tekrar deneyin.");
+        setError(data?.error ?? "Analysis failed, please try again.");
         return;
       }
       const raw = data as RawResult;
@@ -163,7 +163,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
       });
       posthog.capture("ai_meal_analyzed", { hasImage: !!image, itemCount: items.length });
     } catch {
-      setError("Baglanti hatasi. Internet baglantinizi kontrol edin.");
+      setError("Connection error. Check your internet connection.");
     } finally {
       setAnalyzing(false);
     }
@@ -296,8 +296,8 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
         {/* 1 — Baslik + X */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
           <div>
-            <div style={{ color: "#fff", fontWeight: 900, fontSize: 15 }}>AI ile Analiz</div>
-            <div style={{ color: "#71717a", fontSize: 11, marginTop: 2 }}>GPT-4o · fotograf + aciklama</div>
+            <div style={{ color: "#fff", fontWeight: 900, fontSize: 15 }}>Analyze with AI</div>
+            <div style={{ color: "#71717a", fontSize: 11, marginTop: 2 }}>GPT-4o · photo + description</div>
           </div>
           <button
             onClick={onClose}
@@ -317,11 +317,11 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
           </button>
         </div>
 
-        {/* 2 — Fotograf onizleme veya kamera/galeri butonlari */}
+        {/* 2 — Photo preview or camera/gallery buttons */}
         {image ? (
           <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: "1px solid #3f3f46", marginBottom: 12 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={image} alt="Yemek" style={{ width: "100%", maxHeight: 220, objectFit: "contain", background: "#000", display: "block" }} />
+            <img src={image} alt="Meal" style={{ width: "100%", maxHeight: 220, objectFit: "contain", background: "#000", display: "block" }} />
             <button
               onClick={() => setImage(null)}
               style={{
@@ -381,7 +381,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           rows={4}
-          placeholder="Ornek: 100gr pilav, 120gr tavuk gogusu"
+          placeholder="Example: 100g rice, 120g chicken breast"
           style={{
             width: "100%",
             resize: "none",
@@ -416,7 +416,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
             marginBottom: 12,
           }}
         >
-          {analyzing ? "GPT-4o analiz ediyor..." : "Analiz Et"}
+          {analyzing ? "GPT-4o is analyzing..." : "Analyze"}
         </button>
 
         {/* Hata mesaji */}
@@ -431,7 +431,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
           <div style={{ borderTop: "1px solid #27272a", paddingTop: 16 }}>
             {/* Toplam */}
             <div style={{ borderRadius: 12, border: "1px solid rgba(20,83,45,0.4)", background: "rgba(5,46,22,0.2)", padding: 16, marginBottom: 12 }}>
-              <div style={{ color: "#16a34a", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Toplam</div>
+              <div style={{ color: "#16a34a", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Total</div>
               <div style={{ display: "flex", alignItems: "flex-end", gap: 6, marginBottom: 8 }}>
                 <span style={{ color: "#4ade80", fontSize: 36, fontWeight: 900, lineHeight: 1 }}>{result.totalCalories}</span>
                 <span style={{ color: "#71717a", fontSize: 13, marginBottom: 4 }}>kcal</span>
@@ -474,7 +474,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                       <label style={{ display: "flex", alignItems: "center", gap: 4, borderRadius: 8, background: "#3f3f46", padding: "4px 8px" }}>
-                        <span style={{ color: "#71717a", fontSize: 10 }}>Miktar</span>
+                        <span style={{ color: "#71717a", fontSize: 10 }}>Amount</span>
                         <input
                           type="number"
                           step="any"
@@ -485,7 +485,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
                         />
                       </label>
                       <label style={{ display: "flex", alignItems: "center", gap: 4, borderRadius: 8, background: "#3f3f46", padding: "4px 8px" }}>
-                        <span style={{ color: "#71717a", fontSize: 10 }}>Birim</span>
+                        <span style={{ color: "#71717a", fontSize: 10 }}>Unit</span>
                         <input
                           value={it.unit}
                           onChange={(e) => updateText(it.id, "unit", e.target.value)}
@@ -547,7 +547,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
                 marginBottom: 8,
               }}
             >
-              {logging === "single" ? "Ekleniyor..." : "Onayla ve Tek Log Ekle"}
+              {logging === "single" ? "Adding..." : "Confirm & Log as One"}
             </button>
             <button
               onClick={() => logMeal("separate")}
@@ -565,7 +565,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
                 opacity: logging !== null || result.items.length === 0 ? 0.5 : 1,
               }}
             >
-              {logging === "separate" ? "Ekleniyor..." : "Her Yemegi Ayri Logla"}
+              {logging === "separate" ? "Adding..." : "Log Each Item Separately"}
             </button>
           </div>
         )}

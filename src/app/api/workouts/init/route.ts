@@ -36,7 +36,7 @@ export async function GET(request: Request) {
     );
   }
 
-  // İlk split veya gönderilen split için workout getir
+  // Fetch the workout for the first split or the requested split
   const targetSplit = split ?? (finalSplits[0]?.name ?? null);
 
   const workout = targetSplit ? await prisma.workout.findFirst({

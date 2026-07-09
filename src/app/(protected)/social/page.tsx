@@ -75,13 +75,13 @@ function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg"
 // ─── Relative time ────────────────────────────────────────────────────────────
 
 function relativeTime(isoDate: string | null): string {
-  if (!isoDate) return "Hic aktif olmadi";
+  if (!isoDate) return "Never active";
   const diff = (Date.now() - new Date(isoDate).getTime()) / 1000;
-  if (diff < 3600)    return `${Math.round(diff / 60)} dk once`;
-  if (diff < 86400)   return `${Math.round(diff / 3600)} saat once`;
+  if (diff < 3600)    return `${Math.round(diff / 60)} min ago`;
+  if (diff < 86400)   return `${Math.round(diff / 3600)} hr ago`;
   const days = Math.round(diff / 86400);
-  if (days === 1)     return "Dun";
-  return `${days} gun once`;
+  if (days === 1)     return "Yesterday";
+  return `${days} days ago`;
 }
 
 // ─── Skeletons ────────────────────────────────────────────────────────────────
@@ -132,7 +132,7 @@ function FriendCard({ friend }: { friend: FriendData }) {
               <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                 friend.streak > 0 ? "bg-orange-950/60 text-orange-400" : "bg-zinc-800 text-zinc-500"
               }`}>
-                {friend.streak > 0 ? `🔥 ${friend.streak} gün` : "Streak yok"}
+                {friend.streak > 0 ? `🔥 ${friend.streak} days` : "No streak"}
               </span>
             )}
             {friend.isGymDay !== null && (
@@ -150,12 +150,12 @@ function FriendCard({ friend }: { friend: FriendData }) {
           <div className="flex items-center gap-3">
             {friend.weeklyStepsAvg !== null && (
               <span className="text-[10px] text-zinc-400">
-                <span className="font-semibold tabular-nums" style={{ color: METRICS.steps.hex }}>{friend.weeklyStepsAvg.toLocaleString()}</span> adım/gün
+                <span className="font-semibold tabular-nums" style={{ color: METRICS.steps.hex }}>{friend.weeklyStepsAvg.toLocaleString()}</span> steps/day
               </span>
             )}
             {friend.weeklyCaloriesAvg !== null && (
               <span className="text-[10px] text-zinc-400">
-                <span className="font-semibold tabular-nums" style={{ color: METRICS.calories.hex }}>{friend.weeklyCaloriesAvg}</span> kcal/gün
+                <span className="font-semibold tabular-nums" style={{ color: METRICS.calories.hex }}>{friend.weeklyCaloriesAvg}</span> kcal/day
               </span>
             )}
           </div>
@@ -283,9 +283,9 @@ export default function SocialPage() {
   // ── Leaderboard rank badge ─────────────────────────────────────────────────
 
   function RankBadge({ rank }: { rank: number }) {
-    if (rank === 1) return <span className="text-base" aria-label="1. sıra">🥇</span>;
-    if (rank === 2) return <span className="text-base" aria-label="2. sıra">🥈</span>;
-    if (rank === 3) return <span className="text-base" aria-label="3. sıra">🥉</span>;
+    if (rank === 1) return <span className="text-base" aria-label="1st place">🥇</span>;
+    if (rank === 2) return <span className="text-base" aria-label="2nd place">🥈</span>;
+    if (rank === 3) return <span className="text-base" aria-label="3rd place">🥉</span>;
     return <span className="text-xs font-bold text-zinc-400">{rank}</span>;
   }
 
@@ -299,14 +299,14 @@ export default function SocialPage() {
       <div className="mb-5">
         <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-green-400/80">Topluluk</p>
         <h1 className="mt-1 text-2xl font-bold tracking-tight text-white">Social</h1>
-        <p className="text-xs text-zinc-500">Arkadaşlar &amp; haftalık meydan okuma</p>
+        <p className="text-xs text-zinc-500">Friends &amp; weekly challenge</p>
       </div>
 
       {/* Tabs */}
       <div className="mb-5 flex rounded-xl bg-zinc-900 p-1">
         {([
-          { id: "friends",   label: "Arkadaslar" },
-          { id: "challenge", label: "Haftalik" },
+          { id: "friends",   label: "Friends" },
+          { id: "challenge", label: "Weekly" },
           { id: "discover",  label: "Kesfet" },
         ] as const).map(({ id, label }) => (
           <button
@@ -349,14 +349,14 @@ export default function SocialPage() {
                         disabled={respondingId === req.id}
                         className="rounded-lg bg-green-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-green-500 disabled:opacity-50 transition-colors"
                       >
-                        Kabul
+                        Accept
                       </button>
                       <button
                         onClick={() => respond(req.id, "reject")}
                         disabled={respondingId === req.id}
                         className="rounded-lg bg-zinc-800 px-3 py-1.5 text-[11px] hover:bg-zinc-700 disabled:opacity-50 transition-colors"
                       >
-                        Reddet
+                        Decline
                       </button>
                     </div>
                   </div>
@@ -371,7 +371,7 @@ export default function SocialPage() {
           ) : friends.length === 0 ? (
             <div className="py-14 text-center">
               <p className="text-3xl">👥</p>
-              <p className="mt-2 text-sm font-semibold text-zinc-400">Henuz arkadasin yok</p>
+              <p className="mt-2 text-sm font-semibold text-zinc-400">No friends yet</p>
               <button
                 onClick={() => setTab("discover")}
                 className="mt-3 rounded-xl bg-green-600 px-5 py-2 text-sm font-bold text-white hover:bg-green-500"
@@ -390,7 +390,7 @@ export default function SocialPage() {
         <div>
           {/* Header */}
           <div className="mb-4 flex items-center justify-between">
-            <p className="text-sm font-bold text-zinc-200">Bu hafta adim siralaması</p>
+            <p className="text-sm font-bold text-zinc-200">This week's step ranking</p>
             <span className="rounded-full bg-zinc-800 px-2.5 py-0.5 text-[10px] text-zinc-400">
               {daysRemaining > 0 ? `${daysRemaining} gun kaldi` : "Bugun son gun"}
             </span>
@@ -402,7 +402,7 @@ export default function SocialPage() {
             </div>
           ) : leaderboard.length === 0 ? (
             <div className="py-14 text-center">
-              <p className="text-sm text-zinc-500">Veri yok — arkadas ekle ve haftalik meydan okumaya katil!</p>
+              <p className="text-sm text-zinc-500">No data yet — add friends and join the weekly challenge!</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -426,7 +426,7 @@ export default function SocialPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className={`text-sm font-semibold ${entry.isMe ? "text-green-300" : "text-white"}`}>
-                            {entry.isMe ? "Sen" : entry.name}
+                            {entry.isMe ? "You" : entry.name}
                           </span>
                           {entry.username && (
                             <span className="text-[10px] text-zinc-600">@{entry.username}</span>
@@ -463,7 +463,7 @@ export default function SocialPage() {
           {/* Search */}
           <div className="relative">
             <input
-              placeholder="@kullanici_adi veya isim ara..."
+              placeholder="Search by @username or name..."
               value={searchQuery}
               onChange={(e) => doSearch(e.target.value)}
               className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-sm outline-none focus:border-zinc-600 placeholder:text-zinc-600"
@@ -493,14 +493,14 @@ export default function SocialPage() {
                       {alreadyFriend ? (
                         <span className="text-xs text-green-400 font-semibold">Arkadas</span>
                       ) : isPending ? (
-                        <span className="text-xs text-zinc-500">Istek gonderildi</span>
+                        <span className="text-xs text-zinc-500">Request sent</span>
                       ) : (
                         <button
                           onClick={() => sendRequest(user.id)}
                           disabled={!!sendingReq[user.id]}
                           className="rounded-xl bg-green-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-500 disabled:opacity-50 transition-colors"
                         >
-                          {sendingReq[user.id] ? "..." : "Arkadas Ekle"}
+                          {sendingReq[user.id] ? "..." : "Add Friend"}
                         </button>
                       )}
                     </div>
@@ -511,13 +511,13 @@ export default function SocialPage() {
           )}
 
           {searchQuery.length >= 2 && searchResults.length === 0 && !searching && (
-            <p className="text-center text-sm text-zinc-500">Kullanici bulunamadi</p>
+            <p className="text-center text-sm text-zinc-500">No users found</p>
           )}
 
           {/* Outgoing pending requests */}
           {outgoing.length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Gonderilen istekler</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Sent requests</p>
               {outgoing.map((req) => (
                 <div key={req.id} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-2.5">
                   <Avatar name={req.name} />
@@ -528,7 +528,7 @@ export default function SocialPage() {
                     )}
                   </div>
                   <span className="shrink-0 text-[10px] text-zinc-500 bg-zinc-800 rounded-full px-2.5 py-1">
-                    Bekliyor
+                    Pending
                   </span>
                 </div>
               ))}
@@ -552,14 +552,14 @@ export default function SocialPage() {
                       disabled={respondingId === req.id}
                       className="rounded-lg bg-green-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-green-500 disabled:opacity-50 transition-colors"
                     >
-                      Kabul
+                      Accept
                     </button>
                     <button
                       onClick={() => respond(req.id, "reject")}
                       disabled={respondingId === req.id}
                       className="rounded-lg bg-zinc-800 px-2.5 py-1.5 text-[11px] hover:bg-zinc-700 disabled:opacity-50 transition-colors"
                     >
-                      Reddet
+                      Decline
                     </button>
                   </div>
                 </div>
@@ -569,7 +569,7 @@ export default function SocialPage() {
 
           {incoming.length === 0 && outgoing.length === 0 && !searchQuery && (
             <div className="py-10 text-center">
-              <p className="text-sm text-zinc-500">@kullanici_adi ile arama yap ve arkadas ekle</p>
+              <p className="text-sm text-zinc-500">Search by @username and add friends</p>
             </div>
           )}
         </div>

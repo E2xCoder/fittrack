@@ -85,7 +85,7 @@ export default function LoginPage() {
 
           <p className="text-center text-[11px] text-zinc-600">
             <Link href="/privacy" className="hover:underline">
-              Privacy Policy · Gizlilik Politikası
+              Privacy Policy
             </Link>
           </p>
         </div>

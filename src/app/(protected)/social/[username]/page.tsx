@@ -79,7 +79,7 @@ export default function PublicProfilePage() {
     return (
       <main className="mx-auto max-w-lg p-4 text-center py-20">
         <p className="text-3xl mb-3">404</p>
-        <p className="text-zinc-400 mb-4">Bu profil bulunamadi veya gizli.</p>
+        <p className="text-zinc-400 mb-4">This profile was not found or is private.</p>
         <Link href="/social" className="text-sm text-green-400 hover:text-green-300">
           ← Sosyal sayfaya don
         </Link>
@@ -87,7 +87,7 @@ export default function PublicProfilePage() {
     );
   }
 
-  const displayName = profile.name ?? profile.username ?? "Kullanici";
+  const displayName = profile.name ?? profile.username ?? "User";
   const initial     = displayName[0]?.toUpperCase() ?? "?";
 
   return (
@@ -120,13 +120,13 @@ export default function PublicProfilePage() {
         {profile.weeklyStepsAvg !== null && (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-center">
             <p className="text-2xl font-black text-white">{profile.weeklyStepsAvg.toLocaleString()}</p>
-            <p className="text-[11px] text-zinc-400">Adim/gun (bu hafta)</p>
+            <p className="text-[11px] text-zinc-400">Steps/day (this week)</p>
           </div>
         )}
         {profile.weeklyCaloriesAvg !== null && (
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-center">
             <p className="text-2xl font-black text-white">{profile.weeklyCaloriesAvg}</p>
-            <p className="text-[11px] text-zinc-400">kcal/gun (bu hafta)</p>
+            <p className="text-[11px] text-zinc-400">kcal/day (this week)</p>
           </div>
         )}
         {profile.isGymDay !== null && (
@@ -152,7 +152,7 @@ export default function PublicProfilePage() {
           disabled={sending}
           className="w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white hover:bg-green-500 disabled:opacity-50 transition-colors"
         >
-          {sending ? "Gonderiliyor..." : "Arkadas Ekle"}
+          {sending ? "Sending..." : "Add Friend"}
         </button>
       )}
     </main>

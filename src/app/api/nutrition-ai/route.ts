@@ -40,13 +40,13 @@ function num(v: unknown): number {
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) {
-    return NextResponse.json({ error: "Oturum bulunamadı." }, { status: 401 });
+    return NextResponse.json({ error: "Session not found." }, { status: 401 });
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "Bu özellik için OpenAI API key gerekli." },
+      { error: "An OpenAI API key is required for this feature." },
       { status: 503 }
     );
   }
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Geçersiz istek." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
   const message =
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
 
   if (!message && !image) {
     return NextResponse.json(
-      { error: "Lütfen bir açıklama yazın veya fotoğraf ekleyin." },
+      { error: "Please write a description or attach a photo." },
       { status: 400 }
     );
   }
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       type: "text",
       text:
         message ||
-        "Fotoğraftaki yemeği analiz et ve makrolarını hesapla.",
+        "Analyze the food in the photo and calculate its macros.",
     },
   ];
   if (image) {
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
     });
   } catch {
     return NextResponse.json(
-      { error: "AI servisine ulaşılamadı, tekrar deneyin." },
+      { error: "Could not reach the AI service, please try again." },
       { status: 502 }
     );
   }
@@ -115,18 +115,18 @@ export async function POST(request: Request) {
     console.error("OpenAI error", openaiRes.status, detail);
     if (openaiRes.status === 401) {
       return NextResponse.json(
-        { error: "OpenAI API key geçersiz." },
+        { error: "OpenAI API key is invalid." },
         { status: 502 }
       );
     }
     if (openaiRes.status === 429) {
       return NextResponse.json(
-        { error: "OpenAI kotası doldu veya çok fazla istek. Biraz sonra tekrar deneyin." },
+        { error: "OpenAI quota exceeded or too many requests. Try again shortly." },
         { status: 502 }
       );
     }
     return NextResponse.json(
-      { error: "AI analizi başarısız oldu, tekrar deneyin." },
+      { error: "AI analysis failed, please try again." },
       { status: 502 }
     );
   }
@@ -137,7 +137,7 @@ export async function POST(request: Request) {
   const content = data?.choices?.[0]?.message?.content;
   if (!content) {
     return NextResponse.json(
-      { error: "AI boş yanıt döndü, tekrar deneyin." },
+      { error: "AI returned an empty response, please try again." },
       { status: 502 }
     );
   }
@@ -147,7 +147,7 @@ export async function POST(request: Request) {
     parsed = JSON.parse(content) as Record<string, unknown>;
   } catch {
     return NextResponse.json(
-      { error: "AI yanıtı işlenemedi, tekrar deneyin." },
+      { error: "Could not process the AI response, please try again." },
       { status: 500 }
     );
   }

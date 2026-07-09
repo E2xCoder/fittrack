@@ -29,18 +29,18 @@ export default function ForgotPasswordPage() {
     <main className="flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <h1 className="mb-2 text-3xl font-bold">FitTrack</h1>
-        <p className="mb-8 text-zinc-400">Şifrenizi sıfırlayın</p>
+        <p className="mb-8 text-zinc-400">Reset your password</p>
 
         {sent ? (
           <div className="rounded-2xl bg-zinc-900 p-6 text-center">
             <p className="mb-2 text-2xl">📧</p>
-            <p className="font-semibold text-white">Email gönderildi</p>
+            <p className="font-semibold text-white">Email sent</p>
             <p className="mt-2 text-sm text-zinc-400">
-              <strong className="text-zinc-200">{email}</strong> adresine kayıtlı bir hesap varsa sıfırlama linki gönderildi.
+              If an account is registered to <strong className="text-zinc-200">{email}</strong>, a reset link has been sent.
             </p>
-            <p className="mt-1 text-xs text-zinc-500">Spam klasörünü de kontrol edin.</p>
+            <p className="mt-1 text-xs text-zinc-500">Check your spam folder too.</p>
             <Link href="/login" className="mt-4 block text-sm text-green-400 hover:underline">
-              Girişe dön
+              Back to login
             </Link>
           </div>
         ) : (
@@ -58,10 +58,10 @@ export default function ForgotPasswordPage() {
               disabled={loading || !email}
               className="rounded-2xl bg-green-600 py-3 font-semibold hover:bg-green-700 disabled:opacity-50"
             >
-              {loading ? "Gönderiliyor…" : "Sıfırlama Linki Gönder"}
+              {loading ? "Sending…" : "Send Reset Link"}
             </button>
             <Link href="/login" className="text-center text-sm text-zinc-500 hover:text-zinc-300">
-              Girişe dön
+              Back to login
             </Link>
           </div>
         )}

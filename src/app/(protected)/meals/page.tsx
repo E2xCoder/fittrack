@@ -135,21 +135,21 @@ function isLowCarb(m: Meal) {
 }
 
 // ── Meal-time grouping for Today's Log ──
-type MealSlot = "Kahvaltı" | "Öğle" | "Akşam" | "Atıştırmalık";
-const SLOT_ORDER: MealSlot[] = ["Kahvaltı", "Öğle", "Akşam", "Atıştırmalık"];
+type MealSlot = "Breakfast" | "Lunch" | "Dinner" | "Snack";
+const SLOT_ORDER: MealSlot[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
 const SLOT_ICON: Record<MealSlot, string> = {
-  "Kahvaltı": "🌅",
-  "Öğle": "☀️",
-  "Akşam": "🌙",
-  "Atıştırmalık": "🍎",
+  "Breakfast": "🌅",
+  "Lunch": "☀️",
+  "Dinner": "🌙",
+  "Snack": "🍎",
 };
 function slotFor(log: LoggedMeal): MealSlot {
-  if (!log.createdAt) return "Atıştırmalık";
+  if (!log.createdAt) return "Snack";
   const hour = new Date(log.createdAt).getHours();
-  if (hour >= 4 && hour < 11) return "Kahvaltı";
-  if (hour >= 11 && hour < 16) return "Öğle";
-  if (hour >= 16 && hour < 22) return "Akşam";
-  return "Atıştırmalık";
+  if (hour >= 4 && hour < 11) return "Breakfast";
+  if (hour >= 11 && hour < 16) return "Lunch";
+  if (hour >= 16 && hour < 22) return "Dinner";
+  return "Snack";
 }
 function loggedInfo(log: LoggedMeal) {
   const info = log.meal ?? log.mealSnapshot;
@@ -215,7 +215,7 @@ function MealCard({
           className="shrink-0 cursor-grab active:cursor-grabbing select-none text-[13px] leading-none text-zinc-600 hover:text-zinc-400"
           style={{ touchAction: "none" }}
           tabIndex={-1}
-          aria-label="Sırala"
+          aria-label="Reorder"
           {...dragHandle?.listeners}
           {...dragHandle?.attributes}
         >
@@ -246,14 +246,14 @@ function MealCard({
         <div className="flex items-center gap-0.5 shrink-0">
           <button
             onClick={onToggleFavorite}
-            aria-label={meal.isFavorite ? "Favorilerden çıkar" : "Favorilere ekle"}
+            aria-label={meal.isFavorite ? "Remove from favorites" : "Add to favorites"}
             className={`px-1.5 py-1 text-lg transition-colors ${meal.isFavorite ? "text-yellow-400" : "text-zinc-600 hover:text-zinc-400"}`}
           >
             {meal.isFavorite ? "★" : "☆"}
           </button>
           <button
             onClick={onToggleExpand}
-            aria-label={expanded ? "Kapat" : "Aç"}
+            aria-label={expanded ? "Collapse" : "Expand"}
             aria-expanded={expanded}
             className="px-1 py-1 text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
           >
@@ -278,7 +278,7 @@ function MealCard({
                 <span className="min-w-[2rem] text-center text-sm font-semibold">{amount || "1"}</span>
                 <button
                   onClick={() => onAmountChange(String(Number(amount || 1) + 1))}
-                  aria-label="Artır"
+                  aria-label="Increase"
                   className="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm font-bold hover:bg-zinc-700"
                 >
                   +
@@ -315,18 +315,18 @@ function MealCard({
                 added ? "bg-green-800 text-green-300" : "bg-green-600 hover:bg-green-500 text-white"
               }`}
             >
-              {added ? "Eklendi ✓" : dateParam ? "Güne Ekle" : "Bugüne Ekle"}
+              {added ? "Added ✓" : dateParam ? "Add to Day" : "Add to Today"}
             </button>
             <button
               onClick={onEdit}
-              aria-label="Düzenle"
+              aria-label="Edit"
               className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-zinc-700 transition-colors"
             >
               ✏
             </button>
             <button
               onClick={onDelete}
-              aria-label="Sil"
+              aria-label="Delete"
               className="rounded-xl bg-zinc-800 px-3 py-2 text-xs hover:bg-red-900/60 transition-colors"
             >
               ✕
@@ -514,7 +514,7 @@ function MealsContent() {
   // ── Meal CRUD ──────────────────────────────────────────────────────────────
 
   async function saveMeal() {
-    if (!form.name || form.calories === "") { alert("İsim ve kalori gerekli"); return; }
+    if (!form.name || form.calories === "") { alert("Name and calories are required"); return; }
     const servingLabel = form.servingType;
     const servingSize = form.servingType === "piece" ? 1 : Number(form.servingSize) || 100;
     const payload = {
@@ -556,7 +556,7 @@ function MealsContent() {
   async function addMeal(meal: Meal) {
     const rawAmount = amounts[meal.id];
     const amount = rawAmount ? Number(rawAmount) : meal.servingLabel === "piece" ? 1 : meal.servingSize;
-    if (!amount || amount <= 0) { alert("Geçerli bir miktar girin"); return; }
+    if (!amount || amount <= 0) { alert("Enter a valid amount"); return; }
     const multiplier = meal.servingLabel === "piece" ? amount : amount / meal.servingSize;
     await fetch("/api/log-meal", {
       method: "POST",
@@ -751,11 +751,11 @@ function MealsContent() {
   );
 
   const FILTER_CHIPS: { key: MealFilter; label: string }[] = [
-    { key: "ALL", label: "Tümü" },
-    { key: "HIGH_PROTEIN", label: "Yüksek Protein" },
-    { key: "LOW_CARB", label: "Düşük Karb" },
+    { key: "ALL", label: "All" },
+    { key: "HIGH_PROTEIN", label: "High Protein" },
+    { key: "LOW_CARB", label: "Low Carb" },
     { key: "FAVORITES", label: "★ Favoriler" },
-    { key: "RECENT", label: "Son Kullanılan" },
+    { key: "RECENT", label: "Recent" },
   ];
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -768,9 +768,9 @@ function MealsContent() {
           <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-green-400/80">Beslenme</p>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-white">Meals</h1>
           {displayDate ? (
-            <p className="text-xs" style={{ color: METRICS.calories.hex }}>{displayDate} için ekleniyor</p>
+            <p className="text-xs" style={{ color: METRICS.calories.hex }}>Adding for {displayDate}</p>
           ) : (
-            <p className="text-xs text-zinc-500">Kişisel yemek kütüphanesi</p>
+            <p className="text-xs text-zinc-500">Your personal meal library</p>
           )}
         </div>
       </div>
@@ -803,7 +803,7 @@ function MealsContent() {
                   mealView === v ? "bg-green-600 text-white" : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
-                {v === "today" ? "Günün Kaydı" : "Kütüphane"}
+                {v === "today" ? "Today's Log" : "Library"}
               </button>
             ))}
           </div>
@@ -815,7 +815,7 @@ function MealsContent() {
               <div className="rounded-2xl border border-zinc-700/70 bg-zinc-900 p-4">
                 <div className="flex items-baseline justify-between">
                   <div>
-                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">Bugün toplam</p>
+                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">Today's total</p>
                     <p className="text-2xl font-bold tabular-nums" style={{ color: METRICS.calories.hex }}>
                       {Math.round(todayTotals.calories)}
                       {todayGoals && <span className="ml-1 text-sm font-medium text-zinc-500">/ {todayGoals.calories} kcal</span>}
@@ -832,9 +832,9 @@ function MealsContent() {
               {todayLogs.length === 0 ? (
                 <EmptyState
                   icon="🍽️"
-                  title="Bugün henüz kayıt yok"
-                  message="Kütüphaneden bir yemek ekleyerek güne başla."
-                  ctaLabel="Kütüphaneye git"
+                  title="Nothing logged today yet"
+                  message="Start the day by adding a meal from your library."
+                  ctaLabel="Go to library"
                   onCta={() => setMealView("library")}
                 />
               ) : (
@@ -869,7 +869,7 @@ function MealsContent() {
                             </div>
                             <button
                               onClick={() => removeLoggedMeal(log.id)}
-                              aria-label={`${info.name} kaydını sil`}
+                              aria-label={`Delete ${info.name} entry`}
                               className="rounded-lg bg-zinc-800 px-2 py-1 text-xs text-zinc-400 hover:bg-red-900 hover:text-red-300"
                             >
                               ✕
@@ -882,7 +882,7 @@ function MealsContent() {
                       onClick={() => setMealView("library")}
                       className="mt-3 w-full rounded-xl border border-dashed border-zinc-700 py-2 text-xs text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
                     >
-                      + Yemek ekle
+                      + Add meal
                     </button>
                   </div>
                 ))
@@ -896,10 +896,10 @@ function MealsContent() {
               {/* Search + action bar */}
               <div className="mb-3 space-y-3">
                 <input
-                  placeholder="Ara..."
+                  placeholder="Search..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  aria-label="Yemek ara"
+                  aria-label="Search meals"
                   className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-2 text-sm outline-none focus:border-zinc-600 placeholder:text-zinc-600"
                 />
 
@@ -946,13 +946,13 @@ function MealsContent() {
                         : "bg-green-600 text-white hover:bg-green-500"
                     }`}
                   >
-                    {showForm ? "✕ Kapat" : "+ Yeni Yemek"}
+                    {showForm ? "✕ Close" : "+ New Meal"}
                   </button>
                   <button
                     onClick={() => setShowFoodDB(true)}
                     className="flex-1 rounded-xl border border-blue-800 bg-blue-950/40 py-2 text-xs font-bold text-blue-400 hover:bg-blue-900/40 transition-colors"
                   >
-                    Gıda Veritabanı
+                    Food Database
                   </button>
                   {AI_ENABLED && (
                     <button
@@ -969,11 +969,11 @@ function MealsContent() {
               {showForm && (
                 <div className="mb-4 rounded-2xl border border-zinc-700 bg-zinc-900 p-3">
                   <p className="mb-3 text-xs font-bold uppercase tracking-wider text-zinc-400">
-                    {editingId ? "Yemeği Düzenle" : "Yeni Yemek"}
+                    {editingId ? "Edit Meal" : "New Meal"}
                   </p>
                   <div className="space-y-2">
                     <input
-                      placeholder="Yemek adı"
+                      placeholder="Meal name"
                       value={form.name}
                       onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                       className="w-full rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-600 placeholder:text-zinc-600"
@@ -985,7 +985,7 @@ function MealsContent() {
                         onChange={(e) => setForm((p) => ({ ...p, categoryId: e.target.value }))}
                         className="rounded-xl bg-zinc-800 px-3 py-2 text-sm text-zinc-300 outline-none"
                       >
-                        <option value="">Kategori yok</option>
+                        <option value="">No category</option>
                         {categories.map((cat) => (
                           <option key={cat.id} value={cat.id}>{cat.emoji} {cat.name}</option>
                         ))}
@@ -995,7 +995,7 @@ function MealsContent() {
                         onChange={(e) => setForm((p) => ({ ...p, servingType: e.target.value as ServingType }))}
                         className="rounded-xl bg-zinc-800 px-3 py-2 text-sm text-zinc-300 outline-none"
                       >
-                        <option value="piece">Adet başına</option>
+                        <option value="piece">Per piece</option>
                         <option value="g">Gram (g)</option>
                         <option value="ml">Mililitre (ml)</option>
                       </select>
@@ -1011,7 +1011,7 @@ function MealsContent() {
                           className="w-16 bg-transparent text-sm outline-none"
                         />
                         <span className="text-xs text-zinc-500">{form.servingType}</span>
-                        <span className="ml-auto text-[10px] text-zinc-600">makrolar bu miktar içindir</span>
+                        <span className="ml-auto text-[10px] text-zinc-600">macros are for this amount</span>
                       </div>
                     )}
 
@@ -1025,7 +1025,7 @@ function MealsContent() {
                       <input type="number" placeholder="Karbonhidrat (g)" value={form.carbs}
                         onChange={(e) => setForm((p) => ({ ...p, carbs: e.target.value }))}
                         className="rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none placeholder:text-zinc-600" />
-                      <input type="number" placeholder="Yağ (g)" value={form.fat}
+                      <input type="number" placeholder="Fat (g)" value={form.fat}
                         onChange={(e) => setForm((p) => ({ ...p, fat: e.target.value }))}
                         className="rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none placeholder:text-zinc-600" />
                     </div>
@@ -1045,7 +1045,7 @@ function MealsContent() {
                           onChange={(e) => setForm((p) => ({ ...p, isFavorite: e.target.checked }))}
                           className="rounded"
                         />
-                        Favorilere ekle
+                        Add to favorites
                       </label>
                     </div>
 
@@ -1054,14 +1054,14 @@ function MealsContent() {
                         onClick={saveMeal}
                         className="flex-1 rounded-xl bg-green-600 py-2.5 text-sm font-bold text-white hover:bg-green-500 transition-colors"
                       >
-                        {editingId ? "Güncelle" : "Kaydet"}
+                        {editingId ? "Update" : "Save"}
                       </button>
                       {editingId && (
                         <button
                           onClick={() => { resetForm(); setShowForm(false); }}
                           className="rounded-xl bg-zinc-800 px-4 text-sm hover:bg-zinc-700 transition-colors"
                         >
-                          İptal
+                          Cancel
                         </button>
                       )}
                     </div>
@@ -1080,7 +1080,7 @@ function MealsContent() {
               {/* Recently consumed quick-add */}
               {recentMeals.length > 0 && filter === "ALL" && !search && !categoryFilter && (
                 <div className="mb-4">
-                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Son kullanılan</p>
+                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Recently used</p>
                   <div className="flex gap-2 overflow-x-auto pb-1">
                     {recentMeals.map((meal) => (
                       <button
@@ -1096,7 +1096,7 @@ function MealsContent() {
                         <div>
                           <p className="max-w-[7rem] truncate text-xs font-semibold text-white">{meal.name}</p>
                           <p className="text-[10px]" style={{ color: METRICS.calories.hex }}>
-                            {added[meal.id] ? "Eklendi ✓" : `${meal.calories} kcal`}
+                            {added[meal.id] ? "Added ✓" : `${meal.calories} kcal`}
                           </p>
                         </div>
                       </button>
@@ -1163,7 +1163,7 @@ function MealsContent() {
                 {restMeals.length > 0 && (
                   <>
                     {favMeals.length > 0 && (
-                      <p className="pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest text-zinc-600">Diğer</p>
+                      <p className="pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest text-zinc-600">Other</p>
                     )}
                     {dndEnabled ? (
                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={makeDragEnd("rest")}>
@@ -1215,14 +1215,14 @@ function MealsContent() {
                   <div className="py-12 text-center">
                     <p className="text-3xl">🥗</p>
                     <p className="mt-2 text-sm font-semibold text-zinc-400">
-                      {search || filter !== "ALL" || categoryFilter ? "Sonuç bulunamadı" : "Henüz yemek yok"}
+                      {search || filter !== "ALL" || categoryFilter ? "No results found" : "No meals yet"}
                     </p>
                     {!search && filter === "ALL" && !categoryFilter && (
                       <button
                         onClick={() => setShowForm(true)}
                         className="mt-3 rounded-xl bg-green-600 px-5 py-2 text-sm font-bold text-white hover:bg-green-500"
                       >
-                        + İlk yemeği ekle
+                        + Add your first meal
                       </button>
                     )}
                   </div>
@@ -1238,7 +1238,7 @@ function MealsContent() {
         <>
           <div className="mb-4 flex gap-2">
             <input
-              placeholder="Pack adı (örn. Sabah Paketi)"
+              placeholder="Pack name (e.g. Morning Pack)"
               value={newPackName}
               onChange={(e) => setNewPackName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && createPack()}
@@ -1248,13 +1248,13 @@ function MealsContent() {
               onClick={createPack}
               className="rounded-xl bg-green-600 px-4 text-sm font-bold text-white hover:bg-green-500 transition-colors"
             >
-              + Oluştur
+              + Create
             </button>
           </div>
 
           <div className="space-y-3">
             {packs.length === 0 && (
-              <p className="py-10 text-center text-sm text-zinc-500">Henüz pack yok.</p>
+              <p className="py-10 text-center text-sm text-zinc-500">No packs yet.</p>
             )}
             {packs.map((pack) => {
               const totals = packTotals(pack);
@@ -1271,7 +1271,7 @@ function MealsContent() {
                         onClick={() => setExpandedPack(isExpanded ? null : pack.id)}
                         className="rounded-xl bg-zinc-800 px-3 py-1.5 text-xs hover:bg-zinc-700 transition-colors"
                       >
-                        {isExpanded ? "Kapat" : "Düzenle"}
+                        {isExpanded ? "Close" : "Edit"}
                       </button>
                       <button
                         onClick={() => logPack(pack.id)}
@@ -1279,7 +1279,7 @@ function MealsContent() {
                           loggedPack[pack.id] ? "bg-green-800 text-green-300" : "bg-green-600 text-white hover:bg-green-500"
                         }`}
                       >
-                        {loggedPack[pack.id] ? "Eklendi ✓" : "Hepsini Ekle"}
+                        {loggedPack[pack.id] ? "Added ✓" : "Add All"}
                       </button>
                       <button
                         onClick={() => deletePack(pack.id)}
@@ -1328,7 +1328,7 @@ function MealsContent() {
                             <button
                               onClick={() => updatePackItemQuantity(pack.id, item.id,
                                 item.quantity + (item.meal.servingLabel === "piece" ? 1 : 0.5))}
-                              aria-label="Artır"
+                              aria-label="Increase"
                               className="rounded-lg bg-zinc-700 px-2 py-1 text-xs hover:bg-zinc-600"
                             >
                               +
@@ -1336,7 +1336,7 @@ function MealsContent() {
                             {isExpanded && (
                               <button
                                 onClick={() => removeMealFromPack(pack.id, item.id)}
-                                aria-label="Paketten çıkar"
+                                aria-label="Remove from pack"
                                 className="ml-1 text-[10px] text-zinc-600 hover:text-red-400 transition-colors"
                               >
                                 ✕
@@ -1350,7 +1350,7 @@ function MealsContent() {
 
                   {isExpanded && (
                     <div>
-                      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Yemek Ekle</p>
+                      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Add Meal</p>
                       <div className="max-h-48 space-y-1 overflow-y-auto">
                         {meals.filter((m) => !pack.items.some((i) => i.mealId === m.id)).map((meal) => (
                           <button
@@ -1376,7 +1376,7 @@ function MealsContent() {
       {activeTab === "categories" && (
         <div className="space-y-3">
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
-            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-zinc-500">Kategori Ekle</p>
+            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-zinc-500">Add Category</p>
             <div className="flex gap-2">
               <input
                 placeholder="🍽️"
@@ -1386,7 +1386,7 @@ function MealsContent() {
                 className="w-14 rounded-xl bg-zinc-800 p-2 text-center text-lg outline-none"
               />
               <input
-                placeholder="Kategori adı"
+                placeholder="Category name"
                 value={newCatName}
                 onChange={(e) => setNewCatName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && createCategory()}
@@ -1396,7 +1396,7 @@ function MealsContent() {
                 onClick={createCategory}
                 className="rounded-xl bg-green-600 px-3 text-sm font-bold text-white hover:bg-green-500 transition-colors"
               >
-                Ekle
+                Add
               </button>
             </div>
           </div>
@@ -1429,8 +1429,8 @@ function MealsContent() {
                       </span>
                     </div>
                     <div className="flex gap-1.5">
-                      <button onClick={() => setEditingCat(cat)} aria-label="Düzenle" className="rounded-lg bg-zinc-800 px-2.5 py-1 text-xs hover:bg-zinc-700 transition-colors">✏</button>
-                      <button onClick={() => deleteCategory(cat.id)} aria-label="Sil" className="rounded-lg bg-zinc-800 px-2.5 py-1 text-xs hover:bg-red-900/60 transition-colors">✕</button>
+                      <button onClick={() => setEditingCat(cat)} aria-label="Edit" className="rounded-lg bg-zinc-800 px-2.5 py-1 text-xs hover:bg-zinc-700 transition-colors">✏</button>
+                      <button onClick={() => deleteCategory(cat.id)} aria-label="Delete" className="rounded-lg bg-zinc-800 px-2.5 py-1 text-xs hover:bg-red-900/60 transition-colors">✕</button>
                     </div>
                   </div>
                 )}
@@ -1445,7 +1445,7 @@ function MealsContent() {
 
 export default function MealsPage() {
   return (
-    <Suspense fallback={<main className="p-4 text-zinc-400">Yükleniyor...</main>}>
+    <Suspense fallback={<main className="p-4 text-zinc-400">Loading...</main>}>
       <MealsContent />
     </Suspense>
   );

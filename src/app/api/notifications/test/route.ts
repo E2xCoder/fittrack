@@ -20,7 +20,7 @@ export async function POST() {
     subscriptions.map(async (sub) => {
       const result = await sendPushNotification(sub, {
         title: "FitTrack 🏋️",
-        body: "Bildirimler başarıyla çalışıyor!",
+        body: "Notifications are working!",
         url: "/dashboard",
         tag: "fittrack-test",
       });

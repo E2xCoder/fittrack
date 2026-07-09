@@ -83,13 +83,11 @@ export default function RegisterPage() {
           </p>
 
           <p className="text-center text-[11px] text-zinc-600">
-            Kaydolarak{" "}
+            By registering you accept the{" "}
             <Link href="/privacy" className="text-zinc-500 hover:underline">
-              Gizlilik Politikası
+              Privacy Policy
             </Link>
-            {"'"}nı kabul etmiş olursunuz.{" "}
-            <span className="text-zinc-700">· By registering you accept the{" "}
-            <Link href="/privacy" className="hover:underline">Privacy Policy</Link>.</span>
+            .
           </p>
         </div>
       </div>

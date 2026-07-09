@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     where: { id: { in: friendIdsToFetch } },
     select: { id: true, name: true },
   });
-  const nameMap = new Map(names.map((u) => [u.id, u.name ?? "Arkadas"]));
+  const nameMap = new Map(names.map((u) => [u.id, u.name ?? "Friend"]));
 
   // Fetch subscriptions for users who need to be notified
   const notifyUserIds = [...notifyMap.keys()];
@@ -72,10 +72,10 @@ export async function POST(request: Request) {
   for (const sub of subs) {
     const dangers = notifyMap.get(sub.userId) ?? [];
     for (const danger of dangers) {
-      const friendName = nameMap.get(danger.friendId) ?? "Arkadas";
+      const friendName = nameMap.get(danger.friendId) ?? "Friend";
       const result = await sendPushNotification(sub, {
-        title: "Streak tehlikede!",
-        body:  `${friendName}'in ${danger.streak} gunluk streaki tehlikede!`,
+        title: "Streak in danger!",
+        body:  `${friendName}'s ${danger.streak}-day streak is in danger!`,
         url:   "/social",
         tag:   `streak-danger-${danger.friendId}`,
       });

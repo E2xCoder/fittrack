@@ -135,7 +135,7 @@ const EN = () => (
 );
 
 export default function PrivacyPage() {
-  const [lang, setLang] = useState<"tr" | "en">("tr");
+  const [lang, setLang] = useState<"tr" | "en">("en");
 
   return (
     <main className="mx-auto max-w-2xl p-6 pb-16">
