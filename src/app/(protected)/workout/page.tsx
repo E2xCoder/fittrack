@@ -827,27 +827,12 @@ export default function WorkoutPage() {
               <span className="text-lg">{selectedSplitObj.emoji}</span>
               <p className="text-sm font-bold text-zinc-200">{selectedSplitObj.name}</p>
             </div>
-            <div className="flex items-center gap-3 text-right">
-              <div>
-                <p className="text-[9px] uppercase tracking-wide text-zinc-600">Time</p>
-                <p className="text-sm font-bold tabular-nums text-white">
-                  {sessionStarted ? fmtDuration(elapsed) : "0:00"}
-                </p>
-              </div>
-              <div>
-                <p className="text-[9px] uppercase tracking-wide text-zinc-600">Hacim</p>
-                <p className="text-sm font-bold tabular-nums" style={{ color: METRICS.calories.hex }}>
-                  {Math.round(sessionStats.volume).toLocaleString()}
-                  <span className="text-[10px] font-normal text-zinc-600"> kg</span>
-                </p>
-              </div>
-            </div>
           </div>
           {/* Labeled progress bar */}
           <div className="mt-2.5">
             <div className="mb-1 flex justify-between text-[10px] text-zinc-500">
               <span>{sessionStats.loggedExercises}/{sessionStats.total} exercises logged</span>
-              <span>{sessionStats.completedSets} set</span>
+              <span>{sessionStats.completedSets} sets</span>
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
               <div
