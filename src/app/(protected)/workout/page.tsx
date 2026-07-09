@@ -99,8 +99,51 @@ function SetInput({ value, placeholder, onChange, ringClass }: {
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={`h-7 w-full rounded-md border border-zinc-700 bg-zinc-800 text-center text-xs font-semibold text-white outline-none focus:ring-1 ${ringClass} placeholder:text-zinc-600`}
+      className={`h-9 w-full rounded-md border border-zinc-700 bg-zinc-800 text-center text-xs font-semibold text-white outline-none focus:ring-1 ${ringClass} placeholder:text-zinc-600`}
     />
+  );
+}
+
+// Weight/reps input with thumb-sized − / + steppers so sets can be logged
+// without opening the keyboard.
+function StepperInput({ value, step, placeholder, onChange, ringClass }: {
+  value: string; step: number; placeholder: string;
+  onChange: (v: string) => void; ringClass: string;
+}) {
+  const num = () => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const fmt = (n: number) => String(Math.round(n * 10) / 10);
+  return (
+    <div className="flex h-9 items-stretch overflow-hidden rounded-md border border-zinc-700 bg-zinc-800">
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Decrease"
+        onClick={() => onChange(fmt(Math.max(0, num() - step)))}
+        className="w-7 shrink-0 select-none text-sm font-bold text-zinc-400 transition-colors active:bg-zinc-600 hover:bg-zinc-700"
+      >
+        −
+      </button>
+      <input
+        type="number"
+        inputMode="decimal"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`w-full min-w-0 bg-transparent text-center text-xs font-semibold text-white outline-none focus:ring-1 ${ringClass} placeholder:text-zinc-600`}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Increase"
+        onClick={() => onChange(fmt(num() + step))}
+        className="w-7 shrink-0 select-none text-sm font-bold text-zinc-400 transition-colors active:bg-zinc-600 hover:bg-zinc-700"
+      >
+        +
+      </button>
+    </div>
   );
 }
 
@@ -217,9 +260,9 @@ function ExerciseCard({
       ) : null}
 
       {/* Column headers */}
-      <div className="grid grid-cols-[1fr_1fr_1fr_1fr_14px] gap-0.5 px-2 pb-0.5">
+      <div className="grid grid-cols-[2.4fr_2.2fr_1fr_1fr_14px] gap-0.5 px-2 pb-0.5">
         {["kg", "Rep", "Set", "RPE", ""].map((h, i) => (
-          <span key={i} className="text-[9px] font-semibold uppercase tracking-wider text-zinc-600">{h}</span>
+          <span key={i} className="text-center text-[9px] font-semibold uppercase tracking-wider text-zinc-600">{h}</span>
         ))}
       </div>
 
@@ -230,11 +273,11 @@ function ExerciseCard({
           return (
             <div
               key={setIdx}
-              className="grid grid-cols-[1fr_1fr_1fr_1fr_14px] items-center gap-0.5 rounded pl-1"
+              className="grid grid-cols-[2.4fr_2.2fr_1fr_1fr_14px] items-center gap-0.5 rounded pl-1"
               style={{ borderLeft: `2px solid ${TONE_BORDER[tone]}` }}
             >
-              <SetInput value={set.weight} placeholder="—" onChange={(v) => onUpdateSet(setIdx, "weight", v)} ringClass={acc.ring} />
-              <SetInput value={set.reps}   placeholder="—" onChange={(v) => onUpdateSet(setIdx, "reps",   v)} ringClass={acc.ring} />
+              <StepperInput value={set.weight} step={2.5} placeholder="—" onChange={(v) => onUpdateSet(setIdx, "weight", v)} ringClass={acc.ring} />
+              <StepperInput value={set.reps}   step={1}   placeholder="—" onChange={(v) => onUpdateSet(setIdx, "reps",   v)} ringClass={acc.ring} />
               <SetInput value={set.sets}   placeholder="1" onChange={(v) => onUpdateSet(setIdx, "sets",   v)} ringClass={acc.ring} />
               <SetInput value={set.rpe}    placeholder="—" onChange={(v) => onUpdateSet(setIdx, "rpe",    v)} ringClass={acc.ring} />
               <button
@@ -329,6 +372,8 @@ export default function WorkoutPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
   const [showRest, setShowRest] = useState(false);
+  const [autoRest, setAutoRest] = useState(true);
+  const autoRestTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showFinish, setShowFinish] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [sessionStarted, setSessionStarted] = useState(false);
@@ -600,14 +645,26 @@ export default function WorkoutPage() {
   }
 
   function updateSet(exIdx: number, setIdx: number, field: keyof ExerciseSet, value: string) {
+    const isComplete = (s: ExerciseSet) => Number(s.weight) > 0 && Number(s.reps) > 0;
+    let becameComplete = false;
     setExercises((prev) => {
       const updated = [...prev];
       const sets = [...updated[exIdx].sets];
-      sets[setIdx] = { ...sets[setIdx], [field]: value };
+      const before = sets[setIdx];
+      const after = { ...before, [field]: value };
+      becameComplete = !isComplete(before) && isComplete(after);
+      sets[setIdx] = after;
       updated[exIdx] = { ...updated[exIdx], sets };
       return updated;
     });
     scheduleSave(1000); // debounced — user is still typing
+
+    // Auto-start the rest timer once a set gets both weight and reps.
+    // Short delay so it doesn't fire mid-typing.
+    if (becameComplete && autoRest && !isRestDay) {
+      if (autoRestTimeout.current) clearTimeout(autoRestTimeout.current);
+      autoRestTimeout.current = setTimeout(() => triggerRest(), 1500);
+    }
   }
 
   // ── Derived ────────────────────────────────────────────────────────────────
@@ -662,6 +719,21 @@ export default function WorkoutPage() {
     setShowRest(false);
     // Re-mount the timer so tapping "rest" again restarts the countdown.
     requestAnimationFrame(() => setShowRest(true));
+  }
+
+  // Auto-rest preference persists across sessions.
+  useEffect(() => {
+    queueMicrotask(() => setAutoRest(localStorage.getItem("autoRest") !== "0"));
+    return () => {
+      if (autoRestTimeout.current) clearTimeout(autoRestTimeout.current);
+    };
+  }, []);
+
+  function toggleAutoRest() {
+    setAutoRest((v) => {
+      localStorage.setItem("autoRest", v ? "0" : "1");
+      return !v;
+    });
   }
 
   function fmtDuration(secs: number) {
@@ -827,6 +899,17 @@ export default function WorkoutPage() {
               <span className="text-lg">{selectedSplitObj.emoji}</span>
               <p className="text-sm font-bold text-zinc-200">{selectedSplitObj.name}</p>
             </div>
+            <button
+              onClick={toggleAutoRest}
+              aria-pressed={autoRest}
+              className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors ${
+                autoRest
+                  ? "bg-green-950/60 text-green-400 border border-green-900/50"
+                  : "bg-zinc-800 text-zinc-500 border border-zinc-700"
+              }`}
+            >
+              ⏱ auto-rest {autoRest ? "on" : "off"}
+            </button>
           </div>
           {/* Labeled progress bar */}
           <div className="mt-2.5">
@@ -972,7 +1055,7 @@ export default function WorkoutPage() {
               items={exercises.map((ex) => ex.clientId)}
               strategy={rectSortingStrategy}
             >
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {splitLoading
                   ? [1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)
                   : exercises.map((exercise, exIdx) => (
