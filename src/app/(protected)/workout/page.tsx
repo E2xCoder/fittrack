@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { searchExercises } from "@/lib/exercises";
+import { toDateString } from "@/lib/date";
 import Link from "next/link";
 import { posthog } from "@/lib/posthog";
 import { Sparkline } from "@/components/ui/Sparkline";
@@ -356,6 +358,19 @@ function SkeletonCard() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function WorkoutPage() {
+  return (
+    <Suspense fallback={<main className="p-4 text-zinc-400">Loading...</main>}>
+      <WorkoutPageInner />
+    </Suspense>
+  );
+}
+
+function WorkoutPageInner() {
+  const searchParams = useSearchParams();
+  const dateParam = searchParams.get("date");
+  const [selectedDate, setSelectedDate] = useState(() => dateParam ?? toDateString(new Date()));
+  const selectedDateRef = useRef(selectedDate);
+
   const [splits, setSplits] = useState<UserSplit[]>([]);
   const [selectedSplit, setSelectedSplit] = useState<string>("");
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -391,7 +406,8 @@ export default function WorkoutPage() {
     exercisesRef.current = exercises;
     notesRef.current = notes;
     splitRef.current = selectedSplit;
-  }, [exercises, notes, selectedSplit]);
+    selectedDateRef.current = selectedDate;
+  }, [exercises, notes, selectedSplit, selectedDate]);
 
   // dnd-kit sensors — require 8px drag before activating (prevents accidental drags)
   const sensors = useSensors(
@@ -417,6 +433,7 @@ export default function WorkoutPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           split,
+          date: selectedDateRef.current,
           notes: n,
           exercises: exs.map((ex, i) => ({
             name: ex.name,
@@ -467,38 +484,68 @@ export default function WorkoutPage() {
     scheduleSave(300);
   }
 
-  // ── Init ───────────────────────────────────────────────────────────────────
+  // ── Init / load ────────────────────────────────────────────────────────────
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function parseExercises(rawExercises: any[]): Exercise[] {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (rawExercises ?? []).map((ex: any) => ({
+      clientId: newClientId(),
+      id: ex.id,
+      name: ex.name,
+      sets: (ex.sets ?? []).length > 0
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ? ex.sets.map((s: any) => ({
+            setNumber: s.setNumber,
+            weight: s.weight ? String(s.weight) : "",
+            reps:   s.reps   ? String(s.reps)   : "",
+            sets:   s.sets   ? String(s.sets)   : "1",
+            rpe:    s.rpe    ? String(s.rpe)    : "",
+          }))
+        : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
+    }));
+  }
+
+  // Loads the saved workout (if any) for one split on one date. Used on
+  // mount, on split switch, and whenever the viewed date changes.
+  async function loadWorkoutFor(splitName: string, date: string) {
+    setExercises([]);
+    setOverloadData({});
+    setNotes("");
+    setSplitLoading(true);
+    isReadyRef.current = false; // pause auto-save while loading
+    try {
+      const res = await fetch(
+        `/api/workouts/init?split=${encodeURIComponent(splitName)}&date=${encodeURIComponent(date)}`
+      );
+      const data = await res.json();
+      if (data.workout) {
+        setNotes(data.workout.notes ?? "");
+        const loaded = parseExercises(data.workout.exercises ?? []);
+        setExercises(loaded);
+        // eslint-disable-next-line react-hooks/immutability
+        loaded.forEach((ex) => fetchOverload(ex.name));
+      }
+    } catch {
+      // fetch failed — keep empty state
+    }
+    setSplitLoading(false);
+    isReadyRef.current = true;
+  }
 
   useEffect(() => {
     async function init() {
       try {
-        const res  = await fetch("/api/workouts/init");
+        const res  = await fetch(`/api/workouts/init?date=${encodeURIComponent(selectedDate)}`);
         const data = await res.json();
         const loadedSplits: UserSplit[] = data.splits ?? [];
         setSplits(loadedSplits);
         if (loadedSplits.length > 0) {
-          const firstSplit = loadedSplits[0].name;
-          setSelectedSplit(firstSplit);
+          setSelectedSplit(loadedSplits[0].name);
           if (data.workout) {
             setNotes(data.workout.notes ?? "");
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const loaded: Exercise[] = (data.workout.exercises ?? []).map((ex: any) => ({
-              clientId: newClientId(),
-              id: ex.id,
-              name: ex.name,
-              sets: (ex.sets ?? []).length > 0
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                ? ex.sets.map((s: any) => ({
-                    setNumber: s.setNumber,
-                    weight: s.weight ? String(s.weight) : "",
-                    reps:   s.reps   ? String(s.reps)   : "",
-                    sets:   s.sets   ? String(s.sets)   : "1",
-                    rpe:    s.rpe    ? String(s.rpe)    : "",
-                  }))
-                : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
-            }));
+            const loaded = parseExercises(data.workout.exercises ?? []);
             setExercises(loaded);
-            // eslint-disable-next-line react-hooks/immutability
             loaded.forEach((ex) => fetchOverload(ex.name));
           }
         }
@@ -508,7 +555,23 @@ export default function WorkoutPage() {
       isReadyRef.current = true;
     }
     init();
+    // Only ever run once on mount — the date-change effect below handles
+    // reloading when the user navigates to a different day.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Reload the current split's workout whenever the viewed date changes
+  // (but not on the very first render — the init effect already covers it).
+  const didMountRef = useRef(false);
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
+    if (!selectedSplit) return;
+    queueMicrotask(() => loadWorkoutFor(selectedSplit, selectedDate));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate]);
 
   // ── Splits ─────────────────────────────────────────────────────────────────
 
@@ -532,40 +595,7 @@ export default function WorkoutPage() {
   async function handleSplitSelect(splitName: string) {
     if (splitName === selectedSplit) return;
     setSelectedSplit(splitName);
-    setExercises([]);
-    setOverloadData({});
-    setNotes("");
-    setSplitLoading(true);
-    isReadyRef.current = false; // pause auto-save during split load
-    try {
-      const res  = await fetch(`/api/workouts/init?split=${encodeURIComponent(splitName)}`);
-      const data = await res.json();
-      if (data.workout) {
-        setNotes(data.workout.notes ?? "");
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const loaded: Exercise[] = (data.workout.exercises ?? []).map((ex: any) => ({
-          clientId: newClientId(),
-          id: ex.id,
-          name: ex.name,
-          sets: (ex.sets ?? []).length > 0
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ? ex.sets.map((s: any) => ({
-                setNumber: s.setNumber,
-                weight: s.weight ? String(s.weight) : "",
-                reps:   s.reps   ? String(s.reps)   : "",
-                sets:   s.sets   ? String(s.sets)   : "1",
-                rpe:    s.rpe    ? String(s.rpe)    : "",
-              }))
-            : [{ setNumber: 1, weight: "", reps: "", sets: "1", rpe: "" }],
-        }));
-        setExercises(loaded);
-        loaded.forEach((ex) => fetchOverload(ex.name));
-      }
-    } catch {
-      // fetch failed — keep empty state
-    }
-    setSplitLoading(false);
-    isReadyRef.current = true;
+    await loadWorkoutFor(splitName, selectedDate);
   }
 
   async function deleteSplit(id: string) {
@@ -671,6 +701,19 @@ export default function WorkoutPage() {
 
   const isRestDay      = selectedSplit === "Rest Day";
   const selectedSplitObj = splits.find((s) => s.name === selectedSplit);
+
+  function changeDate(offset: number) {
+    const d = new Date(`${selectedDate}T12:00:00`);
+    d.setDate(d.getDate() + offset);
+    setSelectedDate(toDateString(d));
+  }
+
+  const isViewingToday = selectedDate === toDateString(new Date());
+  const displayDate = new Date(`${selectedDate}T12:00:00`).toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
   const canAnalyzeWorkout = exercises.some((exercise) =>
     exercise.sets.some((set) => set.weight.trim() || set.reps.trim())
   );
@@ -801,11 +844,13 @@ export default function WorkoutPage() {
               <span className={`text-[11px] font-medium transition-colors ${
                 saveStatus === "saved" ? "text-green-500" : "text-zinc-500"
               }`}>
-                {saveStatus === "saving" ? "Kaydediliyor..." : "Kaydedildi"}
+                {saveStatus === "saving" ? "Saving..." : "Saved"}
               </span>
             )}
           </div>
-          <p className="text-xs text-zinc-500">Log today&apos;s session</p>
+          <p className="text-xs text-zinc-500">
+            {isViewingToday ? "Log today's session" : `Logging for ${displayDate}`}
+          </p>
         </div>
         <div className="flex gap-1.5">
           <button
@@ -832,6 +877,36 @@ export default function WorkoutPage() {
             Splits
           </button>
         </div>
+      </div>
+
+      {/* ── Date navigation ── */}
+      <div className="mb-4 flex items-center justify-between gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-2 py-1.5">
+        <button
+          onClick={() => changeDate(-1)}
+          aria-label="Previous day"
+          className="rounded-xl px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+        >
+          ←
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-zinc-200">{displayDate}</span>
+          {!isViewingToday && (
+            <button
+              onClick={() => setSelectedDate(toDateString(new Date()))}
+              className="rounded-full bg-green-950/60 px-2 py-0.5 text-[10px] font-semibold text-green-400 border border-green-900/50 hover:bg-green-900/60 transition-colors"
+            >
+              Today
+            </button>
+          )}
+        </div>
+        <button
+          onClick={() => changeDate(1)}
+          disabled={isViewingToday}
+          aria-label="Next day"
+          className="rounded-xl px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+        >
+          →
+        </button>
       </div>
 
       {/* ── Split Manager ── */}

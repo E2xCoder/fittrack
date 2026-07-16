@@ -358,7 +358,7 @@ export default function DashboardPage() {
       actions.push({ type: "nutrition", message: "Add Meal", cta: "", href: `/meals?date=${selectedDate}` });
     }
     if (!data.isGymDay) {
-      actions.push({ type: "workout", message: "Start Workout", cta: "", href: "/workout" });
+      actions.push({ type: "workout", message: "Start Workout", cta: "", href: `/workout?date=${selectedDate}` });
     }
     if (weightDays >= 7) {
       actions.push({ type: "body", message: "Log Weight", cta: "", href: `/body?date=${selectedDate}` });
