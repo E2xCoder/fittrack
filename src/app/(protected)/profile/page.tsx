@@ -101,6 +101,78 @@ export default function ProfilePage() {
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
 
+  // ── Security: 2FA + Passkeys ────────────────────────────────────────
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [passkeys, setPasskeys] = useState<{ id: string; name?: string | null; createdAt?: string | Date | null }[]>([]);
+  const [twoFactorStep, setTwoFactorStep] = useState<"idle" | "password" | "verify">("idle");
+  const [twoFactorPassword, setTwoFactorPassword] = useState("");
+  const [totpUri, setTotpUri] = useState("");
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [securityError, setSecurityError] = useState("");
+  const [securityBusy, setSecurityBusy] = useState(false);
+  const [addingPasskey, setAddingPasskey] = useState(false);
+
+  const refreshPasskeys = useCallback(async () => {
+    const res = await fetch("/api/auth/passkey/list-user-passkeys");
+    if (!res.ok) return;
+    setPasskeys(await res.json());
+  }, []);
+
+  async function startTwoFactorEnroll() {
+    setSecurityError("");
+    if (!twoFactorPassword) { setTwoFactorStep("password"); return; }
+    setSecurityBusy(true);
+    const { data, error } = await authClient.twoFactor.enable({ password: twoFactorPassword });
+    setSecurityBusy(false);
+    if (error) { setSecurityError(error.message ?? "Failed to start 2FA setup"); return; }
+    setTotpUri(data?.totpURI ?? "");
+    setBackupCodes(data?.backupCodes ?? []);
+    setTwoFactorStep("verify");
+  }
+
+  async function confirmTwoFactor() {
+    setSecurityError("");
+    setSecurityBusy(true);
+    const { error } = await authClient.twoFactor.verifyTotp({ code: twoFactorCode });
+    setSecurityBusy(false);
+    if (error) { setSecurityError(error.message ?? "Invalid code"); return; }
+    setTwoFactorEnabled(true);
+    setTwoFactorStep("idle");
+    setTwoFactorPassword("");
+    setTwoFactorCode("");
+  }
+
+  async function disableTwoFactor() {
+    const password = prompt("Enter your password to disable 2FA:");
+    if (!password) return;
+    setSecurityBusy(true);
+    const { error } = await authClient.twoFactor.disable({ password });
+    setSecurityBusy(false);
+    if (error) { setSecurityError(error.message ?? "Failed to disable 2FA"); return; }
+    setTwoFactorEnabled(false);
+  }
+
+  async function addPasskey() {
+    setSecurityError("");
+    setAddingPasskey(true);
+    const { error } = await authClient.passkey.addPasskey({
+      name: typeof navigator !== "undefined" ? navigator.userAgent.split(" ")[0] : "My device",
+    });
+    setAddingPasskey(false);
+    if (error) { setSecurityError(error.message ?? "Failed to add passkey"); return; }
+    refreshPasskeys();
+  }
+
+  async function removePasskey(id: string) {
+    await fetch("/api/auth/passkey/delete-passkey", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    refreshPasskeys();
+  }
+
   // ── Push notifications ──────────────────────────────────────────────
   type NotifState = "unsupported" | "denied" | "subscribed" | "unsubscribed" | "loading";
   const [notifState, setNotifState] = useState<NotifState>("loading");
@@ -157,10 +229,14 @@ export default function ProfilePage() {
 
     fetch("/api/user/me")
       .then((r) => r.json())
-      .then((data) => setIsAdmin(data?.role === "ADMIN"));
+      .then((data) => {
+        setIsAdmin(data?.role === "ADMIN");
+        setTwoFactorEnabled(Boolean(data?.twoFactorEnabled));
+      });
 
+    refreshPasskeys();
     queueMicrotask(() => void refreshNotifState());
-  }, [refreshNotifState]);
+  }, [refreshNotifState, refreshPasskeys]);
 
   useEffect(() => {
     if (loading || !hasChanges || validateUsername(form.username)) return;
@@ -449,6 +525,135 @@ export default function ProfilePage() {
                 </button>
               </label>
             ))}
+          </div>
+        </Section>
+
+        {/* 4b. Security: 2FA + Passkeys */}
+        <Section title="Security" subtitle="Passkeys and two-factor login" icon="🛡️">
+          <div className="space-y-4">
+            {/* Passkeys */}
+            <div>
+              <p className="mb-2 text-xs font-semibold text-zinc-300">Passkeys (Face ID / Touch ID / Windows Hello)</p>
+              {passkeys.length === 0 && (
+                <p className="mb-2 text-[11px] text-zinc-500">No passkeys registered yet.</p>
+              )}
+              <div className="mb-2 space-y-1.5">
+                {passkeys.map((pk) => (
+                  <div key={pk.id} className="flex items-center justify-between rounded-xl bg-zinc-800/50 px-3 py-2">
+                    <span className="text-xs text-zinc-300">{pk.name || "Unnamed device"}</span>
+                    <button
+                      onClick={() => removePasskey(pk.id)}
+                      className="text-[11px] font-semibold text-red-400 hover:text-red-300"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={addPasskey}
+                disabled={addingPasskey}
+                className="w-full rounded-xl bg-zinc-800 py-2.5 text-xs font-semibold text-zinc-200 transition-colors hover:bg-zinc-700 disabled:opacity-50"
+              >
+                {addingPasskey ? "Waiting for device…" : "+ Add a Passkey"}
+              </button>
+            </div>
+
+            <div className="h-px bg-zinc-800" />
+
+            {/* 2FA */}
+            <div>
+              <p className="mb-2 text-xs font-semibold text-zinc-300">Two-Factor Authentication</p>
+
+              {twoFactorEnabled && twoFactorStep === "idle" && (
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-zinc-400">✅ 2FA is enabled</p>
+                  <button
+                    onClick={disableTwoFactor}
+                    disabled={securityBusy}
+                    className="rounded-xl bg-red-950/60 px-3 py-2 text-xs font-semibold text-red-400 hover:bg-red-900/60"
+                  >
+                    Disable
+                  </button>
+                </div>
+              )}
+
+              {!twoFactorEnabled && twoFactorStep === "idle" && (
+                <button
+                  onClick={() => setTwoFactorStep("password")}
+                  className="w-full rounded-xl bg-zinc-800 py-2.5 text-xs font-semibold text-zinc-200 transition-colors hover:bg-zinc-700"
+                >
+                  Enable 2FA
+                </button>
+              )}
+
+              {twoFactorStep === "password" && (
+                <div className="space-y-2">
+                  <p className="text-[11px] text-zinc-500">Confirm your password to start setup:</p>
+                  <input
+                    type="password"
+                    value={twoFactorPassword}
+                    onChange={(e) => setTwoFactorPassword(e.target.value)}
+                    placeholder="Password"
+                    className="w-full rounded-xl bg-zinc-800 p-2.5 text-xs outline-none focus:ring-1 focus:ring-zinc-600"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setTwoFactorStep("idle"); setTwoFactorPassword(""); }}
+                      className="flex-1 rounded-xl bg-zinc-800 py-2 text-xs font-medium hover:bg-zinc-700"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={startTwoFactorEnroll}
+                      disabled={securityBusy || !twoFactorPassword}
+                      className="flex-1 rounded-xl bg-green-600 py-2 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+                    >
+                      {securityBusy ? "..." : "Continue"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {twoFactorStep === "verify" && (
+                <div className="space-y-2">
+                  <p className="text-[11px] text-zinc-500">Scan this QR with your authenticator app (Google Authenticator, Authy, etc.):</p>
+                  {totpUri && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(totpUri)}`}
+                      alt="2FA QR code"
+                      className="mx-auto rounded-xl bg-white p-2"
+                      width={180}
+                      height={180}
+                    />
+                  )}
+                  {backupCodes.length > 0 && (
+                    <div className="rounded-xl bg-zinc-800/50 p-2">
+                      <p className="mb-1 text-[10px] font-semibold text-zinc-400">Backup codes (save these somewhere safe):</p>
+                      <p className="break-all font-mono text-[10px] text-zinc-300">{backupCodes.join("  ")}</p>
+                    </div>
+                  )}
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={twoFactorCode}
+                    onChange={(e) => setTwoFactorCode(e.target.value)}
+                    placeholder="Enter 6-digit code"
+                    className="w-full rounded-xl bg-zinc-800 p-2.5 text-center text-sm tracking-widest outline-none focus:ring-1 focus:ring-zinc-600"
+                  />
+                  <button
+                    onClick={confirmTwoFactor}
+                    disabled={securityBusy || twoFactorCode.length < 6}
+                    className="w-full rounded-xl bg-green-600 py-2.5 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-50"
+                  >
+                    {securityBusy ? "Verifying…" : "Confirm & Enable"}
+                  </button>
+                </div>
+              )}
+
+              {securityError && <p className="mt-2 text-xs text-red-400">{securityError}</p>}
+            </div>
           </div>
         </Section>
 

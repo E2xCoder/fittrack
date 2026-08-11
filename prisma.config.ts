@@ -1,3 +1,4 @@
+import "dotenv/config";
 import {
   defineConfig,
   env,
@@ -16,6 +17,10 @@ export default defineConfig({
     url:
       process.env[
         "DATABASE_URL"
+      ]!,
+    directUrl:
+      process.env[
+        "DIRECT_URL"
       ]!,
   },
 });

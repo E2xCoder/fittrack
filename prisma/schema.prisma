@@ -1,10 +1,12 @@
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -29,17 +31,17 @@ model User {
   apiToken      String? @unique
 
   // Social
-  username      String?  @unique
-  isPublic      Boolean  @default(true)
-  shareSteps    Boolean  @default(true)
-  shareCalories Boolean  @default(true)
-  shareWorkout  Boolean  @default(true)
-  shareStreak   Boolean  @default(true)
+  username      String? @unique
+  isPublic      Boolean @default(true)
+  shareSteps    Boolean @default(true)
+  shareCalories Boolean @default(true)
+  shareWorkout  Boolean @default(true)
+  shareStreak   Boolean @default(true)
 
   // Timezone
-  timezone      String   @default("Europe/Berlin")
+  timezone String @default("Europe/Berlin")
 
-  role                String   @default("USER")
+  role String @default("USER")
 
   onboardingCompleted Boolean  @default(false)
   age                 Int?
@@ -49,23 +51,27 @@ model User {
   dietaryPreferences  String[]
   mealsPerDay         Int?     @default(3)
 
-  meals              Meal[]
-  mealPacks          MealPack[]
-  mealLogs           MealLog[]
-  mealCategories     UserMealCategory[]
-  dailyLogs          DailyLog[]
-  workouts           Workout[]
-  exercises          Exercise[]
-  userSplits         UserSplit[]
-  bodyLogs           BodyLog[]
-  weightLogs         WeightLog[]
-  progressPhotos     ProgressPhoto[]
-  sessions           Session[]
-  accounts           Account[]
-  pushSubscriptions  PushSubscription[]
-  friendships        Friendship[]       @relation("UserFriends")
-  friendOf           Friendship[]       @relation("FriendOf")
-  weeklyChallenges   WeeklyChallenge[]
+  meals             Meal[]
+  mealPacks         MealPack[]
+  mealLogs          MealLog[]
+  mealCategories    UserMealCategory[]
+  dailyLogs         DailyLog[]
+  workouts          Workout[]
+  exercises         Exercise[]
+  userSplits        UserSplit[]
+  bodyLogs          BodyLog[]
+  weightLogs        WeightLog[]
+  progressPhotos    ProgressPhoto[]
+  sessions          Session[]
+  accounts          Account[]
+  pushSubscriptions PushSubscription[]
+  friendships       Friendship[]       @relation("UserFriends")
+  friendOf          Friendship[]       @relation("FriendOf")
+  weeklyChallenges  WeeklyChallenge[]
+
+  twoFactorEnabled Boolean?    @default(false)
+  twofactors       TwoFactor[]
+  passkeys         Passkey[]
 
   @@map("user")
 }
@@ -77,8 +83,8 @@ model Friendship {
   status    String   @default("pending") // pending | accepted | rejected
   createdAt DateTime @default(now())
 
-  user   User @relation("UserFriends", fields: [userId],   references: [id], onDelete: Cascade)
-  friend User @relation("FriendOf",    fields: [friendId], references: [id], onDelete: Cascade)
+  user   User @relation("UserFriends", fields: [userId], references: [id], onDelete: Cascade)
+  friend User @relation("FriendOf", fields: [friendId], references: [id], onDelete: Cascade)
 
   @@unique([userId, friendId])
   @@index([userId])
@@ -161,7 +167,7 @@ model UserSplit {
 }
 
 model Meal {
-  id           String  @id @default(cuid())
+  id           String   @id @default(cuid())
   userId       String
   name         String
   calories     Float
@@ -170,8 +176,8 @@ model Meal {
   fat          Float
   fiber        Float?
   sodium       Float?
-  servingSize  Float   @default(1)
-  servingLabel String  @default("piece")
+  servingSize  Float    @default(1)
+  servingLabel String   @default("piece")
   ingredients  String?
   imageUrl     String?
   orderIndex   Int      @default(0)
@@ -216,17 +222,17 @@ model MealPackItem {
 }
 
 model MealLog {
-  id         String   @id @default(cuid())
-  userId     String
-  mealId     String?
-  dailyLogId String?
-  quantity   Float    @default(1)
-  calories   Float
-  protein    Float
-  carbs      Float
-  fat        Float
+  id           String   @id @default(cuid())
+  userId       String
+  mealId       String?
+  dailyLogId   String?
+  quantity     Float    @default(1)
+  calories     Float
+  protein      Float
+  carbs        Float
+  fat          Float
   mealSnapshot Json?
-  createdAt  DateTime @default(now())
+  createdAt    DateTime @default(now())
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   meal     Meal?     @relation(fields: [mealId], references: [id], onDelete: SetNull)
@@ -377,4 +383,38 @@ model Verification {
 
   @@index([identifier])
   @@map("verification")
+}
+
+model TwoFactor {
+  id                      String    @id
+  secret                  String
+  backupCodes             String
+  userId                  String
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verified                Boolean?  @default(true)
+  failedVerificationCount Int?      @default(0)
+  lockedUntil             DateTime?
+
+  @@index([secret])
+  @@index([userId])
+  @@map("twoFactor")
+}
+
+model Passkey {
+  id           String    @id
+  name         String?
+  publicKey    String
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialID String
+  counter      Int
+  deviceType   String
+  backedUp     Boolean
+  transports   String?
+  createdAt    DateTime?
+  aaguid       String?
+
+  @@index([userId])
+  @@index([credentialID])
+  @@map("passkey")
 }

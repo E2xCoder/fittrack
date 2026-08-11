@@ -28,6 +28,7 @@ export async function GET() {
       goal: true,
       dietaryPreferences: true,
       mealsPerDay: true,
+      twoFactorEnabled: true,
     },
   });
 
