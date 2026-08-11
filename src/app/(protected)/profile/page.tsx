@@ -14,6 +14,15 @@ const TIMEZONE_OPTIONS = [
   "Asia/Bangkok", "Asia/Shanghai", "Asia/Tokyo", "Australia/Sydney", "Pacific/Auckland",
 ];
 
+function extractTotpSecret(totpUri: string): string {
+  try {
+    const query = totpUri.split("?")[1] ?? "";
+    return new URLSearchParams(query).get("secret") ?? "";
+  } catch {
+    return "";
+  }
+}
+
 function validateUsername(val: string): string | null {
   if (!val) return null; // empty is allowed (no username)
   if (val.length < 3) return "At least 3 characters";
@@ -112,6 +121,7 @@ export default function ProfilePage() {
   const [securityError, setSecurityError] = useState("");
   const [securityBusy, setSecurityBusy] = useState(false);
   const [addingPasskey, setAddingPasskey] = useState(false);
+  const [secretCopied, setSecretCopied] = useState(false);
 
   const refreshPasskeys = useCallback(async () => {
     const res = await fetch("/api/auth/passkey/list-user-passkeys");
@@ -627,6 +637,28 @@ export default function ProfilePage() {
                       width={180}
                       height={180}
                     />
+                  )}
+                  {totpUri && (
+                    <div className="rounded-xl bg-zinc-800/50 p-2.5">
+                      <p className="mb-1 text-[10px] font-semibold text-zinc-400">
+                        Can&apos;t scan? Enter this code manually in your authenticator app:
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="flex-1 break-all font-mono text-xs text-zinc-200">
+                          {extractTotpSecret(totpUri).match(/.{1,4}/g)?.join(" ") ?? extractTotpSecret(totpUri)}
+                        </p>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(extractTotpSecret(totpUri));
+                            setSecretCopied(true);
+                            setTimeout(() => setSecretCopied(false), 1500);
+                          }}
+                          className="shrink-0 rounded-lg bg-zinc-700 px-2 py-1 text-[10px] font-semibold text-zinc-200 hover:bg-zinc-600"
+                        >
+                          {secretCopied ? "Copied!" : "Copy"}
+                        </button>
+                      </div>
+                    </div>
                   )}
                   {backupCodes.length > 0 && (
                     <div className="rounded-xl bg-zinc-800/50 p-2">
