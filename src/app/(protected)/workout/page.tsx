@@ -368,6 +368,7 @@ export default function WorkoutPage() {
 function WorkoutPageInner() {
   const searchParams = useSearchParams();
   const dateParam = searchParams.get("date");
+  const splitParam = searchParams.get("split");
   const [selectedDate, setSelectedDate] = useState(() => dateParam ?? toDateString(new Date()));
   const selectedDateRef = useRef(selectedDate);
 
@@ -541,6 +542,20 @@ function WorkoutPageInner() {
         const loadedSplits: UserSplit[] = data.splits ?? [];
         setSplits(loadedSplits);
         if (loadedSplits.length > 0) {
+          // Deep-link support: a "?split=" param (e.g. from the dashboard's
+          // "Log Workout" action) preselects that split instead of the first one,
+          // so logging a workout you already did doesn't need an extra tap.
+          const preselected = splitParam
+            ? loadedSplits.find((s) => s.name.toLowerCase() === splitParam.toLowerCase())
+            : undefined;
+
+          if (preselected && preselected.name !== loadedSplits[0].name) {
+            setSelectedSplit(preselected.name);
+            isReadyRef.current = true;
+            await loadWorkoutFor(preselected.name, selectedDate);
+            return;
+          }
+
           setSelectedSplit(loadedSplits[0].name);
           if (data.workout) {
             setNotes(data.workout.notes ?? "");

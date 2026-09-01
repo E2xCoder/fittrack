@@ -317,9 +317,9 @@ export default function DashboardPage() {
       tips.push({
         type: "workout",
         message: nextSplit
-          ? `No workout logged yet. ${nextSplit.emoji} ${nextSplit.name} is ready when you are.`
+          ? `No workout logged yet. Did you train ${nextSplit.emoji} ${nextSplit.name} today?`
           : "No workout logged yet. Mark today as a gym or rest day.",
-        cta: "Set training",
+        cta: "Log it",
         onClick: () => setShowGymPicker(true),
       });
     }
@@ -358,7 +358,14 @@ export default function DashboardPage() {
       actions.push({ type: "nutrition", message: "Add Meal", cta: "", href: `/meals?date=${selectedDate}` });
     }
     if (!data.isGymDay) {
-      actions.push({ type: "workout", message: "Start Workout", cta: "", href: `/workout?date=${selectedDate}` });
+      actions.push({
+        type: "workout",
+        message: "Log Workout",
+        cta: "",
+        href: nextSplit
+          ? `/workout?date=${selectedDate}&split=${encodeURIComponent(nextSplit.name)}`
+          : `/workout?date=${selectedDate}`,
+      });
     }
     if (weightDays >= 7) {
       actions.push({ type: "body", message: "Log Weight", cta: "", href: `/body?date=${selectedDate}` });
