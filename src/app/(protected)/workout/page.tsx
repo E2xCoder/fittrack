@@ -394,6 +394,14 @@ function WorkoutPageInner() {
   const [elapsed, setElapsed] = useState(0);
   const [sessionStarted, setSessionStarted] = useState(false);
   const sessionStartRef = useRef<number | null>(null);
+  const [celebration, setCelebration] = useState<{ exerciseName: string; weight: number; reps: number } | null>(null);
+
+  // Auto-dismiss the PR celebration after a few seconds.
+  useEffect(() => {
+    if (!celebration) return;
+    const t = setTimeout(() => setCelebration(null), 3200);
+    return () => clearTimeout(t);
+  }, [celebration]);
 
   const inputRef      = useRef<HTMLInputElement>(null);
   const isReadyRef    = useRef(false);
@@ -691,14 +699,14 @@ function WorkoutPageInner() {
 
   function updateSet(exIdx: number, setIdx: number, field: keyof ExerciseSet, value: string) {
     const isComplete = (s: ExerciseSet) => Number(s.weight) > 0 && Number(s.reps) > 0;
-    let becameComplete = false;
+    const before = exercises[exIdx]?.sets[setIdx];
+    const after: ExerciseSet | null = before ? { ...before, [field]: value } : null;
+    const becameComplete = Boolean(before && after && !isComplete(before) && isComplete(after));
+
     setExercises((prev) => {
       const updated = [...prev];
       const sets = [...updated[exIdx].sets];
-      const before = sets[setIdx];
-      const after = { ...before, [field]: value };
-      becameComplete = !isComplete(before) && isComplete(after);
-      sets[setIdx] = after;
+      sets[setIdx] = { ...sets[setIdx], [field]: value };
       updated[exIdx] = { ...updated[exIdx], sets };
       return updated;
     });
@@ -709,6 +717,19 @@ function WorkoutPageInner() {
     if (becameComplete && autoRest && !isRestDay) {
       if (autoRestTimeout.current) clearTimeout(autoRestTimeout.current);
       autoRestTimeout.current = setTimeout(() => triggerRest(), 1500);
+    }
+
+    // Celebrate a new PR the moment a set is completed and beats last
+    // session's best (weight × reps volume) for this exercise.
+    if (becameComplete && after) {
+      const exerciseName = exercises[exIdx]?.name;
+      const best = exerciseName ? overloadData[exerciseName]?.lastBestSet : null;
+      const w = Number(after.weight);
+      const r = Number(after.reps);
+      if (exerciseName && best && w * r > best.weight * best.reps) {
+        setCelebration({ exerciseName, weight: w, reps: r });
+        posthog.capture("workout_pr", { exerciseName, weight: w, reps: r });
+      }
     }
   }
 
@@ -1242,6 +1263,26 @@ function WorkoutPageInner() {
                 Kapat
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PR celebration ── */}
+      {celebration && (
+        <div
+          className="fixed inset-0 z-[70] flex cursor-pointer items-center justify-center bg-black/75 p-4"
+          onClick={() => setCelebration(null)}
+        >
+          <div className="relative flex flex-col items-center">
+            <div className="absolute h-64 w-64 animate-ping rounded-full bg-green-500/20" />
+            <div className="absolute h-44 w-44 animate-pulse rounded-full bg-green-500/30 blur-2xl" />
+            <p className="relative animate-bounce text-6xl">🏆</p>
+            <h2 className="relative mt-3 text-3xl font-black tracking-tight text-white">NEW PR!</h2>
+            <p className="relative mt-1 text-sm font-medium text-zinc-300">{celebration.exerciseName}</p>
+            <p className="relative mt-2 text-3xl font-bold text-green-400 tabular-nums">
+              {celebration.weight}kg × {celebration.reps}
+            </p>
+            <p className="relative mt-5 text-xs text-zinc-500">Tap anywhere to continue</p>
           </div>
         </div>
       )}
