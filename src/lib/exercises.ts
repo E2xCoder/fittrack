@@ -47,10 +47,77 @@ export function searchExercises(query: string): string[] {
   return [...starts, ...contains].slice(0, 8);
 }
 
-// Exact (case-insensitive) lookup for showing images/muscles/instructions
-// against an already-logged exercise name. Returns null for custom,
-// user-typed exercises that aren't in the dataset — callers should just
-// skip the visual/info affordance in that case.
+// ── Fuzzy fallback for getExerciseInfo ──────────────────────────────────────
+// Names logged before this dataset existed (or typed slightly differently —
+// "Hammer Curl" vs the dataset's "Hammer Curls", "Bench Press" vs "Barbell
+// Bench Press - Medium Grip") won't exact-match. Tokenize both sides, strip
+// simple plurals, and accept a dataset entry if it contains every one of the
+// query's words — then prefer the entry with the fewest *extra* words (the
+// most generic/canonical match, e.g. "Barbell Squat" over "Barbell Full Squat"
+// for a plain "Squat").
+
+function stem(word: string): string {
+  // "curls" -> "curl", "squats" -> "squat", but leave "press"/"cross" alone.
+  if (word.length > 3 && word.endsWith("s") && !word.endsWith("ss")) return word.slice(0, -1);
+  return word;
+}
+
+function tokenize(name: string): string[] {
+  return name
+    .toLowerCase()
+    .replace(/[-'/]/g, " ")
+    .split(/\s+/)
+    .map(stem)
+    .filter(Boolean);
+}
+
+const TOKENIZED = EXERCISE_DATA.map((e) => ({ entry: e, tokens: tokenize(e.name) }));
+
+// When several matches tie on "fewest extra words", prefer the plain/default
+// equipment variant (barbell, or bodyweight) over odd ones like "Car Deadlift"
+// or "Clean Shrug" — that's almost always what a bare "Deadlift"/"Squat" meant.
+const EQUIPMENT_RANK: Record<string, number> = { barbell: 0, "body only": 1 };
+function equipmentRank(e: ExerciseInfo): number {
+  return EQUIPMENT_RANK[e.equipment?.toLowerCase() ?? ""] ?? 2;
+}
+
+function fuzzyMatch(query: string): ExerciseInfo | null {
+  const qTokens = tokenize(query);
+  if (qTokens.length === 0) return null;
+
+  let best: { entry: ExerciseInfo; extra: number; equip: number; length: number } | null = null;
+  for (const { entry, tokens } of TOKENIZED) {
+    if (!qTokens.every((t) => tokens.includes(t))) continue;
+    const extra = tokens.length - qTokens.length;
+    const equip = equipmentRank(entry);
+    const length = entry.name.length;
+    if (
+      !best ||
+      extra < best.extra ||
+      (extra === best.extra && equip < best.equip) ||
+      (extra === best.extra && equip === best.equip && length < best.length)
+    ) {
+      best = { entry, extra, equip, length };
+    }
+  }
+  return best?.entry ?? null;
+}
+
+const infoCache = new Map<string, ExerciseInfo | null>();
+
+// Case-insensitive exact lookup first, then a fuzzy fallback (memoized) for
+// logged/typed names that don't match the dataset's exact wording. Returns
+// null for genuinely custom exercises — callers should just skip the
+// visual/info affordance in that case.
 export function getExerciseInfo(name: string): ExerciseInfo | null {
-  return BY_NAME.get(name.trim().toLowerCase()) ?? null;
+  const key = name.trim().toLowerCase();
+  if (!key) return null;
+
+  const exact = BY_NAME.get(key);
+  if (exact) return exact;
+
+  if (infoCache.has(key)) return infoCache.get(key)!;
+  const fuzzy = fuzzyMatch(key);
+  infoCache.set(key, fuzzy);
+  return fuzzy;
 }
