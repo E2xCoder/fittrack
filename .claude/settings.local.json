@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(npx prisma *)",
-      "Bash(node -e \"const { PrismaClient } = require\\('@prisma/client'\\); const p = new PrismaClient\\(\\); console.log\\('sets' in {}\\)\")",
-      "Bash(node -e \"const t = require\\('./node_modules/@prisma/client/index.d.ts'\\); console.log\\('done'\\)\")"
-    ]
-  }
-}

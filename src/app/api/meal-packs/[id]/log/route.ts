@@ -20,7 +20,8 @@ export async function POST(
   });
   if (!pack) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const today = new Date();
+  const { date: dateParam } = await request.json().catch(() => ({}));
+  const today = dateParam ? new Date(dateParam + "T12:00:00") : new Date();
   today.setHours(0, 0, 0, 0);
 
   let dailyLog = await prisma.dailyLog.findFirst({

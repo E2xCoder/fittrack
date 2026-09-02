@@ -16,27 +16,29 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const dateParam = searchParams.get("date");
 
+  const userProfile = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: {
+      height: true,
+      weight: true,
+      stepTarget: true,
+      waterTarget: true,
+      sleepTarget: true,
+      timezone: true,
+    },
+  });
+
+  const userTz = userProfile?.timezone ?? "Europe/Berlin";
+
   const date = dateParam
     ? new Date(dateParam + "T12:00:00")
-    : getTodayInTimezone();
+    : getTodayInTimezone(userTz);
 
   if (dateParam) date.setHours(0, 0, 0, 0);
 
-  const [bodyLog, userProfile] = await Promise.all([
-    prisma.bodyLog.findFirst({
-      where: { userId: user.id, date },
-    }),
-    prisma.user.findUnique({
-      where: { id: user.id },
-      select: {
-        height: true,
-        weight: true,
-        stepTarget: true,
-        waterTarget: true,
-        sleepTarget: true,
-      },
-    }),
-  ]);
+  const bodyLog = await prisma.bodyLog.findFirst({
+    where: { userId: user.id, date },
+  });
 
   return NextResponse.json({ bodyLog, userProfile });
 }
@@ -48,56 +50,51 @@ export async function POST(request: Request) {
   const body = await request.json();
   const dateParam = body.date;
 
+  const userProfile = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { weight: true, timezone: true },
+  });
+
+  const userTz = userProfile?.timezone ?? "Europe/Berlin";
+  const weight = userProfile?.weight ?? 70;
+
   const date = dateParam
     ? new Date(dateParam + "T12:00:00")
-    : getTodayInTimezone();
+    : getTodayInTimezone(userTz);
 
   if (dateParam) date.setHours(0, 0, 0, 0);
 
-  // Calculate calories burned from steps
-  const userProfile = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { weight: true },
-  });
+  // Build a partial payload: only fields actually present in the request are
+  // touched, so a targeted update (e.g. a water quick-add from the dashboard)
+  // never wipes steps/weight/sleep. An explicit empty value still clears a
+  // field, preserving the Body form's "clear" behaviour.
+  const NUMERIC_FIELDS = [
+    "weight", "steps", "water", "sleep",
+    "waist", "chest", "hip", "arm", "leg", "bodyFat",
+  ] as const;
 
-  const weight = userProfile?.weight ?? 70;
-  const steps = Number(body.steps) || 0;
-  const caloriesBurned = Math.round(steps * 0.04 * (weight / 70));
+  const data: Record<string, number | null> = {};
+  for (const field of NUMERIC_FIELDS) {
+    if (field in body) {
+      const raw = body[field];
+      data[field] = raw === "" || raw === null || raw === undefined ? null : Number(raw);
+    }
+  }
+
+  // Recompute calories burned only when steps are part of this update.
+  if ("steps" in body) {
+    const steps = Number(body.steps) || 0;
+    data.caloriesBurned = Math.round(steps * 0.04 * (weight / 70));
+  }
 
   const bodyLog = await prisma.bodyLog.upsert({
     where: { userId_date: { userId: user.id, date } },
-    update: {
-      weight: body.weight ? Number(body.weight) : undefined,
-      steps: body.steps ? Number(body.steps) : undefined,
-      water: body.water ? Number(body.water) : undefined,
-      sleep: body.sleep ? Number(body.sleep) : undefined,
-      waist: body.waist ? Number(body.waist) : undefined,
-      chest: body.chest ? Number(body.chest) : undefined,
-      hip: body.hip ? Number(body.hip) : undefined,
-      arm: body.arm ? Number(body.arm) : undefined,
-      leg: body.leg ? Number(body.leg) : undefined,
-      bodyFat: body.bodyFat ? Number(body.bodyFat) : undefined,
-      caloriesBurned,
-    },
-    create: {
-      userId: user.id,
-      date,
-      weight: body.weight ? Number(body.weight) : null,
-      steps: body.steps ? Number(body.steps) : null,
-      water: body.water ? Number(body.water) : null,
-      sleep: body.sleep ? Number(body.sleep) : null,
-      waist: body.waist ? Number(body.waist) : null,
-      chest: body.chest ? Number(body.chest) : null,
-      hip: body.hip ? Number(body.hip) : null,
-      arm: body.arm ? Number(body.arm) : null,
-      leg: body.leg ? Number(body.leg) : null,
-      bodyFat: body.bodyFat ? Number(body.bodyFat) : null,
-      caloriesBurned,
-    },
+    update: data,
+    create: { userId: user.id, date, ...data },
   });
 
-  // Update user's current weight if provided
-  if (body.weight) {
+  // Update user's current weight if a real weight value was provided.
+  if ("weight" in body && body.weight) {
     await prisma.user.update({
       where: { id: user.id },
       data: { weight: Number(body.weight) },
