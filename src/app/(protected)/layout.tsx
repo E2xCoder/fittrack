@@ -48,6 +48,11 @@ const navItems: NavItem[] = [
   { href: "/profile",   label: "Profile", icon: "👤" },
 ];
 
+// Bottom mobile tab bar drops Profile (7 tabs was cramped on small screens) —
+// it moves next to Logout in the mobile top bar instead. Desktop keeps the
+// full list since the top nav has room for all seven.
+const mobileNavItems = navItems.filter((item) => item.href !== "/profile");
+
 // ── Layout ─────────────────────────────────────────────────────────────────
 
 // Keyboard shortcuts: press G then H/M/T/B/S to jump between sections.
@@ -150,13 +155,28 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
               })}
             </div>
 
-            <button
-              onClick={handleLogout}
-              aria-label="Log out"
-              className="rounded-2xl bg-zinc-800 px-4 py-2 text-sm transition hover:bg-zinc-700 hover:text-white"
-            >
-              Logout
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Profile lives here on mobile instead of the bottom tab bar */}
+              <Link
+                href="/profile"
+                aria-label="Profile"
+                aria-current={pathname === "/profile" || pathname.startsWith("/profile/") ? "page" : undefined}
+                className={`flex items-center gap-1.5 rounded-2xl px-3 py-2 text-sm transition md:hidden ${
+                  pathname === "/profile" || pathname.startsWith("/profile/")
+                    ? "bg-green-600 text-white shadow-sm shadow-green-900/40 ring-1 ring-green-400/40"
+                    : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                }`}
+              >
+                <span aria-hidden>👤</span>
+              </Link>
+              <button
+                onClick={handleLogout}
+                aria-label="Log out"
+                className="rounded-2xl bg-zinc-800 px-4 py-2 text-sm transition hover:bg-zinc-700 hover:text-white"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </nav>
 
@@ -172,7 +192,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
         {/* Mobile bottom nav */}
         <nav aria-label="Main menu" className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-zinc-950 md:hidden">
           <div className="flex items-center justify-around py-1">
-            {navItems.map((item) => {
+            {mobileNavItems.map((item) => {
               const active = pathname === item.href || pathname.startsWith(item.href + "/");
               return (
                 <Link
