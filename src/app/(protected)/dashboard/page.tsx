@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, LinkCard } from "@/components/ui/Card";
 import { ProgressBar, ProgressRing } from "@/components/ui/Progress";
 import { MacroChip } from "@/components/ui/MacroChip";
@@ -148,6 +148,15 @@ export default function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState(toDateString(new Date()));
   const [showGymPicker, setShowGymPicker] = useState(false);
   const [savingGym, setSavingGym] = useState(false);
+  const workoutCardRef = useRef<HTMLDivElement>(null);
+
+  // Opens the inline split picker and scrolls it into view — used by both
+  // the coach tip and the "Log Workout" quick action so logging a workout
+  // never has to leave the dashboard.
+  function openWorkoutPicker() {
+    setShowGymPicker(true);
+    workoutCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 
   async function fetchData(date: string) {
     setLoading(true);
@@ -320,7 +329,7 @@ export default function DashboardPage() {
           ? `No workout logged yet. Did you train ${nextSplit.emoji} ${nextSplit.name} today?`
           : "No workout logged yet. Mark today as a gym or rest day.",
         cta: "Log it",
-        onClick: () => setShowGymPicker(true),
+        onClick: openWorkoutPicker,
       });
     }
     if (weightDays >= 7) {
@@ -358,14 +367,10 @@ export default function DashboardPage() {
       actions.push({ type: "nutrition", message: "Add Meal", cta: "", href: `/meals?date=${selectedDate}` });
     }
     if (!data.isGymDay) {
-      actions.push({
-        type: "workout",
-        message: "Log Workout",
-        cta: "",
-        href: nextSplit
-          ? `/workout?date=${selectedDate}&split=${encodeURIComponent(nextSplit.name)}`
-          : `/workout?date=${selectedDate}`,
-      });
+      // Opens the inline split picker below instead of navigating to
+      // /workout — marking today's split is the whole "log" for most days;
+      // /workout (set-by-set entry) stays one tap away from there if wanted.
+      actions.push({ type: "workout", message: "Log Workout", cta: "", onClick: openWorkoutPicker });
     }
     if (weightDays >= 7) {
       actions.push({ type: "body", message: "Log Weight", cta: "", href: `/body?date=${selectedDate}` });
@@ -528,19 +533,22 @@ export default function DashboardPage() {
             <section>
               <SectionHeader eyebrow="Quick actions" title="Fast moves for today" />
               <div className="grid gap-3 sm:grid-cols-3">
-                {summary.actions.map((action, i) => (
-                  <Link
-                    key={action.message}
-                    href={action.href!}
-                    className={`rounded-2xl border p-4 text-center text-sm font-semibold transition hover:-translate-y-0.5 ${
-                      i === 0
-                        ? "border-transparent bg-green-600 text-white hover:bg-green-500"
-                        : "border-zinc-800 bg-zinc-900/70 text-zinc-200 hover:border-zinc-700 hover:bg-zinc-800/70"
-                    }`}
-                  >
-                    {action.message}
-                  </Link>
-                ))}
+                {summary.actions.map((action, i) => {
+                  const className = `rounded-2xl border p-4 text-center text-sm font-semibold transition hover:-translate-y-0.5 ${
+                    i === 0
+                      ? "border-transparent bg-green-600 text-white hover:bg-green-500"
+                      : "border-zinc-800 bg-zinc-900/70 text-zinc-200 hover:border-zinc-700 hover:bg-zinc-800/70"
+                  }`;
+                  return action.href ? (
+                    <Link key={action.message} href={action.href} className={className}>
+                      {action.message}
+                    </Link>
+                  ) : (
+                    <button key={action.message} type="button" onClick={action.onClick} className={className}>
+                      {action.message}
+                    </button>
+                  );
+                })}
               </div>
             </section>
           )}
@@ -620,7 +628,7 @@ export default function DashboardPage() {
                   <ProgressBar value={data.sleep} target={SLEEP_TARGET_DEFAULT} color={METRICS.sleep.hex} />
                 </div>
                 {/* Workout status */}
-                <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
+                <div ref={workoutCardRef} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium text-white">
