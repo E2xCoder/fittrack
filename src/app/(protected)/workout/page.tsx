@@ -2,12 +2,13 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { searchExercises } from "@/lib/exercises";
+import { searchExercises, getExerciseInfo, exerciseImageUrl, type ExerciseInfo } from "@/lib/exercises";
 import { toDateString } from "@/lib/date";
 import Link from "next/link";
 import { posthog } from "@/lib/posthog";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { RestTimer } from "@/components/ui/RestTimer";
+import { ExerciseInfoModal } from "@/components/ui/ExerciseInfoModal";
 import { METRICS, SEMANTIC } from "@/lib/metrics";
 import {
   DndContext,
@@ -178,7 +179,7 @@ const TONE_BORDER: Record<"up" | "down" | "neutral", string> = {
 
 function ExerciseCard({
   exercise, exIdx, overload,
-  onRemove, onAddSet, onRemoveSet, onUpdateSet, onRest,
+  onRemove, onAddSet, onRemoveSet, onUpdateSet, onRest, onShowInfo,
   dragHandle,
 }: {
   exercise: Exercise;
@@ -189,10 +190,12 @@ function ExerciseCard({
   onRemoveSet: (setIdx: number) => void;
   onUpdateSet: (setIdx: number, field: keyof ExerciseSet, value: string) => void;
   onRest: () => void;
+  onShowInfo: (info: ExerciseInfo) => void;
   dragHandle?: DragHandleProps;
 }) {
   const acc = accentFor(exIdx);
   const history = overload?.history?.map((h) => h.volume) ?? [];
+  const info = getExerciseInfo(exercise.name);
 
   return (
     <div
@@ -215,6 +218,22 @@ function ExerciseCard({
             ⠿
           </button>
           <span className={`text-[10px] font-bold ${acc.text}`}>#{exIdx + 1}</span>
+          {info && (
+            <button
+              type="button"
+              onClick={() => onShowInfo(info)}
+              className="shrink-0 overflow-hidden rounded border border-zinc-700"
+              aria-label={`View ${exercise.name} demo`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={exerciseImageUrl(info.images[0])}
+                alt=""
+                className="h-6 w-6 object-cover"
+                loading="lazy"
+              />
+            </button>
+          )}
           <span className="truncate text-xs font-bold text-white leading-tight">{exercise.name}</span>
         </div>
         <button
@@ -395,6 +414,7 @@ function WorkoutPageInner() {
   const [sessionStarted, setSessionStarted] = useState(false);
   const sessionStartRef = useRef<number | null>(null);
   const [celebration, setCelebration] = useState<{ exerciseName: string; weight: number; reps: number } | null>(null);
+  const [infoExercise, setInfoExercise] = useState<ExerciseInfo | null>(null);
 
   // Auto-dismiss the PR celebration after a few seconds.
   useEffect(() => {
@@ -1135,15 +1155,29 @@ function WorkoutPageInner() {
 
             {suggestions.length > 0 && (
               <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl">
-                {suggestions.slice(0, 6).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => { selectSuggestion(s); addExercise(s); }}
-                    className="flex w-full items-center px-4 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
-                  >
-                    {s}
-                  </button>
-                ))}
+                {suggestions.slice(0, 6).map((s) => {
+                  const sInfo = getExerciseInfo(s);
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => { selectSuggestion(s); addExercise(s); }}
+                      className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
+                    >
+                      {sInfo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={exerciseImageUrl(sInfo.images[0])}
+                          alt=""
+                          className="h-8 w-8 shrink-0 rounded object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <span className="h-8 w-8 shrink-0 rounded bg-zinc-800" />
+                      )}
+                      <span className="min-w-0 flex-1 truncate">{s}</span>
+                    </button>
+                  );
+                })}
                 {newExerciseName && !suggestions.includes(newExerciseName) && (
                   <button
                     onClick={() => addExercise(newExerciseName)}
@@ -1180,6 +1214,7 @@ function WorkoutPageInner() {
                         onRemoveSet={(setIdx) => removeSet(exIdx, setIdx)}
                         onUpdateSet={(setIdx, field, value) => updateSet(exIdx, setIdx, field, value)}
                         onRest={triggerRest}
+                        onShowInfo={setInfoExercise}
                       />
                     ))}
               </div>
@@ -1285,6 +1320,11 @@ function WorkoutPageInner() {
             <p className="relative mt-5 text-xs text-zinc-500">Tap anywhere to continue</p>
           </div>
         </div>
+      )}
+
+      {/* ── Exercise demo modal ── */}
+      {infoExercise && (
+        <ExerciseInfoModal info={infoExercise} onClose={() => setInfoExercise(null)} />
       )}
     </main>
   );
