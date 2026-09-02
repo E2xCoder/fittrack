@@ -49,9 +49,12 @@ const navItems: NavItem[] = [
 ];
 
 // Bottom mobile tab bar drops Profile (7 tabs was cramped on small screens) —
-// it moves next to Logout in the mobile top bar instead. Desktop keeps the
-// full list since the top nav has room for all seven.
+// it moves next to Logout in the mobile top bar instead.
 const mobileNavItems = navItems.filter((item) => item.href !== "/profile");
+
+// Desktop top nav drops Profile and Social too — both move to the icon
+// cluster next to Logout, leaving the 5 tabs used every day.
+const desktopNavItems = navItems.filter((item) => item.href !== "/profile" && item.href !== "/social");
 
 // ── Layout ─────────────────────────────────────────────────────────────────
 
@@ -135,7 +138,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
             <Link href="/dashboard" className="text-xl font-bold">FitTrack</Link>
 
             <div className="hidden flex-wrap gap-2 md:flex">
-              {navItems.map((item) => {
+              {desktopNavItems.map((item) => {
                 const active = pathname === item.href || pathname.startsWith(item.href + "/");
                 return (
                   <Link
@@ -162,6 +165,31 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
                 aria-label="Profile"
                 aria-current={pathname === "/profile" || pathname.startsWith("/profile/") ? "page" : undefined}
                 className={`flex items-center gap-1.5 rounded-2xl px-3 py-2 text-sm transition md:hidden ${
+                  pathname === "/profile" || pathname.startsWith("/profile/")
+                    ? "bg-green-600 text-white shadow-sm shadow-green-900/40 ring-1 ring-green-400/40"
+                    : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                }`}
+              >
+                <span aria-hidden>👤</span>
+              </Link>
+              {/* Social and Profile live here on desktop instead of the top nav */}
+              <Link
+                href="/social"
+                aria-label="Social"
+                aria-current={pathname === "/social" || pathname.startsWith("/social/") ? "page" : undefined}
+                className={`hidden items-center gap-1.5 rounded-2xl px-3 py-2 text-sm transition md:flex ${
+                  pathname === "/social" || pathname.startsWith("/social/")
+                    ? "bg-green-600 text-white shadow-sm shadow-green-900/40 ring-1 ring-green-400/40"
+                    : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                }`}
+              >
+                <UsersIcon size={16} />
+              </Link>
+              <Link
+                href="/profile"
+                aria-label="Profile"
+                aria-current={pathname === "/profile" || pathname.startsWith("/profile/") ? "page" : undefined}
+                className={`hidden items-center gap-1.5 rounded-2xl px-3 py-2 text-sm transition md:flex ${
                   pathname === "/profile" || pathname.startsWith("/profile/")
                     ? "bg-green-600 text-white shadow-sm shadow-green-900/40 ring-1 ring-green-400/40"
                     : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800 hover:text-white"
