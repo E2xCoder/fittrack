@@ -7,7 +7,7 @@ import { toDateString } from "@/lib/date";
 import { MEAL_TYPE_OPTIONS } from "@/lib/meal-type";
 import { METRICS } from "@/lib/metrics";
 import { ProgressBar } from "@/components/ui/Progress";
-import type { Macros, PlanDay } from "@/lib/meal-plan";
+import { macroDeviations, type Macros, type PlanDay } from "@/lib/meal-plan";
 
 const STORAGE_KEY = "fittrack-meal-plan-v1";
 const SLOT_META = Object.fromEntries(MEAL_TYPE_OPTIONS.map((o) => [o.value, o]));
@@ -205,6 +205,11 @@ export default function MealPlanPage() {
                 </div>
               ))}
             </div>
+            {macroDeviations(day.totals, plan.target).map((w) => (
+              <p key={w} className="mt-3 rounded-lg bg-amber-950/40 px-3 py-2 text-xs text-amber-300">
+                ⚠️ {w}. Generate a new plan for a better balance.
+              </p>
+            ))}
           </div>
 
           <div className="space-y-3">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assemblePlan, type LibraryMeal } from "./meal-plan";
+import { assemblePlan, isPlannable, macroDeviations, type LibraryMeal } from "./meal-plan";
 
 const lib: LibraryMeal[] = [
   { id: "oats", name: "Oats", calories: 300, protein: 10, carbs: 50, fat: 6, servingSize: 80, servingLabel: "g" },
@@ -20,13 +20,27 @@ describe("assemblePlan", () => {
     expect(days[0].totals.calories).toBeGreaterThan(800);
   });
 
-  it("clamps quantities to 0.25 steps within 0.25-5", () => {
+  it("clamps pieces to whole numbers up to 6", () => {
     const [day] = assemblePlan(
       { days: [{ meals: [{ slot: "lunch", items: [{ mealId: "egg", quantity: 99 }] }] }] },
-      lib, { calories: 350, protein: 30, carbs: 3, fat: 25 }, 7
+      lib, { calories: 420, protein: 36, carbs: 3, fat: 30 }, 7
     );
-    expect(day.meals[0].items[0].quantity).toBe(5);
-    expect(day.meals[0].items[0].amountLabel).toBe("5 pc");
+    expect(day.meals[0].items[0].quantity).toBe(6);
+    expect(day.meals[0].items[0].amountLabel).toBe("6 pc");
+  });
+
+  it("never rounds a piece item to a fraction", () => {
+    const [day] = assemblePlan(
+      { days: [{ meals: [{ slot: "breakfast", items: [{ mealId: "egg", quantity: 0.25 }] }] }] },
+      lib, { calories: 70, protein: 6, carbs: 0.5, fat: 5 }, 7
+    );
+    expect(day.meals[0].items[0].quantity).toBe(1);
+  });
+
+  it("filters out macro-helper entries like a 1g Protein quick-add", () => {
+    const helper: LibraryMeal = { id: "p", name: "Protein", calories: 0, protein: 1, carbs: 0, fat: 0, servingSize: 1, servingLabel: "g" };
+    expect(isPlannable(helper)).toBe(false);
+    expect(isPlannable(lib[0])).toBe(true);
   });
 
   it("leaves a day alone when already within 8% of the target", () => {
@@ -50,5 +64,13 @@ describe("assemblePlan", () => {
   it("returns nothing for garbage input", () => {
     expect(assemblePlan(null, lib, target, 7)).toEqual([]);
     expect(assemblePlan({ days: [{ meals: [{ slot: "x", items: [] }] }] }, lib, target, 7)).toEqual([]);
+  });
+});
+
+describe("macroDeviations", () => {
+  it("flags macros more than 30% off and ignores close ones", () => {
+    const w = macroDeviations({ calories: 1957, protein: 141, carbs: 305, fat: 37 }, { calories: 2050, protein: 138, carbs: 190, fat: 70 });
+    expect(w).toEqual(["Carbs is 61% over target", "Fat is 47% under target"]);
+    expect(macroDeviations({ calories: 2000, protein: 140, carbs: 190, fat: 70 }, { calories: 2050, protein: 138, carbs: 190, fat: 70 })).toEqual([]);
   });
 });

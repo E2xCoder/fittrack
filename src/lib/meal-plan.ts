@@ -37,7 +37,16 @@ export interface PlanDay {
 
 const STEP = 0.25;
 const roundStep = (n: number) => Math.round(n / STEP) * STEP;
-const clampQty = (q: number) => Math.min(5, Math.max(STEP, roundStep(q)));
+// Countable items (eggs, slices) move in whole pieces; weighed ones in quarter servings.
+function clampQtyFor(m: LibraryMeal, q: number): number {
+  if (m.servingLabel === "piece") return Math.min(6, Math.max(1, Math.round(q)));
+  return Math.min(5, Math.max(STEP, roundStep(q)));
+}
+
+// Library entries like a 1 g "Protein" or "Cal" quick-add (or a zero-calorie
+// drink) are macro helpers, not food - never offer them to the planner.
+export const MIN_PLAN_KCAL = 15;
+export const isPlannable = (m: LibraryMeal) => m.calories >= MIN_PLAN_KCAL;
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
 function amountLabel(m: LibraryMeal, quantity: number): string {
@@ -100,7 +109,7 @@ export function assemblePlan(raw: unknown, library: LibraryMeal[], target: Macro
         const meal = typeof ri.mealId === "string" ? byId.get(ri.mealId) : undefined;
         if (!meal) continue;
         const q = Number(ri.quantity);
-        picks.push({ meal, quantity: clampQty(Number.isFinite(q) && q > 0 ? q : 1) });
+        picks.push({ meal, quantity: clampQtyFor(meal, Number.isFinite(q) && q > 0 ? q : 1) });
       }
       if (picks.length) meals.push({ slot, picks });
     }
@@ -114,7 +123,7 @@ export function assemblePlan(raw: unknown, library: LibraryMeal[], target: Macro
         day = finishDay(
           meals.map((m) => ({
             slot: m.slot,
-            picks: m.picks.map((p) => ({ meal: p.meal, quantity: clampQty(p.quantity * scale) })),
+            picks: m.picks.map((p) => ({ meal: p.meal, quantity: clampQtyFor(p.meal, p.quantity * scale) })),
           }))
         );
       }
@@ -122,4 +131,17 @@ export function assemblePlan(raw: unknown, library: LibraryMeal[], target: Macro
     days.push(day);
   }
   return days;
+}
+
+// Only calories are corrected automatically; this flags macros that ended up
+// far from their target so the user isn't misled by an on-target calorie total.
+export function macroDeviations(totals: Macros, target: Macros): string[] {
+  const out: string[] = [];
+  for (const [label, key] of [["Protein", "protein"], ["Carbs", "carbs"], ["Fat", "fat"]] as const) {
+    if (target[key] <= 0) continue;
+    const ratio = totals[key] / target[key];
+    if (ratio > 1.3) out.push(`${label} is ${Math.round((ratio - 1) * 100)}% over target`);
+    else if (ratio < 0.7) out.push(`${label} is ${Math.round((1 - ratio) * 100)}% under target`);
+  }
+  return out;
 }

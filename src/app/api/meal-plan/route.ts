@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { assemblePlan, type LibraryMeal } from "@/lib/meal-plan";
+import { assemblePlan, isPlannable, type LibraryMeal } from "@/lib/meal-plan";
 
 export const maxDuration = 60;
 
@@ -14,7 +14,8 @@ const SYSTEM_PROMPT =
   "- Use only the provided mealId values. quantity is a multiple of ONE serving (0.25 steps, 0.25-4).\n" +
   "- Each day: fill the requested meal slots (breakfast, lunch, dinner, and snack if asked) so the day's calories land close to the daily target and protein is near its target.\n" +
   "- Vary the days; avoid repeating the same dinner on consecutive days. Respect the dietary preferences and notes.\n" +
-  "- Prefer meals that fit the slot by name (e.g. oats/eggs for breakfast).\n" +
+  "- Library entries are often single ingredients. Build each slot from 2-4 items that make a sensible meal together (a protein + a carb, plus fruit/veg/dairy when available), not one ingredient alone.\n" +
+  "- Prefer items that fit the slot by name (e.g. oats/eggs/yogurt for breakfast).\n" +
   "Return ONLY JSON: {\"days\":[{\"meals\":[{\"slot\":\"breakfast|lunch|dinner|snack\",\"items\":[{\"mealId\":string,\"quantity\":number}]}]}]}";
 
 export async function POST(request: Request) {
@@ -50,9 +51,10 @@ export async function POST(request: Request) {
   if (!user?.calorieTarget) {
     return NextResponse.json({ error: "Set your daily calorie target in Profile first." }, { status: 422 });
   }
-  if (meals.length < MIN_LIBRARY) {
+  const library: LibraryMeal[] = meals.filter(isPlannable);
+  if (library.length < MIN_LIBRARY) {
     return NextResponse.json(
-      { error: `Your meal library has ${meals.length} meal${meals.length === 1 ? "" : "s"} — add at least ${MIN_LIBRARY} so the plan has variety.` },
+      { error: `Your meal library has ${library.length} usable meal${library.length === 1 ? "" : "s"} — add at least ${MIN_LIBRARY} so the plan has variety.` },
       { status: 422 }
     );
   }
@@ -63,8 +65,6 @@ export async function POST(request: Request) {
     carbs: user.carbTarget ?? Math.round((user.calorieTarget * 0.4) / 4),
     fat: user.fatTarget ?? Math.round((user.calorieTarget * 0.3) / 9),
   };
-  const library: LibraryMeal[] = meals;
-
   const libraryText = library
     .map((m) => {
       const serving = m.servingLabel === "piece" ? "1 piece" : `${m.servingSize}${m.servingLabel}`;
