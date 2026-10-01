@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { posthog } from "@/lib/posthog";
 import {
   DndContext,
@@ -785,6 +786,14 @@ function MealsContent() {
             <p className="text-xs text-zinc-500">Your personal meal library</p>
           )}
         </div>
+        {AI_ENABLED && (
+          <Link
+            href="/meals/plan"
+            className="rounded-xl border border-green-800 bg-green-950/40 px-3 py-2 text-xs font-bold text-green-400 transition-colors hover:bg-green-900/40"
+          >
+            📅 Meal plan
+          </Link>
+        )}
       </div>
 
       {/* Meal type for everything logged from this page */}
