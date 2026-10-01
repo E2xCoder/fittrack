@@ -23,7 +23,7 @@ import { MacroChip } from "@/components/ui/MacroChip";
 import { EmptyState } from "@/components/ui/Primitives";
 import { METRICS } from "@/lib/metrics";
 import MealTypePicker from "@/components/MealTypePicker";
-import { defaultMealType, type MealType } from "@/lib/meal-type";
+import { defaultMealType, mealTypeForLog, type MealType } from "@/lib/meal-type";
 
 const FoodDatabaseModal = dynamic(() => import("@/components/FoodDatabaseModal"), { ssr: false });
 const AIMealAnalyzer = dynamic(() => import("./AIMealAnalyzer"), { ssr: false });
@@ -79,6 +79,7 @@ interface LoggedMeal {
   carbs: number;
   fat: number;
   createdAt?: string;
+  mealType?: string | null;
   meal: { id: string; name: string; servingLabel: string; servingSize: number; imageUrl?: string | null } | null;
   mealSnapshot: { name: string; servingLabel: string; servingSize: number; imageUrl?: string | null } | null;
 }
@@ -145,13 +146,14 @@ const SLOT_ICON: Record<MealSlot, string> = {
   "Dinner": "🌙",
   "Snack": "🍎",
 };
+const TYPE_TO_SLOT: Record<MealType, MealSlot> = {
+  breakfast: "Breakfast",
+  lunch: "Lunch",
+  dinner: "Dinner",
+  snack: "Snack",
+};
 function slotFor(log: LoggedMeal): MealSlot {
-  if (!log.createdAt) return "Snack";
-  const hour = new Date(log.createdAt).getHours();
-  if (hour >= 4 && hour < 11) return "Breakfast";
-  if (hour >= 11 && hour < 16) return "Lunch";
-  if (hour >= 16 && hour < 22) return "Dinner";
-  return "Snack";
+  return TYPE_TO_SLOT[mealTypeForLog(log)];
 }
 function loggedInfo(log: LoggedMeal) {
   const info = log.meal ?? log.mealSnapshot;

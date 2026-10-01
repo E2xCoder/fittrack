@@ -8,6 +8,7 @@ import { ProgressBar, ProgressRing } from "@/components/ui/Progress";
 import { MacroChip } from "@/components/ui/MacroChip";
 import { SectionHeader, EmptyState, Skeleton } from "@/components/ui/Primitives";
 import { METRICS, SEMANTIC, scoreColor, percent } from "@/lib/metrics";
+import { mealTypeForLog, type MealType } from "@/lib/meal-type";
 
 const FoodDatabaseModal = dynamic(() => import("@/components/FoodDatabaseModal"), { ssr: false });
 
@@ -137,7 +138,7 @@ const SLOT_ICON: Record<MealSlot, string> = {
   Snack: "🍎",
 };
 
-const TYPE_TO_SLOT: Record<string, MealSlot> = {
+const TYPE_TO_SLOT: Record<MealType, MealSlot> = {
   breakfast: "Breakfast",
   lunch: "Lunch",
   dinner: "Dinner",
@@ -145,14 +146,7 @@ const TYPE_TO_SLOT: Record<string, MealSlot> = {
 };
 
 function slotFor(log: MealLog): MealSlot {
-  // An explicitly chosen meal type wins; older entries fall back to log time.
-  if (log.mealType && TYPE_TO_SLOT[log.mealType]) return TYPE_TO_SLOT[log.mealType];
-  if (!log.createdAt) return "Snack";
-  const hour = new Date(log.createdAt).getHours();
-  if (hour >= 4 && hour < 11) return "Breakfast";
-  if (hour >= 11 && hour < 16) return "Lunch";
-  if (hour >= 16 && hour < 22) return "Dinner";
-  return "Snack";
+  return TYPE_TO_SLOT[mealTypeForLog(log)];
 }
 
 export default function DashboardPage() {
