@@ -26,6 +26,7 @@ interface MealLog {
   carbs: number;
   fat: number;
   createdAt?: string;
+  mealType?: string | null;
   meal: ({ id: string; imageUrl?: string | null } & MealInfo) | null;
   mealSnapshot: MealInfo | null;
 }
@@ -136,7 +137,16 @@ const SLOT_ICON: Record<MealSlot, string> = {
   Snack: "🍎",
 };
 
+const TYPE_TO_SLOT: Record<string, MealSlot> = {
+  breakfast: "Breakfast",
+  lunch: "Lunch",
+  dinner: "Dinner",
+  snack: "Snack",
+};
+
 function slotFor(log: MealLog): MealSlot {
+  // An explicitly chosen meal type wins; older entries fall back to log time.
+  if (log.mealType && TYPE_TO_SLOT[log.mealType]) return TYPE_TO_SLOT[log.mealType];
   if (!log.createdAt) return "Snack";
   const hour = new Date(log.createdAt).getHours();
   if (hour >= 4 && hour < 11) return "Breakfast";

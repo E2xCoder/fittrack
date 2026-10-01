@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTodayInTimezone } from "@/lib/date";
 
+const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"] as const;
+
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -11,6 +13,7 @@ export async function POST(request: Request) {
   const user = session.user;
   const body = await request.json();
   const quantity = Number(body.quantity) || 1;
+  const mealType: string | null = MEAL_TYPES.includes(body.mealType) ? body.mealType : null;
 
   // Resolve the nutrition base + display snapshot from one of two sources:
   //  • an existing library meal (body.mealId), or
@@ -90,6 +93,7 @@ export async function POST(request: Request) {
           dailyLogId: dailyLog.id,
           mealId,
           userId: user.id,
+          mealType,
         },
       })
     : null;
@@ -112,6 +116,7 @@ export async function POST(request: Request) {
           mealId,
           userId: user.id,
           dailyLogId: dailyLog.id,
+          mealType,
           quantity,
           calories,
           protein,

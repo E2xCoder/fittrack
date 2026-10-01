@@ -32,6 +32,44 @@ interface NormalizedProduct {
   servingLabel: "g" | "ml";
 }
 
+type MealType = "breakfast" | "lunch" | "dinner" | "snack";
+
+const MEAL_TYPE_OPTIONS: { value: MealType; label: string; icon: string }[] = [
+  { value: "breakfast", label: "Breakfast", icon: "🌅" },
+  { value: "lunch", label: "Lunch", icon: "☀️" },
+  { value: "dinner", label: "Dinner", icon: "🌙" },
+  { value: "snack", label: "Snack", icon: "🍎" },
+];
+
+// Preselect the meal that matches the current time so most logs need no extra tap.
+function defaultMealType(): MealType {
+  const h = new Date().getHours();
+  if (h >= 4 && h < 11) return "breakfast";
+  if (h >= 11 && h < 16) return "lunch";
+  if (h >= 16 && h < 22) return "dinner";
+  return "snack";
+}
+
+function MealTypePicker({ value, onChange, compact = false }: { value: MealType; onChange: (v: MealType) => void; compact?: boolean }) {
+  return (
+    <div className="flex gap-1.5">
+      {MEAL_TYPE_OPTIONS.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          onClick={() => onChange(o.value)}
+          className={`flex flex-1 flex-col items-center rounded-xl transition-colors ${compact ? "gap-0 py-1.5" : "gap-0.5 py-2.5"} ${
+            value === o.value ? "bg-green-600 text-white" : "bg-zinc-700/50 text-zinc-400 hover:text-white"
+          }`}
+        >
+          <span className={compact ? "text-sm" : "text-lg"} aria-hidden>{o.icon}</span>
+          <span className="text-[10px] font-semibold">{o.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 interface QueuedItem {
   product: NormalizedProduct;
   amount: number; // g or ml (per product.servingLabel)
@@ -95,6 +133,7 @@ function AddQuantityModal({
   const [unit, setUnit] = useState<Unit>(product.servingLabel === "ml" ? "ml" : "g");
   // null = idle, "today" = log to today only, "library" = save to library only
   const [savingMode, setSavingMode] = useState<null | "today" | "library">(null);
+  const [mealType, setMealType] = useState<MealType>(defaultMealType);
   const saving = savingMode !== null;
 
   const numAmount = Math.max(1, Number(amount) || 1);
@@ -146,6 +185,7 @@ function AddQuantityModal({
             servingSize: servingSizeForApi,
             servingLabel: servingLabelForApi,
             quantity: mult,
+            mealType,
             date: dateParam,
           }),
         });
@@ -234,6 +274,12 @@ function AddQuantityModal({
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Meal type (applies to "Add to today") */}
+        <div className="mb-4 rounded-2xl bg-zinc-800/60 p-3.5">
+          <p className="mb-2 text-sm font-semibold text-white">Meal</p>
+          <MealTypePicker value={mealType} onChange={setMealType} />
         </div>
 
         {/* Nutrition facts */}
@@ -326,6 +372,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
   const [showQueue, setShowQueue] = useState(false);
   const [savingQueue, setSavingQueue] = useState(false);
   const [queueError, setQueueError] = useState("");
+  const [queueMealType, setQueueMealType] = useState<MealType>(defaultMealType);
   const queuedCodes = new Set(queue.map((q) => q.product.code));
   const queueKcal = Math.round(queue.reduce((s, q) => s + (q.product.per100.calories * q.amount) / 100, 0));
 
@@ -360,6 +407,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
             servingSize: 100,
             servingLabel: product.servingLabel,
             quantity: Math.max(1, amount) / 100,
+            mealType: queueMealType,
             date: dateParam,
           }),
         }).then((r) => { if (!r.ok) throw new Error("save failed"); })
@@ -797,6 +845,9 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
                 </div>
               )}
               {queueError && <p className="mb-2 text-xs text-red-400">{queueError}</p>}
+              <div className="mb-3">
+                <MealTypePicker value={queueMealType} onChange={setQueueMealType} compact />
+              </div>
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setShowQueue((v) => !v)}

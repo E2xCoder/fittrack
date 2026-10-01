@@ -232,6 +232,7 @@ model MealLog {
   carbs        Float
   fat          Float
   mealSnapshot Json?
+  mealType     String? // breakfast | lunch | dinner | snack (null = unspecified, falls back to time of day)
   createdAt    DateTime @default(now())
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
