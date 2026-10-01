@@ -32,6 +32,13 @@ interface NormalizedProduct {
   servingLabel: "g" | "ml";
 }
 
+interface QueuedItem {
+  product: NormalizedProduct;
+  amount: number; // g or ml (per product.servingLabel)
+}
+
+const foodLabel = (p: NormalizedProduct) => p.name + (p.brand ? ` (${p.brand})` : "");
+
 interface Props {
   onClose: () => void;
   dateParam: string | null;
@@ -313,6 +320,65 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
   // Add quantity
   const [addingProduct, setAddingProduct] = useState<NormalizedProduct | null>(null);
 
+  // Batch list: "+" on a result queues it at 100 g/ml; the whole list is
+  // logged to the day in one go from the footer.
+  const [queue, setQueue] = useState<QueuedItem[]>([]);
+  const [showQueue, setShowQueue] = useState(false);
+  const [savingQueue, setSavingQueue] = useState(false);
+  const [queueError, setQueueError] = useState("");
+  const queuedCodes = new Set(queue.map((q) => q.product.code));
+  const queueKcal = Math.round(queue.reduce((s, q) => s + (q.product.per100.calories * q.amount) / 100, 0));
+
+  function toggleQueue(p: NormalizedProduct) {
+    setQueueError("");
+    setQueue((prev) =>
+      prev.some((q) => q.product.code === p.code)
+        ? prev.filter((q) => q.product.code !== p.code)
+        : [...prev, { product: p, amount: 100 }]
+    );
+  }
+
+  function setQueueAmount(code: string, amount: number) {
+    setQueue((prev) => prev.map((q) => (q.product.code === code ? { ...q, amount } : q)));
+  }
+
+  async function saveQueue() {
+    if (savingQueue || queue.length === 0) return;
+    setSavingQueue(true);
+    setQueueError("");
+    const settled = await Promise.allSettled(
+      queue.map(({ product, amount }) =>
+        fetch("/api/log-meal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: foodLabel(product),
+            calories: product.per100.calories,
+            protein:  product.per100.protein,
+            carbs:    product.per100.carbs,
+            fat:      product.per100.fat,
+            servingSize: 100,
+            servingLabel: product.servingLabel,
+            quantity: Math.max(1, amount) / 100,
+            date: dateParam,
+          }),
+        }).then((r) => { if (!r.ok) throw new Error("save failed"); })
+      )
+    );
+    const failed = queue.filter((_, i) => settled[i].status === "rejected");
+    if (failed.length === 0) {
+      posthog.capture("food_db_batch_used", { count: queue.length });
+      onAdded();
+      onClose();
+      return;
+    }
+    // Keep only what didn't save so a retry can't double-log the rest.
+    if (failed.length < queue.length) onAdded();
+    setQueue(failed);
+    setQueueError(`${failed.length} item${failed.length > 1 ? "s" : ""} failed to save — try again.`);
+    setSavingQueue(false);
+  }
+
   // ── Search ──────────────────────────────────────────────────────────────
 
   const doSearch = useCallback(async (q: string) => {
@@ -478,8 +544,14 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
   // ── Render ────────────────────────────────────────────────────────────
 
   function ProductCard({ product }: { product: NormalizedProduct }) {
+    const queued = queuedCodes.has(product.code);
     return (
-      <div className="flex items-start gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-3 hover:border-zinc-700 transition-colors">
+      <div
+        onClick={() => setAddingProduct(product)}
+        className={`flex cursor-pointer items-center gap-3 rounded-2xl border bg-zinc-900 p-3 transition-colors hover:border-zinc-600 ${
+          queued ? "border-green-700" : "border-zinc-800"
+        }`}
+      >
         {/* Image */}
         <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-zinc-800">
           {product.imageUrl ? (
@@ -510,12 +582,15 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
           <p className="mt-1 text-[10px] text-zinc-600">/ 100g</p>
         </div>
 
-        {/* Add button */}
+        {/* Quick add to list (100 g/ml) — tap the card itself to pick an amount */}
         <button
-          onClick={() => setAddingProduct(product)}
-          className="shrink-0 rounded-xl bg-green-600 px-3 py-2 text-xs font-bold text-white shadow-md shadow-green-900/30 hover:bg-green-500 transition-colors"
+          onClick={(e) => { e.stopPropagation(); toggleQueue(product); }}
+          aria-label={queued ? "Remove from list" : "Add to list"}
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg font-bold transition-colors ${
+            queued ? "bg-green-600 text-white" : "bg-zinc-800 text-green-400 hover:bg-zinc-700"
+          }`}
         >
-          + Add
+          {queued ? "✓" : "+"}
         </button>
       </div>
     );
@@ -693,6 +768,60 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
               </>
             )}
           </div>
+
+          {/* Batch list footer */}
+          {queue.length > 0 && (
+            <div className="shrink-0 border-t border-zinc-800 bg-zinc-900 px-4 pt-3 pb-4">
+              {showQueue && (
+                <div className="mb-3 max-h-48 space-y-1.5 overflow-y-auto">
+                  {queue.map((q) => (
+                    <div key={q.product.code} className="flex items-center gap-2 rounded-xl bg-zinc-800/60 px-3 py-2">
+                      <p className="min-w-0 flex-1 truncate text-xs font-medium text-zinc-200">{q.product.name}</p>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={q.amount}
+                        onChange={(e) => setQueueAmount(q.product.code, Number(e.target.value) || 0)}
+                        className="w-16 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-center text-xs font-bold text-white outline-none focus:border-green-600"
+                      />
+                      <span className="w-5 text-[11px] text-zinc-500">{q.product.servingLabel}</span>
+                      <button
+                        onClick={() => toggleQueue(q.product)}
+                        aria-label="Remove"
+                        className="text-xs text-zinc-500 hover:text-red-400"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {queueError && <p className="mb-2 text-xs text-red-400">{queueError}</p>}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowQueue((v) => !v)}
+                  className="flex items-center gap-2 text-left"
+                >
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-sm font-bold text-white">
+                    {queue.length}
+                  </span>
+                  <span>
+                    <span className="block text-xs font-semibold text-white">
+                      {queue.length === 1 ? "1 item" : `${queue.length} items`} in list {showQueue ? "▾" : "▴"}
+                    </span>
+                    <span className="block text-[11px] text-zinc-500">{queueKcal} kcal · tap to edit amounts</span>
+                  </span>
+                </button>
+                <button
+                  onClick={saveQueue}
+                  disabled={savingQueue}
+                  className="ml-auto rounded-2xl bg-green-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-green-900/30 transition-colors hover:bg-green-500 disabled:opacity-50"
+                >
+                  {savingQueue ? "Adding…" : "Add to today"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -705,7 +834,8 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
           onDone={() => {
             setAddingProduct(null);
             onAdded();
-            onClose();
+            // Keep the modal open if there's a pending list so it isn't lost.
+            if (queue.length === 0) onClose();
           }}
         />
       )}
