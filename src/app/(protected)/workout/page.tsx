@@ -9,6 +9,7 @@ import { posthog } from "@/lib/posthog";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { RestTimer } from "@/components/ui/RestTimer";
 import { ExerciseInfoModal } from "@/components/ui/ExerciseInfoModal";
+import { SetPickerSheet } from "@/components/ui/SetPickerSheet";
 import { METRICS, SEMANTIC } from "@/lib/metrics";
 import {
   DndContext,
@@ -109,9 +110,11 @@ function SetInput({ value, placeholder, onChange, ringClass }: {
 
 // Weight/reps input with thumb-sized − / + steppers so sets can be logged
 // without opening the keyboard.
-function StepperInput({ value, step, placeholder, onChange, ringClass }: {
+function StepperInput({ value, step, placeholder, onChange, ringClass, onOpenPicker }: {
   value: string; step: number; placeholder: string;
   onChange: (v: string) => void; ringClass: string;
+  /** When set, tapping the number opens the drag-ruler sheet instead of the keyboard. */
+  onOpenPicker?: () => void;
 }) {
   const num = () => {
     const n = Number(value);
@@ -129,14 +132,27 @@ function StepperInput({ value, step, placeholder, onChange, ringClass }: {
       >
         −
       </button>
-      <input
-        type="number"
-        inputMode="decimal"
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`w-full min-w-0 bg-transparent text-center text-xs font-semibold text-white outline-none focus:ring-1 ${ringClass} placeholder:text-zinc-600`}
-      />
+      {onOpenPicker ? (
+        <button
+          type="button"
+          onClick={onOpenPicker}
+          aria-label="Set weight and reps with the ruler"
+          className={`w-full min-w-0 bg-transparent text-center text-xs font-semibold outline-none focus:ring-1 ${ringClass} ${
+            value ? "text-white" : "text-zinc-600"
+          }`}
+        >
+          {value || placeholder}
+        </button>
+      ) : (
+        <input
+          type="number"
+          inputMode="decimal"
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`w-full min-w-0 bg-transparent text-center text-xs font-semibold text-white outline-none focus:ring-1 ${ringClass} placeholder:text-zinc-600`}
+        />
+      )}
       <button
         type="button"
         tabIndex={-1}
@@ -179,7 +195,7 @@ const TONE_BORDER: Record<"up" | "down" | "neutral", string> = {
 
 function ExerciseCard({
   exercise, exIdx, overload,
-  onRemove, onAddSet, onRemoveSet, onUpdateSet, onRest, onShowInfo,
+  onRemove, onAddSet, onRemoveSet, onUpdateSet, onRest, onShowInfo, onPickSet,
   dragHandle,
 }: {
   exercise: Exercise;
@@ -191,6 +207,7 @@ function ExerciseCard({
   onUpdateSet: (setIdx: number, field: keyof ExerciseSet, value: string) => void;
   onRest: () => void;
   onShowInfo: (info: ExerciseInfo) => void;
+  onPickSet: (setIdx: number) => void;
   dragHandle?: DragHandleProps;
 }) {
   const acc = accentFor(exIdx);
@@ -297,8 +314,8 @@ function ExerciseCard({
               className="grid grid-cols-[2.4fr_2.2fr_1fr_1fr_14px] items-center gap-0.5 rounded pl-1"
               style={{ borderLeft: `2px solid ${TONE_BORDER[tone]}` }}
             >
-              <StepperInput value={set.weight} step={2.5} placeholder="—" onChange={(v) => onUpdateSet(setIdx, "weight", v)} ringClass={acc.ring} />
-              <StepperInput value={set.reps}   step={1}   placeholder="—" onChange={(v) => onUpdateSet(setIdx, "reps",   v)} ringClass={acc.ring} />
+              <StepperInput value={set.weight} step={2.5} placeholder="—" onChange={(v) => onUpdateSet(setIdx, "weight", v)} ringClass={acc.ring} onOpenPicker={() => onPickSet(setIdx)} />
+              <StepperInput value={set.reps}   step={1}   placeholder="—" onChange={(v) => onUpdateSet(setIdx, "reps",   v)} ringClass={acc.ring} onOpenPicker={() => onPickSet(setIdx)} />
               <SetInput value={set.sets}   placeholder="1" onChange={(v) => onUpdateSet(setIdx, "sets",   v)} ringClass={acc.ring} />
               <SetInput value={set.rpe}    placeholder="—" onChange={(v) => onUpdateSet(setIdx, "rpe",    v)} ringClass={acc.ring} />
               <button
@@ -415,6 +432,7 @@ function WorkoutPageInner() {
   const sessionStartRef = useRef<number | null>(null);
   const [celebration, setCelebration] = useState<{ exerciseName: string; weight: number; reps: number } | null>(null);
   const [infoExercise, setInfoExercise] = useState<ExerciseInfo | null>(null);
+  const [picker, setPicker] = useState<{ exIdx: number; setIdx: number } | null>(null);
 
   // Auto-dismiss the PR celebration after a few seconds.
   useEffect(() => {
@@ -718,15 +736,21 @@ function WorkoutPageInner() {
   }
 
   function updateSet(exIdx: number, setIdx: number, field: keyof ExerciseSet, value: string) {
+    applySet(exIdx, setIdx, { [field]: value } as Partial<ExerciseSet>);
+  }
+
+  // Applies one or more field changes to a set in a single update, so completing a
+  // set (weight + reps together) still triggers auto-rest and PR detection.
+  function applySet(exIdx: number, setIdx: number, patch: Partial<ExerciseSet>) {
     const isComplete = (s: ExerciseSet) => Number(s.weight) > 0 && Number(s.reps) > 0;
     const before = exercises[exIdx]?.sets[setIdx];
-    const after: ExerciseSet | null = before ? { ...before, [field]: value } : null;
+    const after: ExerciseSet | null = before ? { ...before, ...patch } : null;
     const becameComplete = Boolean(before && after && !isComplete(before) && isComplete(after));
 
     setExercises((prev) => {
       const updated = [...prev];
       const sets = [...updated[exIdx].sets];
-      sets[setIdx] = { ...sets[setIdx], [field]: value };
+      sets[setIdx] = { ...sets[setIdx], ...patch };
       updated[exIdx] = { ...updated[exIdx], sets };
       return updated;
     });
@@ -1215,6 +1239,7 @@ function WorkoutPageInner() {
                         onUpdateSet={(setIdx, field, value) => updateSet(exIdx, setIdx, field, value)}
                         onRest={triggerRest}
                         onShowInfo={setInfoExercise}
+                        onPickSet={(setIdx) => setPicker({ exIdx, setIdx })}
                       />
                     ))}
               </div>
@@ -1321,6 +1346,36 @@ function WorkoutPageInner() {
           </div>
         </div>
       )}
+
+      {/* ── Drag-ruler weight/reps sheet ── */}
+      {picker && exercises[picker.exIdx]?.sets[picker.setIdx] && (() => {
+        const ex = exercises[picker.exIdx];
+        const set = ex.sets[picker.setIdx];
+        const prevSet = ex.sets[picker.setIdx - 1];
+        const best = overloadData[ex.name]?.lastBestSet ?? null;
+        const num = (v: string | undefined) => (Number(v) > 0 ? Number(v) : 0);
+        return (
+          <SetPickerSheet
+            key={`${picker.exIdx}-${picker.setIdx}`}
+            exerciseName={ex.name}
+            setNumber={picker.setIdx + 1}
+            initialWeight={num(set.weight) || num(prevSet?.weight) || best?.weight || 20}
+            initialReps={num(set.reps) || num(prevSet?.reps) || best?.reps || 8}
+            hint={best ? `Last: ${best.weight}kg × ${best.reps}` : undefined}
+            onClose={() => setPicker(null)}
+            onApply={(weight, reps, addNext) => {
+              const { exIdx, setIdx } = picker;
+              applySet(exIdx, setIdx, { weight: String(weight), reps: String(reps) });
+              if (addNext) {
+                addSet(exIdx);
+                setPicker({ exIdx, setIdx: setIdx + 1 });
+              } else {
+                setPicker(null);
+              }
+            }}
+          />
+        );
+      })()}
 
       {/* ── Exercise demo modal ── */}
       {infoExercise && (
