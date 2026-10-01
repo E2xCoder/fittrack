@@ -291,6 +291,21 @@ export default function DashboardPage() {
 
   const todayStr = toDateString(new Date());
   const isToday = selectedDate === todayStr;
+
+  // Mon–Sun strip for the week containing the selected day.
+  const weekStrip = useMemo(() => {
+    const start = new Date(`${selectedDate}T12:00:00`);
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      return {
+        date: toDateString(d),
+        label: d.toLocaleDateString("en-GB", { weekday: "short" }),
+        num: d.getDate(),
+      };
+    });
+  }, [selectedDate]);
   const displayDate = new Date(`${selectedDate}T12:00:00`).toLocaleDateString("en-GB", {
     weekday: "long",
     day: "numeric",
@@ -446,6 +461,34 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Week strip: one tap to any day this week */}
+      <div className="mb-5 grid grid-cols-7 gap-1.5" role="group" aria-label="Pick a day">
+        {weekStrip.map((day) => {
+          const selected = day.date === selectedDate;
+          const future = day.date > todayStr;
+          return (
+            <button
+              key={day.date}
+              type="button"
+              disabled={future}
+              onClick={() => setSelectedDate(day.date)}
+              aria-pressed={selected}
+              className={`flex flex-col items-center rounded-2xl py-2 transition ${
+                selected
+                  ? "bg-green-600 text-white shadow-md shadow-green-900/40"
+                  : future
+                    ? "bg-zinc-900/40 text-zinc-700"
+                    : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+              }`}
+            >
+              <span className="text-[10px] font-medium uppercase">{day.label}</span>
+              <span className="text-base font-bold tabular-nums">{day.num}</span>
+              {day.date === todayStr && <span className={`mt-0.5 h-1 w-1 rounded-full ${selected ? "bg-white" : "bg-green-500"}`} />}
+            </button>
+          );
+        })}
+      </div>
+
       {loading || !data || !summary ? (
         <div className="space-y-4">
           <Skeleton className="h-40" />
@@ -483,7 +526,7 @@ export default function DashboardPage() {
                   </p>
                 )}
 
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <StatPill
                     label="Calories"
                     value={`${Math.round(data.totalCalories)}`}
@@ -491,17 +534,31 @@ export default function DashboardPage() {
                     color={METRICS.calories.hex}
                   />
                   <StatPill
-                    label="Protein"
-                    value={`${Math.round(data.totalProtein)}g`}
-                    sub={`/ ${data.goals.protein}g`}
-                    color={METRICS.protein.hex}
-                  />
-                  <StatPill
                     label="Workout"
                     value={data.isGymDay ? "Logged" : "—"}
                     sub={data.isGymDay ? (data.gymSplit ?? "Gym day") : "Not logged"}
                     color={SEMANTIC.accent}
                   />
+                </div>
+
+                {/* Macros in grams, right where you land */}
+                <div className="grid grid-cols-3 gap-3">
+                  {(
+                    [
+                      { label: "Protein", metric: "protein", current: data.totalProtein, target: data.goals.protein },
+                      { label: "Carbs", metric: "carbs", current: data.totalCarbs, target: data.goals.carbs },
+                      { label: "Fat", metric: "fat", current: data.totalFat, target: data.goals.fat },
+                    ] as const
+                  ).map((m) => (
+                    <div key={m.metric}>
+                      <p className="text-[10px] uppercase tracking-wide text-zinc-500">{m.label}</p>
+                      <p className="mb-1 text-sm font-bold tabular-nums text-white">
+                        {Math.round(m.current)}
+                        <span className="text-[11px] font-medium text-zinc-500"> / {m.target}g</span>
+                      </p>
+                      <ProgressBar value={m.current} target={m.target} color={METRICS[m.metric].hex} height={6} />
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
