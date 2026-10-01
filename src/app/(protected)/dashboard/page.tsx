@@ -9,6 +9,7 @@ import { MacroChip } from "@/components/ui/MacroChip";
 import { SectionHeader, EmptyState, Skeleton } from "@/components/ui/Primitives";
 import { METRICS, SEMANTIC, scoreColor, percent } from "@/lib/metrics";
 import { mealTypeForLog, type MealType } from "@/lib/meal-type";
+import { buildInsights, type InsightLevel } from "@/lib/nutrition-insights";
 
 const FoodDatabaseModal = dynamic(() => import("@/components/FoodDatabaseModal"), { ssr: false });
 
@@ -429,6 +430,23 @@ export default function DashboardPage() {
     });
   }, [data]);
 
+  const insights = useMemo(() => {
+    if (!data) return [];
+    const caloriesByMeal: Partial<Record<MealType, number>> = {};
+    for (const log of data.mealLogs) {
+      const t = mealTypeForLog(log);
+      caloriesByMeal[t] = (caloriesByMeal[t] ?? 0) + log.calories;
+    }
+    return buildInsights({
+      totals: { calories: data.totalCalories, protein: data.totalProtein, carbs: data.totalCarbs, fat: data.totalFat },
+      goals: data.goals,
+      caloriesByMeal,
+      logCount: data.mealLogs.length,
+      isToday: selectedDate === toDateString(new Date()),
+      hour: new Date().getHours(),
+    });
+  }, [data, selectedDate]);
+
   return (
     <main className="mx-auto max-w-5xl p-4 pb-10">
       {/* ── Header + date nav ── */}
@@ -765,6 +783,24 @@ export default function DashboardPage() {
             </Card>
           </div>
 
+          {/* ── Nutrition analysis ── */}
+          {insights.length > 0 && (
+            <section>
+              <SectionHeader eyebrow="Analysis" title="How your day looks" />
+              <div className="space-y-2.5">
+                {insights.map((i) => (
+                  <Card key={i.id} accent={INSIGHT_ACCENT[i.level]} className="!p-4">
+                    <p className="text-sm font-semibold text-white">
+                      <span aria-hidden className="mr-1.5">{INSIGHT_ICON[i.level]}</span>
+                      {i.title}
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-zinc-400">{i.detail}</p>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* ── 6. Today's meals timeline ── */}
           <section>
             <SectionHeader
@@ -918,6 +954,9 @@ export default function DashboardPage() {
 }
 
 // ── Small local presentational helpers ──────────────────────────────────────
+
+const INSIGHT_ICON: Record<InsightLevel, string> = { good: "✅", warn: "⚠️", info: "💡" };
+const INSIGHT_ACCENT: Record<InsightLevel, string> = { good: "#22c55e", warn: "#f59e0b", info: "#60a5fa" };
 
 function StatPill({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
   return (
