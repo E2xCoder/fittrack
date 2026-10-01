@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { posthog } from "@/lib/posthog";
 import type { MealType } from "@/lib/meal-type";
+import { fileToResizedDataUrl } from "@/lib/image";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -47,44 +48,6 @@ interface Props {
   mealType?: MealType;
   onClose: () => void;
   onAdded: () => void;
-}
-
-// ─── Image helper ─────────────────────────────────────────────────────────────
-
-async function fileToResizedDataUrl(file: File): Promise<string> {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error("read failed"));
-    reader.readAsDataURL(file);
-  });
-
-  const img = document.createElement("img");
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error("decode failed"));
-    img.src = dataUrl;
-  });
-
-  const maxDim = 1024;
-  let { width, height } = img;
-  if (width > maxDim || height > maxDim) {
-    if (width >= height) {
-      height = Math.round((height * maxDim) / width);
-      width = maxDim;
-    } else {
-      width = Math.round((width * maxDim) / height);
-      height = maxDim;
-    }
-  }
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return dataUrl;
-  ctx.drawImage(img, 0, 0, width, height);
-  return canvas.toDataURL("image/jpeg", 0.8);
 }
 
 function sumTotals(items: AIItem[]) {

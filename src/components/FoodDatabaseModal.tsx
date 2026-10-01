@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { posthog } from "@/lib/posthog";
 import MealTypePicker from "@/components/MealTypePicker";
 import { defaultMealType, type MealType } from "@/lib/meal-type";
+import { fileToResizedDataUrl } from "@/lib/image";
+
+// Label scanning calls a paid vision model, so it follows the same flag as the other AI features.
+const AI_ENABLED = process.env.NEXT_PUBLIC_AI_ENABLED === "1";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,7 +25,7 @@ interface OFFProduct {
   };
 }
 
-type FoodSource = "OFF" | "USDA";
+type FoodSource = "OFF" | "USDA" | "LABEL";
 type Unit = "g" | "ml" | "piece";
 
 interface NormalizedProduct {
@@ -45,7 +49,7 @@ interface Props {
   onClose: () => void;
   dateParam: string | null;
   onAdded: () => void; // refresh parent meal list
-  initialTab?: "search" | "barcode";
+  initialTab?: "search" | "barcode" | "label";
   initialMealType?: MealType;
 }
 
@@ -306,10 +310,192 @@ function AddQuantityModal({
   );
 }
 
+// ─── Label Scanner (photo of a Nutrition Facts panel → editable values) ──────
+
+interface LabelForm {
+  name: string;
+  unit: "g" | "ml";
+  calories: string;
+  protein: string;
+  carbs: string;
+  fat: string;
+}
+
+function LabelScanner({ onProduct }: { onProduct: (p: NormalizedProduct) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [form, setForm] = useState<LabelForm | null>(null);
+
+  async function handleFile(file: File | undefined) {
+    if (!file) return;
+    setBusy(true);
+    setError("");
+    setWarnings([]);
+    setForm(null);
+    try {
+      const image = await fileToResizedDataUrl(file, 1600, 0.85);
+      const res = await fetch("/api/nutrition-label", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "Could not read the label.");
+        return;
+      }
+      const v = (n: number | null) => (n === null || n === undefined ? "" : String(n));
+      setWarnings(data.warnings ?? []);
+      setForm({
+        name: data.name ?? "",
+        unit: data.unit === "ml" ? "ml" : "g",
+        calories: v(data.per100.calories),
+        protein: v(data.per100.protein),
+        carbs: v(data.per100.carbs),
+        fat: v(data.per100.fat),
+      });
+      posthog.capture("label_scanned");
+    } catch {
+      setError("Something went wrong — try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function submit() {
+    if (!form || !form.name.trim()) return;
+    const num = (x: string) => Math.max(0, Number(x) || 0);
+    onProduct({
+      code: `label-${Date.now()}`,
+      name: form.name.trim(),
+      brand: "",
+      imageUrl: null,
+      source: "LABEL",
+      servingLabel: form.unit,
+      per100: {
+        calories: Math.round(num(form.calories)),
+        protein: Math.round(num(form.protein) * 10) / 10,
+        carbs: Math.round(num(form.carbs) * 10) / 10,
+        fat: Math.round(num(form.fat) * 10) / 10,
+      },
+    });
+  }
+
+  const field = (key: "calories" | "protein" | "carbs" | "fat", label: string, suffix: string) =>
+    form && (
+      <label className="block">
+        <span className="mb-1 block text-[11px] font-semibold text-zinc-400">{label}</span>
+        <div className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 focus-within:border-green-600">
+          <input
+            type="number"
+            inputMode="decimal"
+            value={form[key]}
+            onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+            placeholder="—"
+            className="min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-zinc-600"
+          />
+          <span className="text-[11px] text-zinc-500">{suffix}</span>
+        </div>
+      </label>
+    );
+
+  const pickerBtn =
+    "flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold transition-colors";
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs leading-snug text-zinc-500">
+        Take a clear, well-lit photo of the Nutrition Facts panel. Only printed values are read — nothing is estimated.
+      </p>
+
+      <div className="flex gap-2">
+        <label className={`${pickerBtn} bg-green-600 text-white hover:bg-green-500`}>
+          📷 Take photo
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            disabled={busy}
+            onChange={(e) => { void handleFile(e.target.files?.[0]); e.target.value = ""; }}
+          />
+        </label>
+        <label className={`${pickerBtn} border border-zinc-700 bg-zinc-800 text-zinc-200 hover:border-zinc-500`}>
+          🖼️ Upload
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            disabled={busy}
+            onChange={(e) => { void handleFile(e.target.files?.[0]); e.target.value = ""; }}
+          />
+        </label>
+      </div>
+
+      {busy && (
+        <div className="flex items-center justify-center gap-3 py-6 text-sm text-zinc-400">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-700 border-t-green-500" />
+          Reading label…
+        </div>
+      )}
+
+      {error && <p className="rounded-xl bg-red-950/40 px-4 py-3 text-sm text-red-400">{error}</p>}
+
+      {form && !busy && (
+        <div className="space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-3.5">
+          {warnings.map((w) => (
+            <p key={w} className="rounded-lg bg-amber-950/40 px-3 py-2 text-xs text-amber-300">{w}</p>
+          ))}
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-semibold text-zinc-400">Product name</span>
+            <input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Peanut butter"
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm font-semibold text-white outline-none placeholder:text-zinc-600 focus:border-green-600"
+            />
+          </label>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-zinc-300">Per 100 {form.unit}</p>
+            <div className="flex gap-1">
+              {(["g", "ml"] as const).map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() => setForm({ ...form, unit: u })}
+                  className={`rounded-lg px-3 py-1 text-xs font-semibold ${
+                    form.unit === u ? "bg-green-600 text-white" : "bg-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {field("calories", "Calories", "kcal")}
+            {field("protein", "Protein", "g")}
+            {field("carbs", "Carbs", "g")}
+            {field("fat", "Fat", "g")}
+          </div>
+          <button
+            onClick={submit}
+            disabled={!form.name.trim() || form.calories === ""}
+            className="w-full rounded-2xl bg-green-600 py-3.5 text-sm font-bold text-white transition-colors hover:bg-green-500 disabled:opacity-40"
+          >
+            Continue
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 
 export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initialTab = "search", initialMealType }: Props) {
-  const [tab, setTab] = useState<"search" | "barcode">(initialTab);
+  const [tab, setTab] = useState<"search" | "barcode" | "label">(initialTab);
 
   // Search state
   const [query, setQuery]           = useState("");
@@ -643,7 +829,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
 
           {/* Tabs */}
           <div className="flex shrink-0 border-b border-zinc-800 px-4">
-            {(["search", "barcode"] as const).map((t) => (
+            {((AI_ENABLED ? ["search", "barcode", "label"] : ["search", "barcode"]) as ("search" | "barcode" | "label")[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -653,7 +839,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
                     : "text-zinc-500"
                 }`}
               >
-                {t === "search" ? "🔎 Ara" : "📷 Barkod"}
+                {t === "search" ? "🔎 Ara" : t === "barcode" ? "📷 Barkod" : "🏷️ Etiket"}
               </button>
             ))}
           </div>
@@ -694,6 +880,9 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
             )}
 
             {/* ── Barcode Tab ── */}
+            {/* ── Label Tab ── */}
+            {tab === "label" && <LabelScanner onProduct={(p) => setAddingProduct(p)} />}
+
             {tab === "barcode" && (
               <>
                 {/* Manual input */}
