@@ -22,6 +22,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { MacroChip } from "@/components/ui/MacroChip";
 import { EmptyState } from "@/components/ui/Primitives";
 import { METRICS } from "@/lib/metrics";
+import MealTypePicker from "@/components/MealTypePicker";
+import { defaultMealType, type MealType } from "@/lib/meal-type";
 
 const FoodDatabaseModal = dynamic(() => import("@/components/FoodDatabaseModal"), { ssr: false });
 const AIMealAnalyzer = dynamic(() => import("./AIMealAnalyzer"), { ssr: false });
@@ -385,6 +387,8 @@ function MealsContent() {
   const [loggedPack, setLoggedPack] = useState<Record<string, boolean>>({});
   const [showFoodDB, setShowFoodDB] = useState(false);
   const [showAI, setShowAI] = useState(false);
+  // Which meal everything logged from this page lands in (library, packs, AI, food database).
+  const [mealType, setMealType] = useState<MealType>(defaultMealType);
   const [showForm, setShowForm] = useState(false);
 
   // Today's log
@@ -563,7 +567,7 @@ function MealsContent() {
     fetch("/api/log-meal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mealId: meal.id, quantity, date: dateParam }),
+      body: JSON.stringify({ mealId: meal.id, quantity, mealType, date: dateParam }),
     })
       .then((res) => {
         if (!res.ok) throw new Error("log failed");
@@ -673,7 +677,7 @@ function MealsContent() {
     await fetch(`/api/meal-packs/${packId}/log`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date: dateParam }),
+      body: JSON.stringify({ date: dateParam, mealType }),
     });
     setLoggedPack((p) => ({ ...p, [packId]: true }));
     setTimeout(() => setLoggedPack((p) => ({ ...p, [packId]: false })), 2000);
@@ -780,6 +784,14 @@ function MealsContent() {
           )}
         </div>
       </div>
+
+      {/* Meal type for everything logged from this page */}
+      {activeTab !== "categories" && (
+        <div className="mb-4">
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Logging to</p>
+          <MealTypePicker value={mealType} onChange={setMealType} compact />
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="mb-5 flex rounded-xl bg-zinc-900 p-1">
@@ -1077,10 +1089,10 @@ function MealsContent() {
 
               {/* Modals */}
               {showFoodDB && (
-                <FoodDatabaseModal dateParam={dateParam} onClose={() => setShowFoodDB(false)} onAdded={() => { fetchAll(); fetchTodayLog(); }} />
+                <FoodDatabaseModal dateParam={dateParam} initialMealType={mealType} onClose={() => setShowFoodDB(false)} onAdded={() => { fetchAll(); fetchTodayLog(); }} />
               )}
               {showAI && (
-                <AIMealAnalyzer dateParam={dateParam} onClose={() => setShowAI(false)} onAdded={() => { fetchAll(); fetchTodayLog(); }} />
+                <AIMealAnalyzer dateParam={dateParam} mealType={mealType} onClose={() => setShowAI(false)} onAdded={() => { fetchAll(); fetchTodayLog(); }} />
               )}
 
               {/* Recently consumed quick-add */}

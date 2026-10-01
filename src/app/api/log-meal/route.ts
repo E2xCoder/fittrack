@@ -3,8 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTodayInTimezone } from "@/lib/date";
-
-const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"] as const;
+import { parseMealType } from "@/lib/meal-type";
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -13,7 +12,7 @@ export async function POST(request: Request) {
   const user = session.user;
   const body = await request.json();
   const quantity = Number(body.quantity) || 1;
-  const mealType: string | null = MEAL_TYPES.includes(body.mealType) ? body.mealType : null;
+  const mealType = parseMealType(body.mealType);
 
   // Resolve the nutrition base + display snapshot from one of two sources:
   //  • an existing library meal (body.mealId), or

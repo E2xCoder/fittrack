@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parseMealType } from "@/lib/meal-type";
 
 export async function POST(
   request: Request,
@@ -20,7 +21,8 @@ export async function POST(
   });
   if (!pack) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const { date: dateParam } = await request.json().catch(() => ({}));
+  const { date: dateParam, mealType: rawMealType } = await request.json().catch(() => ({}));
+  const mealType = parseMealType(rawMealType);
   const today = dateParam ? new Date(dateParam + "T12:00:00") : new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -53,6 +55,7 @@ export async function POST(
         mealId: meal.id,
         userId: user.id,
         dailyLogId: dailyLog.id,
+        mealType,
         quantity,
         calories,
         protein,

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { posthog } from "@/lib/posthog";
+import type { MealType } from "@/lib/meal-type";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,7 @@ function newId(): string {
 
 interface Props {
   dateParam: string | null;
+  mealType?: MealType;
   onClose: () => void;
   onAdded: () => void;
 }
@@ -96,7 +98,7 @@ function sumTotals(items: AIItem[]) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
+export default function AIMealAnalyzer({ dateParam, mealType, onClose, onAdded }: Props) {
   const [image, setImage] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
@@ -213,6 +215,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
             quantity: 1,
             servingLabel: "porsiyon",
             servingSize: 1,
+            mealType,
             date: dateParam,
           }),
         });
@@ -232,6 +235,7 @@ export default function AIMealAnalyzer({ dateParam, onClose, onAdded }: Props) {
               quantity: 1,
               servingLabel: it.unit || "porsiyon",
               servingSize: it.amount || 1,
+              mealType,
               date: dateParam,
             }),
           });
