@@ -122,6 +122,19 @@ export default function ProfilePage() {
   const [securityBusy, setSecurityBusy] = useState(false);
   const [addingPasskey, setAddingPasskey] = useState(false);
   const [secretCopied, setSecretCopied] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState("");
+
+  // The otpauth:// URI contains the 2FA secret, so the QR is drawn in the
+  // browser — never sent to a third-party QR service.
+  useEffect(() => {
+    if (!totpUri) return;
+    let cancelled = false;
+    import("qrcode")
+      .then((QR) => QR.toDataURL(totpUri, { width: 360, margin: 1 }))
+      .then((url) => { if (!cancelled) setQrDataUrl(url); })
+      .catch(() => { if (!cancelled) setQrDataUrl(""); });
+    return () => { cancelled = true; };
+  }, [totpUri]);
 
   const refreshPasskeys = useCallback(async () => {
     const res = await fetch("/api/auth/passkey/list-user-passkeys");
@@ -629,14 +642,20 @@ export default function ProfilePage() {
                 <div className="space-y-2">
                   <p className="text-[11px] text-zinc-500">Scan this QR with your authenticator app (Google Authenticator, Authy, etc.):</p>
                   {totpUri && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(totpUri)}`}
-                      alt="2FA QR code"
-                      className="mx-auto rounded-xl bg-white p-2"
-                      width={180}
-                      height={180}
-                    />
+                    qrDataUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={qrDataUrl}
+                        alt="2FA QR code"
+                        className="mx-auto rounded-xl bg-white p-2"
+                        width={180}
+                        height={180}
+                      />
+                    ) : (
+                      <div className="mx-auto flex h-[196px] w-[196px] items-center justify-center rounded-xl bg-zinc-800 text-[11px] text-zinc-500">
+                        Generating QR…
+                      </div>
+                    )
                   )}
                   {totpUri && (
                     <div className="rounded-xl bg-zinc-800/50 p-2.5">
