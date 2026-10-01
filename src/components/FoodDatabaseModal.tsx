@@ -151,79 +151,136 @@ function AddQuantityModal({
     }
   }
 
+  // Macro split by calories (4/4/9 kcal per g) for the stacked bar.
+  const pCal = preview.protein * 4;
+  const cCal = preview.carbs * 4;
+  const fCal = preview.fat * 9;
+  const macroCalTotal = pCal + cCal + fCal;
+  const pct = (v: number) => (macroCalTotal > 0 ? Math.round((v / macroCalTotal) * 100) : 0);
+  const quickAmounts = unit === "piece" ? [1, 2, 3, 4] : [50, 100, 150, 200, 250];
+
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl">
-        <div className="mb-4 flex items-start justify-between">
-          <div>
-            <p className="font-bold text-white leading-tight">{product.name}</p>
-            {product.brand && <p className="text-xs text-zinc-500">{product.brand}</p>}
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/80 sm:items-center sm:px-4" onClick={onCancel}>
+      <div
+        className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl sm:rounded-3xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Product header */}
+        <div className="mb-5 flex items-start gap-4">
+          <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-zinc-800">
+            {product.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={product.imageUrl} alt={product.name} className="h-full w-full object-cover" />
+            ) : (
+              <span className="text-4xl">🥫</span>
+            )}
           </div>
-          <button onClick={onCancel} className="ml-3 text-zinc-500 hover:text-white">✕</button>
+          <div className="min-w-0 flex-1 pt-1">
+            <p className="text-lg font-bold leading-tight text-white">{product.name}</p>
+            {product.brand && <p className="mt-0.5 text-sm text-zinc-500">{product.brand}</p>}
+            <p className="mt-1.5 text-xs text-zinc-600">
+              {product.per100.calories} kcal / 100{product.servingLabel}
+            </p>
+          </div>
+          <button onClick={onCancel} aria-label="Close" className="text-zinc-500 hover:text-white">✕</button>
         </div>
 
-        {/* Unit selection */}
-        <div className="mb-3 flex gap-1.5">
-          {(["g", "ml", "piece"] as Unit[]).map((u) => (
-            <button
-              key={u}
-              onClick={() => setUnit(u)}
-              className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition-colors ${
-                unit === u
-                  ? "bg-green-600 text-white"
-                  : "bg-zinc-800 text-zinc-400 hover:text-white"
-              }`}
-            >
-              {u === "piece" ? "adet" : u}
-            </button>
-          ))}
+        {/* Serving size */}
+        <div className="mb-4 rounded-2xl bg-zinc-800/60 p-3.5">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-semibold text-white">Serving size</p>
+            <div className="flex gap-1">
+              {(["g", "ml", "piece"] as Unit[]).map((u) => (
+                <button
+                  key={u}
+                  onClick={() => setUnit(u)}
+                  className={`rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
+                    unit === u ? "bg-green-600 text-white" : "bg-zinc-700/60 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  {u === "piece" ? "adet" : u}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mb-3 flex items-center gap-2">
+            <input
+              type="number"
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-center text-2xl font-bold text-white outline-none focus:border-green-600"
+              autoFocus
+            />
+            <span className="w-10 text-sm text-zinc-500">{unitLabel}</span>
+          </div>
+          <div className="flex gap-1.5">
+            {quickAmounts.map((q) => (
+              <button
+                key={q}
+                onClick={() => setAmount(String(q))}
+                className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition-colors ${
+                  numAmount === q ? "bg-zinc-600 text-white" : "bg-zinc-700/50 text-zinc-400 hover:text-white"
+                }`}
+              >
+                {q}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <label className="mb-1 block text-xs font-semibold text-zinc-400">
-          Miktar ({unitLabel})
-        </label>
-        <div className="mb-4 flex items-center gap-2">
-          <input
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-center text-lg font-bold text-white outline-none focus:border-green-600"
-            autoFocus
-          />
-          <span className="text-sm text-zinc-500">{unitLabel}</span>
-        </div>
-
-        <div className="mb-4 rounded-xl bg-zinc-800 p-3">
-          <p className="mb-1 text-[11px] text-zinc-500">
-            Preview ({numAmount} {unitLabel})
+        {/* Nutrition facts */}
+        <div className="mb-5 rounded-2xl bg-zinc-800/60 p-3.5">
+          <p className="mb-2 text-sm font-semibold text-white">Nutrition facts</p>
+          <p className="mb-3 text-4xl font-black tabular-nums text-white">
+            {preview.calories}
+            <span className="ml-1 text-sm font-medium text-zinc-500">kcal</span>
           </p>
-          <div className="flex flex-wrap gap-1.5">
-            <span className="rounded-full bg-zinc-700 px-2.5 py-0.5 text-xs font-bold text-white">{preview.calories} kcal</span>
-            <span className="rounded-full bg-blue-950 px-2.5 py-0.5 text-xs font-semibold text-blue-300">P {preview.protein}g</span>
-            <span className="rounded-full bg-amber-950 px-2.5 py-0.5 text-xs font-semibold text-amber-300">K {preview.carbs}g</span>
-            <span className="rounded-full bg-rose-950 px-2.5 py-0.5 text-xs font-semibold text-rose-300">Y {preview.fat}g</span>
+          <div className="mb-3 flex h-2.5 overflow-hidden rounded-full bg-zinc-700">
+            {macroCalTotal > 0 && (
+              <>
+                <div className="h-full bg-blue-400" style={{ width: `${(pCal / macroCalTotal) * 100}%` }} />
+                <div className="h-full bg-amber-400" style={{ width: `${(cCal / macroCalTotal) * 100}%` }} />
+                <div className="h-full bg-rose-400" style={{ width: `${(fCal / macroCalTotal) * 100}%` }} />
+              </>
+            )}
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {[
+              { label: "Protein", g: preview.protein, p: pct(pCal), dot: "bg-blue-400" },
+              { label: "Carbs", g: preview.carbs, p: pct(cCal), dot: "bg-amber-400" },
+              { label: "Fat", g: preview.fat, p: pct(fCal), dot: "bg-rose-400" },
+            ].map((m) => (
+              <div key={m.label} className="rounded-xl bg-zinc-900/60 py-2">
+                <p className="flex items-center justify-center gap-1.5 text-[11px] text-zinc-400">
+                  <span className={`h-1.5 w-1.5 rounded-full ${m.dot}`} />
+                  {m.label} {m.p}%
+                </p>
+                <p className="text-base font-bold tabular-nums text-white">{m.g}g</p>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="space-y-2">
-          <button
-            onClick={() => handleSave("today")}
-            disabled={saving}
-            className="w-full rounded-xl bg-green-600 py-3 text-sm font-bold text-white shadow-lg shadow-green-900/30 hover:bg-green-500 transition-colors disabled:opacity-50"
-          >
-            {savingMode === "today" ? "Adding…" : "Add to Today's Log"}
-          </button>
+        <div className="flex gap-2">
           <button
             onClick={() => handleSave("library")}
             disabled={saving}
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-800 py-3 text-sm font-semibold text-zinc-200 hover:border-green-600 hover:text-green-400 transition-colors disabled:opacity-50"
+            className="flex-1 rounded-2xl border border-zinc-700 bg-zinc-800 py-3.5 text-sm font-semibold text-zinc-200 transition-colors hover:border-green-600 hover:text-green-400 disabled:opacity-50"
           >
-            {savingMode === "library" ? "Saving…" : "Add to Library"}
+            {savingMode === "library" ? "Saving…" : "Save to library"}
           </button>
-          <p className="px-1 text-center text-[11px] leading-snug text-zinc-600">
-            "Add to Today's Log" only logs it for today; "Add to Library" only saves it to your library without logging it.
-          </p>
+          <button
+            onClick={() => handleSave("today")}
+            disabled={saving}
+            className="flex-[1.4] rounded-2xl bg-green-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-green-900/30 transition-colors hover:bg-green-500 disabled:opacity-50"
+          >
+            {savingMode === "today" ? "Adding…" : "Add to today"}
+          </button>
         </div>
+        <p className="mt-2 px-1 text-center text-[11px] leading-snug text-zinc-600">
+          "Save to library" doesn&apos;t log it; "Add to today" doesn&apos;t save it to your library.
+        </p>
       </div>
     </div>
   );
@@ -424,19 +481,19 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
     return (
       <div className="flex items-start gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-3 hover:border-zinc-700 transition-colors">
         {/* Image */}
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-zinc-800">
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-zinc-800">
           {product.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={product.imageUrl} alt={product.name} className="h-full w-full object-cover" />
           ) : (
-            <span className="text-2xl">🥫</span>
+            <span className="text-3xl">🥫</span>
           )}
         </div>
 
         {/* Info */}
         <div className="min-w-0 flex-1">
           <div className="mb-0.5 flex items-center gap-1.5 min-w-0">
-            <p className="truncate text-sm font-bold text-white leading-tight">{product.name}</p>
+            <p className="line-clamp-2 text-sm font-bold text-white leading-tight">{product.name}</p>
             <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
               product.source === "USDA" ? "bg-blue-950 text-blue-400" : "bg-zinc-800 text-zinc-500"
             }`}>
@@ -447,8 +504,8 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
           <div className="flex flex-wrap gap-1">
             <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[11px] font-bold text-white">{product.per100.calories} kcal</span>
             <MacroBadge label="P" value={product.per100.protein} unit="g" color="bg-blue-950 text-blue-300" />
-            <MacroBadge label="K" value={product.per100.carbs}   unit="g" color="bg-amber-950 text-amber-300" />
-            <MacroBadge label="Y" value={product.per100.fat}     unit="g" color="bg-rose-950 text-rose-300" />
+            <MacroBadge label="C" value={product.per100.carbs}   unit="g" color="bg-amber-950 text-amber-300" />
+            <MacroBadge label="F" value={product.per100.fat}     unit="g" color="bg-rose-950 text-rose-300" />
           </div>
           <p className="mt-1 text-[10px] text-zinc-600">/ 100g</p>
         </div>
