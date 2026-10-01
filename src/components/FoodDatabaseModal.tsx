@@ -36,6 +36,7 @@ interface Props {
   onClose: () => void;
   dateParam: string | null;
   onAdded: () => void; // refresh parent meal list
+  initialTab?: "search" | "barcode";
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -230,8 +231,8 @@ function AddQuantityModal({
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 
-export default function FoodDatabaseModal({ onClose, dateParam, onAdded }: Props) {
-  const [tab, setTab] = useState<"search" | "barcode">("search");
+export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initialTab = "search" }: Props) {
+  const [tab, setTab] = useState<"search" | "barcode">(initialTab);
 
   // Search state
   const [query, setQuery]           = useState("");

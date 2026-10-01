@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, LinkCard } from "@/components/ui/Card";
 import { ProgressBar, ProgressRing } from "@/components/ui/Progress";
 import { MacroChip } from "@/components/ui/MacroChip";
 import { SectionHeader, EmptyState, Skeleton } from "@/components/ui/Primitives";
 import { METRICS, SEMANTIC, scoreColor, percent } from "@/lib/metrics";
+
+const FoodDatabaseModal = dynamic(() => import("@/components/FoodDatabaseModal"), { ssr: false });
 
 interface MealInfo {
   name: string;
@@ -149,6 +152,7 @@ export default function DashboardPage() {
   const [showGymPicker, setShowGymPicker] = useState(false);
   const [savingGym, setSavingGym] = useState(false);
   const workoutCardRef = useRef<HTMLDivElement>(null);
+  const [foodDb, setFoodDb] = useState<"search" | "barcode" | null>(null);
 
   // Opens the inline split picker and scrolls it into view — used by both
   // the coach tip and the "Log Workout" quick action so logging a workout
@@ -499,6 +503,27 @@ export default function DashboardPage() {
             </div>
           </Card>
 
+          {/* ── Add food: search + barcode, one tap from home ── */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setFoodDb("search")}
+              className="flex flex-1 items-center gap-2.5 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3.5 text-left text-sm text-zinc-400 transition hover:border-zinc-600 hover:text-zinc-200"
+            >
+              <span aria-hidden>🔍</span>
+              Search food to log…
+            </button>
+            <button
+              type="button"
+              onClick={() => setFoodDb("barcode")}
+              aria-label="Scan barcode"
+              className="flex items-center gap-2 rounded-2xl bg-green-600 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-green-500"
+            >
+              <span aria-hidden>📷</span>
+              <span className="hidden sm:inline">Scan</span>
+            </button>
+          </div>
+
           {/* ── 2. AI Coach ── */}
           <section>
             <SectionHeader eyebrow="AI Coach" title="What matters next" />
@@ -818,6 +843,14 @@ export default function DashboardPage() {
             </Card>
           </section>
         </div>
+      )}
+      {foodDb && (
+        <FoodDatabaseModal
+          initialTab={foodDb}
+          dateParam={selectedDate}
+          onClose={() => setFoodDb(null)}
+          onAdded={() => void fetchData(selectedDate)}
+        />
       )}
     </main>
   );
