@@ -751,6 +751,11 @@ function MealsContent() {
       })
     : null;
 
+  // Same wording as the dashboard header ("Friday 2 October"); used when a specific day is open.
+  const dayLabel = dateParam
+    ? new Date(dateParam + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })
+    : null;
+
   // ── Today's log grouping ──
   const todayGroups = useMemo(() => {
     const groups = new Map<MealSlot, LoggedMeal[]>();
@@ -862,7 +867,7 @@ function MealsContent() {
               <div className="rounded-2xl border border-zinc-700/70 bg-zinc-900 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-3">
                   <div>
-                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">Today&apos;s total</p>
+                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">{dayLabel ? `${dayLabel} total` : "Today's total"}</p>
                     <p className="text-2xl font-bold tabular-nums" style={{ color: METRICS.calories.hex }}>
                       {Math.round(todayTotals.calories)}
                       {todayGoals && <span className="ml-1 text-sm font-medium text-zinc-500">/ {todayGoals.calories} kcal</span>}
@@ -888,7 +893,7 @@ function MealsContent() {
               {todayLogs.length === 0 ? (
                 <EmptyState
                   icon="🍽️"
-                  title="Nothing logged today yet"
+                  title={dayLabel ? "Nothing logged for this day yet" : "Nothing logged today yet"}
                   message="Start the day by adding a meal from your library."
                   ctaLabel="Go to library"
                   onCta={() => setMealView("library")}
