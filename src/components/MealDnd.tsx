@@ -80,22 +80,25 @@ export function MealDropZone({
   type,
   label,
   empty,
+  keepEmpty = false,
   children,
 }: {
   type: MealType;
   label: string;
   empty: boolean;
+  /** Render `children` even when empty (the page draws its own empty state). */
+  keepEmpty?: boolean;
   children: ReactNode;
 }) {
   const dragging = useContext(DraggingContext);
   const { setNodeRef, isOver } = useDroppable({ id: type });
-  if (empty && !dragging) return null;
+  if (empty && !dragging && !keepEmpty) return null;
   return (
     <div
       ref={setNodeRef}
       className={`rounded-2xl transition ${isOver ? "ring-2 ring-green-500" : dragging ? "ring-1 ring-zinc-700" : ""}`}
     >
-      {empty ? (
+      {empty && !keepEmpty ? (
         <div className="rounded-2xl border border-dashed border-zinc-700 px-4 py-3 text-sm text-zinc-500">
           {label} · drop here
         </div>

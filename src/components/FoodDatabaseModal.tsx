@@ -25,7 +25,7 @@ interface OFFProduct {
   };
 }
 
-type FoodSource = "OFF" | "USDA" | "LABEL";
+type FoodSource = "OFF" | "USDA" | "LABEL" | "HISTORY";
 type Unit = "g" | "ml" | "piece";
 
 interface NormalizedProduct {
@@ -36,11 +36,48 @@ interface NormalizedProduct {
   per100: { calories: number; protein: number; carbs: number; fat: number };
   source: FoodSource;
   servingLabel: "g" | "ml";
+  /** Set for foods from the history list: how it was last logged. For "piece" the
+   *  per100 values are per piece. */
+  recent?: { unit: Unit; amount: number };
 }
 
 interface QueuedItem {
   product: NormalizedProduct;
-  amount: number; // g or ml (per product.servingLabel)
+  amount: number; // in `unit`
+  unit: Unit;
+}
+
+interface HistoryApiItem {
+  key: string;
+  name: string;
+  perUnit: { calories: number; protein: number; carbs: number; fat: number };
+  unit: Unit;
+  lastAmount: number;
+  imageUrl: string | null;
+}
+
+// 1 piece vs. 100 g/ml — per100 holds the values for that base amount.
+const unitMult = (unit: Unit, amount: number) => (unit === "piece" ? amount : amount / 100);
+const unitText = (unit: Unit) => (unit === "piece" ? "adet" : unit);
+
+function fromHistory(h: HistoryApiItem): NormalizedProduct {
+  const k = h.unit === "piece" ? 1 : 100;
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+  return {
+    code: `hist:${h.key}`,
+    name: h.name,
+    brand: "",
+    imageUrl: h.imageUrl,
+    source: "HISTORY",
+    servingLabel: h.unit === "ml" ? "ml" : "g",
+    per100: {
+      calories: Math.round(h.perUnit.calories * k),
+      protein: r1(h.perUnit.protein * k),
+      carbs: r1(h.perUnit.carbs * k),
+      fat: r1(h.perUnit.fat * k),
+    },
+    recent: { unit: h.unit, amount: h.lastAmount },
+  };
 }
 
 const foodLabel = (p: NormalizedProduct) => p.name + (p.brand ? ` (${p.brand})` : "");
@@ -100,8 +137,10 @@ function AddQuantityModal({
   onCancel: () => void;
   defaultMeal?: MealType;
 }) {
-  const [amount, setAmount] = useState("100");
-  const [unit, setUnit] = useState<Unit>(product.servingLabel === "ml" ? "ml" : "g");
+  const [amount, setAmount] = useState(product.recent ? String(product.recent.amount) : "100");
+  const [unit, setUnit] = useState<Unit>(product.recent?.unit ?? (product.servingLabel === "ml" ? "ml" : "g"));
+  // Per-piece history values can't be converted to grams, so they stay in pieces.
+  const unitOptions: Unit[] = product.recent?.unit === "piece" ? ["piece"] : ["g", "ml", "piece"];
   // null = idle, "today" = log to today only, "library" = save to library only
   const [savingMode, setSavingMode] = useState<null | "today" | "library">(null);
   const [mealType, setMealType] = useState<MealType>(defaultMeal ?? defaultMealType());
@@ -197,7 +236,7 @@ function AddQuantityModal({
             <p className="text-lg font-bold leading-tight text-white">{product.name}</p>
             {product.brand && <p className="mt-0.5 text-sm text-zinc-500">{product.brand}</p>}
             <p className="mt-1.5 text-xs text-zinc-600">
-              {product.per100.calories} kcal / 100{product.servingLabel}
+              {product.per100.calories} kcal / {product.recent?.unit === "piece" ? "adet" : `100${product.servingLabel}`}
             </p>
           </div>
           <button onClick={onCancel} aria-label="Close" className="text-zinc-500 hover:text-white">✕</button>
@@ -208,7 +247,7 @@ function AddQuantityModal({
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-semibold text-white">Serving size</p>
             <div className="flex gap-1">
-              {(["g", "ml", "piece"] as Unit[]).map((u) => (
+              {unitOptions.map((u) => (
                 <button
                   key={u}
                   onClick={() => setUnit(u)}
@@ -516,6 +555,17 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
   const readerRef = useRef<import("@zxing/browser").BrowserMultiFormatReader | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  // Recently logged foods, shown while the search box is empty
+  const [history, setHistory] = useState<NormalizedProduct[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/food-history")
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((d) => { if (!cancelled) setHistory((d.items ?? []).map(fromHistory)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   // Add quantity
   const [addingProduct, setAddingProduct] = useState<NormalizedProduct | null>(null);
 
@@ -527,14 +577,14 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
   const [queueError, setQueueError] = useState("");
   const [queueMealType, setQueueMealType] = useState<MealType>(initialMealType ?? defaultMealType());
   const queuedCodes = new Set(queue.map((q) => q.product.code));
-  const queueKcal = Math.round(queue.reduce((s, q) => s + (q.product.per100.calories * q.amount) / 100, 0));
+  const queueKcal = Math.round(queue.reduce((s, q) => s + q.product.per100.calories * unitMult(q.unit, q.amount), 0));
 
   function toggleQueue(p: NormalizedProduct) {
     setQueueError("");
     setQueue((prev) =>
       prev.some((q) => q.product.code === p.code)
         ? prev.filter((q) => q.product.code !== p.code)
-        : [...prev, { product: p, amount: 100 }]
+        : [...prev, { product: p, amount: p.recent?.amount ?? 100, unit: p.recent?.unit ?? p.servingLabel }]
     );
   }
 
@@ -547,7 +597,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
     setSavingQueue(true);
     setQueueError("");
     const settled = await Promise.allSettled(
-      queue.map(({ product, amount }) =>
+      queue.map(({ product, amount, unit }) =>
         fetch("/api/log-meal", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -557,9 +607,9 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
             protein:  product.per100.protein,
             carbs:    product.per100.carbs,
             fat:      product.per100.fat,
-            servingSize: 100,
-            servingLabel: product.servingLabel,
-            quantity: Math.max(1, amount) / 100,
+            servingSize: unit === "piece" ? 1 : 100,
+            servingLabel: unit,
+            quantity: unitMult(unit, Math.max(unit === "piece" ? 0.5 : 1, amount)),
             mealType: queueMealType,
             date: dateParam,
           }),
@@ -746,6 +796,9 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
 
   function ProductCard({ product }: { product: NormalizedProduct }) {
     const queued = queuedCodes.has(product.code);
+    const r = product.recent;
+    const shown = r ? unitMult(r.unit, r.amount) : 1;
+    const show = (n: number) => Math.round(n * shown * 10) / 10;
     return (
       <div
         onClick={() => setAddingProduct(product)}
@@ -770,17 +823,17 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
             <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
               product.source === "USDA" ? "bg-blue-950 text-blue-400" : "bg-zinc-800 text-zinc-500"
             }`}>
-              {product.source === "USDA" ? "USDA" : "OFF"}
+              {product.source === "USDA" ? "USDA" : product.source === "HISTORY" ? "🕘" : "OFF"}
             </span>
           </div>
           {product.brand && <p className="mb-1.5 text-[11px] text-zinc-500">{product.brand}</p>}
           <div className="flex flex-wrap gap-1">
-            <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[11px] font-bold text-white">{product.per100.calories} kcal</span>
-            <MacroBadge label="P" value={product.per100.protein} unit="g" color="bg-blue-950 text-blue-300" />
-            <MacroBadge label="C" value={product.per100.carbs}   unit="g" color="bg-amber-950 text-amber-300" />
-            <MacroBadge label="F" value={product.per100.fat}     unit="g" color="bg-rose-950 text-rose-300" />
+            <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[11px] font-bold text-white">{Math.round(product.per100.calories * shown)} kcal</span>
+            <MacroBadge label="P" value={show(product.per100.protein)} unit="g" color="bg-blue-950 text-blue-300" />
+            <MacroBadge label="C" value={show(product.per100.carbs)}   unit="g" color="bg-amber-950 text-amber-300" />
+            <MacroBadge label="F" value={show(product.per100.fat)}     unit="g" color="bg-rose-950 text-rose-300" />
           </div>
-          <p className="mt-1 text-[10px] text-zinc-600">/ 100g</p>
+          <p className="mt-1 text-[10px] text-zinc-600">{r ? `${r.amount}${r.unit === "piece" ? " adet" : r.unit} · last time` : "/ 100g"}</p>
         </div>
 
         {/* Quick add to list (100 g/ml) — tap the card itself to pick an amount */}
@@ -870,8 +923,14 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
                 {!searching && noResults && query.trim() && (
                   <p className="py-6 text-center text-sm text-zinc-500">No results found for "{query}".</p>
                 )}
-                {!searching && results.length === 0 && !noResults && (
+                {!searching && results.length === 0 && !noResults && history.length === 0 && (
                   <p className="py-10 text-center text-sm text-zinc-600">Type a product to search…</p>
+                )}
+                {!query.trim() && !searching && history.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="px-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Recent</p>
+                    {history.map((p) => <ProductCard key={p.code} product={p} />)}
+                  </div>
                 )}
                 <div className="space-y-2">
                   {results.map((p) => <ProductCard key={p.code} product={p} />)}
@@ -988,7 +1047,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
                         onChange={(e) => setQueueAmount(q.product.code, Number(e.target.value) || 0)}
                         className="w-16 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-center text-xs font-bold text-white outline-none focus:border-green-600"
                       />
-                      <span className="w-5 text-[11px] text-zinc-500">{q.product.servingLabel}</span>
+                      <span className="w-8 text-[11px] text-zinc-500">{unitText(q.unit)}</span>
                       <button
                         onClick={() => toggleQueue(q.product)}
                         aria-label="Remove"

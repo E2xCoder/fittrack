@@ -7,9 +7,9 @@ import { useSearchParams } from "next/navigation";
 import { Card, LinkCard } from "@/components/ui/Card";
 import { ProgressBar, ProgressRing } from "@/components/ui/Progress";
 import { MacroChip } from "@/components/ui/MacroChip";
-import { SectionHeader, EmptyState, Skeleton } from "@/components/ui/Primitives";
+import { SectionHeader, Skeleton } from "@/components/ui/Primitives";
 import { METRICS, SEMANTIC, scoreColor, percent } from "@/lib/metrics";
-import { mealTypeForLog, type MealType } from "@/lib/meal-type";
+import { MEAL_TYPE_OPTIONS, mealTypeForLog, type MealType } from "@/lib/meal-type";
 import { DraggableMeal, MealDndProvider, MealDropZone } from "@/components/MealDnd";
 import { buildInsights, type InsightLevel } from "@/lib/nutrition-insights";
 
@@ -159,7 +159,7 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
   const [showGymPicker, setShowGymPicker] = useState(false);
   const [savingGym, setSavingGym] = useState(false);
   const workoutCardRef = useRef<HTMLDivElement>(null);
-  const [foodDb, setFoodDb] = useState<"search" | "barcode" | null>(null);
+  const [foodDb, setFoodDb] = useState<{ tab: "search" | "barcode"; mealType?: MealType } | null>(null);
 
   // Opens the inline split picker and scrolls it into view — used by both
   // the coach tip and the "Log Workout" quick action so logging a workout
@@ -564,7 +564,7 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
                   </p>
                 )}
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <StatPill
                     label="Calories"
                     value={`${Math.round(data.totalCalories)}`}
@@ -576,6 +576,13 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
                     value={data.isGymDay ? "Logged" : "—"}
                     sub={data.isGymDay ? (data.gymSplit ?? "Gym day") : "Not logged"}
                     color={SEMANTIC.accent}
+                  />
+                  {/* Estimated from steps only (no workout or resting burn), so it's labelled as such. */}
+                  <StatPill
+                    label="Burned"
+                    value={data.caloriesBurned > 0 ? `${Math.round(data.caloriesBurned)}` : "—"}
+                    sub={data.caloriesBurned > 0 ? "kcal · from steps" : "No steps yet"}
+                    color={METRICS.steps.hex}
                   />
                 </div>
 
@@ -606,7 +613,7 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => setFoodDb("search")}
+              onClick={() => setFoodDb({ tab: "search" })}
               className="flex flex-1 items-center gap-2.5 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3.5 text-left text-sm text-zinc-400 transition hover:border-zinc-600 hover:text-zinc-200"
             >
               <span aria-hidden>🔍</span>
@@ -614,7 +621,7 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
             </button>
             <button
               type="button"
-              onClick={() => setFoodDb("barcode")}
+              onClick={() => setFoodDb({ tab: "barcode" })}
               aria-label="Scan barcode"
               className="flex items-center gap-2 rounded-2xl bg-green-600 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-green-500"
             >
@@ -835,16 +842,12 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
                 </Link>
               }
             />
-            {data.mealLogs.length === 0 ? (
-              <EmptyState
-                icon="🍽️"
-                title="No meals logged yet"
-                message={`${data.goals.calories} kcal to go — log your first meal to start the day.`}
-                ctaLabel="Log a meal"
-                ctaHref={`/meals?date=${selectedDate}`}
-              />
-            ) : (
-              <MealDndProvider
+            {data.mealLogs.length === 0 && (
+              <p className="mb-3 text-sm text-zinc-400">
+                {data.goals.calories} kcal to go — log your first meal to start the day.
+              </p>
+            )}
+            <MealDndProvider
                 onMove={(id, to) => void moveMeal(id, to)}
                 overlay={(id) => {
                   const log = data.mealLogs.find((e) => e.id === id);
@@ -853,16 +856,18 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
               >
               <div className="space-y-4">
                 {mealGroups.map((group) => (
-                  <MealDropZone key={group.slot} type={group.type} label={`${SLOT_ICON[group.slot]} ${group.slot}`} empty={group.logs.length === 0}>
+                  <MealDropZone key={group.slot} type={group.type} label={`${SLOT_ICON[group.slot]} ${group.slot}`} empty={group.logs.length === 0} keepEmpty>
                   <Card tier="secondary">
-                    <div className="mb-3 flex items-center justify-between">
+                    <div className={`flex items-center justify-between ${group.logs.length > 0 ? "mb-3" : "mb-2"}`}>
                       <div className="flex items-center gap-2">
                         <span className="text-lg">{SLOT_ICON[group.slot]}</span>
                         <span className="text-sm font-semibold text-white">{group.slot}</span>
                       </div>
-                      <span className="text-sm font-semibold tabular-nums" style={{ color: METRICS.calories.hex }}>
-                        {Math.round(group.calories)} kcal
-                      </span>
+                      {group.logs.length > 0 && (
+                        <span className="text-sm font-semibold tabular-nums" style={{ color: METRICS.calories.hex }}>
+                          {Math.round(group.calories)} kcal
+                        </span>
+                      )}
                     </div>
                     <div className="space-y-2.5">
                       {group.logs.map((log) => {
@@ -929,12 +934,24 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
                         );
                       })}
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setFoodDb({ tab: "search", mealType: group.type })}
+                      className={`w-full rounded-xl text-sm font-semibold transition ${
+                        group.logs.length === 0
+                          ? "bg-zinc-800/80 py-3 text-green-400 hover:bg-zinc-800"
+                          : "mt-3 border border-dashed border-zinc-700 py-2 text-xs text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                      }`}
+                    >
+                      {group.logs.length === 0
+                        ? `＋ Log ${MEAL_TYPE_OPTIONS.find((o) => o.value === group.type)?.label ?? group.slot}`
+                        : `+ Add to ${group.slot}`}
+                    </button>
                   </Card>
                   </MealDropZone>
                 ))}
               </div>
-              </MealDndProvider>
-            )}
+            </MealDndProvider>
           </section>
 
           {/* ── 7. Weekly glance ── */}
@@ -978,7 +995,8 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
       )}
       {foodDb && (
         <FoodDatabaseModal
-          initialTab={foodDb}
+          initialTab={foodDb.tab}
+          initialMealType={foodDb.mealType}
           dateParam={selectedDate}
           onClose={() => setFoodDb(null)}
           onAdded={() => void fetchData(selectedDate)}
@@ -1000,7 +1018,7 @@ function StatPill({ label, value, sub, color }: { label: string; value: string; 
       <p className="text-lg font-bold leading-tight tabular-nums" style={{ color }}>
         {value}
       </p>
-      <p className="text-[10px] text-zinc-500">{sub}</p>
+      <p className="truncate text-[10px] text-zinc-500">{sub}</p>
     </div>
   );
 }

@@ -4,6 +4,22 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTodayInTimezone } from "@/lib/date";
 import { parseMealType } from "@/lib/meal-type";
+import { Prisma } from "@prisma/client";
+
+// Several entries for a day that has no DailyLog yet (e.g. the "+" list in the
+// food modal saves them in parallel) all try to create it. upsert isn't atomic,
+// so the losers hit the unique constraint — they just need to read the row back.
+async function getOrCreateDailyLog(userId: string, date: Date) {
+  const where = { userId_date: { userId, date } };
+  try {
+    return await prisma.dailyLog.upsert({ where, update: {}, create: { userId, date } });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return prisma.dailyLog.findUniqueOrThrow({ where });
+    }
+    throw e;
+  }
+}
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -73,11 +89,7 @@ export async function POST(request: Request) {
     logDate = getTodayInTimezone(userTz);
   }
 
-  const dailyLog = await prisma.dailyLog.upsert({
-    where: { userId_date: { userId: user.id, date: logDate } },
-    update: {},
-    create: { userId: user.id, date: logDate },
-  });
+  const dailyLog = await getOrCreateDailyLog(user.id, logDate);
 
   const calories = base.calories * quantity;
   const protein = base.protein * quantity;
