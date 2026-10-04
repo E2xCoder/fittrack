@@ -1,5 +1,12 @@
 import type { PrismaClient } from "@prisma/client";
 
+interface SetInput {
+  weight?: number | null;
+  reps?: number | null;
+  sets?: number | null;
+  rpe?: number | null;
+}
+
 export interface SaveWorkoutInput {
   userId: string;
   date: Date;
@@ -28,7 +35,7 @@ export async function saveWorkout(db: PrismaClient, input: SaveWorkoutInput) {
     userId,
     orderIndex: index,
     sets: {
-      create: (exercise.sets ?? []).map((set: any, i: number) => ({
+      create: (exercise.sets ?? []).map((set: SetInput, i: number) => ({
         setNumber: i + 1,
         weight: set.weight ?? null,
         reps: set.reps ?? null,
