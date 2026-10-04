@@ -11,7 +11,11 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const exerciseName = searchParams.get("exercise") ?? "";
 
-  const today = getTodayInTimezone();
+  const userTzRow = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { timezone: true },
+  });
+  const today = getTodayInTimezone(userTzRow?.timezone ?? "Europe/Berlin");
 
   const lastExercise = await prisma.exercise.findFirst({
     where: {

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTodayInTimezone } from "@/lib/date";
+import { currentStreak as computeCurrentStreak, longestStreak as computeLongestStreak } from "@/lib/fitness";
 
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -11,15 +12,32 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const dateParam = searchParams.get("date");
 
-  let date: Date;
-  if (dateParam) {
-    date = new Date(dateParam + "T12:00:00");
-    date.setHours(0, 0, 0, 0);
-  } else {
-    date = getTodayInTimezone();
-  }
+  const userRow = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      calorieTarget: true,
+      proteinTarget: true,
+      carbTarget: true,
+      fatTarget: true,
+      stepTarget: true,
+      timezone: true,
+    },
+  });
 
-  const [dailyLog, user, bodyLog] = await Promise.all([
+  const userTz = userRow?.timezone ?? "Europe/Berlin";
+
+  const date = dateParam
+    ? new Date(`${dateParam}T12:00:00`)
+    : getTodayInTimezone(userTz);
+
+  if (dateParam) date.setHours(0, 0, 0, 0);
+
+  // 7-day window for the weekly glance + streak (ending on the viewed date).
+  const weekStart = new Date(date);
+  weekStart.setDate(date.getDate() - 6);
+  weekStart.setHours(0, 0, 0, 0);
+
+  const [dailyLog, bodyLog, splits, latestWeightLog, latestMeasurementLog, weekDailyLogs, weekBodyLogs, streakDailyLogs, streakBodyLogs] = await Promise.all([
     prisma.dailyLog.findFirst({
       where: { userId: session.user.id, date },
       include: {
@@ -29,21 +47,81 @@ export async function GET(request: Request) {
         },
       },
     }),
-    prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        calorieTarget: true,
-        proteinTarget: true,
-        carbTarget: true,
-        fatTarget: true,
-        weight: true,
-        stepTarget: true,
-      },
-    }),
     prisma.bodyLog.findFirst({
       where: { userId: session.user.id, date },
     }),
+    prisma.userSplit.findMany({
+      where: { userId: session.user.id },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.bodyLog.findFirst({
+      where: {
+        userId: session.user.id,
+        weight: { not: null },
+      },
+      orderBy: { date: "desc" },
+      select: { date: true, weight: true },
+    }),
+    prisma.bodyLog.findFirst({
+      where: {
+        userId: session.user.id,
+        OR: [
+          { waist: { not: null } },
+          { chest: { not: null } },
+          { hip: { not: null } },
+          { arm: { not: null } },
+          { leg: { not: null } },
+          { bodyFat: { not: null } },
+        ],
+      },
+      orderBy: { date: "desc" },
+      select: { date: true, waist: true, bodyFat: true },
+    }),
+    prisma.dailyLog.findMany({
+      where: { userId: session.user.id, date: { gte: weekStart, lte: date } },
+      select: { date: true, totalCalories: true, isGymDay: true },
+    }),
+    prisma.bodyLog.findMany({
+      where: { userId: session.user.id, date: { gte: weekStart, lte: date } },
+      select: { date: true, weight: true, steps: true },
+    }),
+    prisma.dailyLog.findMany({
+      where: { userId: session.user.id },
+      select: { date: true },
+      orderBy: { date: "desc" },
+    }),
+    prisma.bodyLog.findMany({
+      where: { userId: session.user.id },
+      select: { date: true },
+      orderBy: { date: "desc" },
+    }),
   ]);
+
+  // ── Weekly glance: one entry per day (meals / workout / weigh-in dots) ──
+  const dayKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: userTz });
+  const week = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    const key = dayKey(d);
+    const dl = weekDailyLogs.find((l) => dayKey(new Date(l.date)) === key);
+    const bl = weekBodyLogs.find((l) => dayKey(new Date(l.date)) === key);
+    week.push({
+      date: key,
+      weekday: d.toLocaleDateString("en-GB", { weekday: "narrow", timeZone: userTz }),
+      hasMeals: (dl?.totalCalories ?? 0) > 0,
+      hasWorkout: dl?.isGymDay ?? false,
+      hasWeighIn: bl?.weight != null,
+    });
+  }
+
+  // ── Streak: consecutive logged days walking back from the viewed date ──
+  const loggedDates = new Set<string>();
+  for (const l of streakDailyLogs) loggedDates.add(dayKey(new Date(l.date)));
+  for (const l of streakBodyLogs) loggedDates.add(dayKey(new Date(l.date)));
+
+  const currentStreak = computeCurrentStreak(loggedDates, dayKey(date));
+  const longestStreak = computeLongestStreak(loggedDates);
 
   return NextResponse.json({
     totalCalories: dailyLog?.totalCalories ?? 0,
@@ -52,15 +130,22 @@ export async function GET(request: Request) {
     totalFat: dailyLog?.totalFat ?? 0,
     mealLogs: dailyLog?.mealLogs ?? [],
     goals: {
-      calories: user?.calorieTarget ?? 2400,
-      protein: user?.proteinTarget ?? 150,
-      carbs: user?.carbTarget ?? 200,
-      fat: user?.fatTarget ?? 70,
-      steps: user?.stepTarget ?? 10000,
+      calories: userRow?.calorieTarget ?? 2400,
+      protein: userRow?.proteinTarget ?? 150,
+      carbs: userRow?.carbTarget ?? 200,
+      fat: userRow?.fatTarget ?? 70,
+      steps: userRow?.stepTarget ?? 10000,
     },
     steps: bodyLog?.steps ?? 0,
     caloriesBurned: bodyLog?.caloriesBurned ?? 0,
     water: bodyLog?.water ?? 0,
     sleep: bodyLog?.sleep ?? 0,
+    isGymDay: dailyLog?.isGymDay ?? false,
+    gymSplit: dailyLog?.gymSplit ?? null,
+    splits: splits ?? [],
+    latestWeightLog,
+    latestMeasurementLog,
+    week,
+    streak: { current: currentStreak, longest: longestStreak },
   });
 }
