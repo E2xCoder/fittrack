@@ -146,14 +146,31 @@ function AddQuantityModal({
   const [mealType, setMealType] = useState<MealType>(defaultMeal ?? defaultMealType());
   const saving = savingMode !== null;
 
+  // Open Food Facts / USDA data is sometimes wrong, so the values can be corrected
+  // here before logging. Strings while typing; negative or empty counts as 0.
+  const [editing, setEditing] = useState(false);
+  const [vals, setVals] = useState({
+    calories: String(product.per100.calories),
+    protein: String(product.per100.protein),
+    carbs: String(product.per100.carbs),
+    fat: String(product.per100.fat),
+  });
+  const num = (v: string) => Math.max(0, Number(v.replace(",", ".")) || 0);
+  const per100 = { calories: num(vals.calories), protein: num(vals.protein), carbs: num(vals.carbs), fat: num(vals.fat) };
+  const edited =
+    per100.calories !== product.per100.calories || per100.protein !== product.per100.protein ||
+    per100.carbs !== product.per100.carbs || per100.fat !== product.per100.fat;
+  const macroKcal = Math.round(per100.protein * 4 + per100.carbs * 4 + per100.fat * 9);
+  const kcalMismatch = per100.calories > 0 && Math.abs(macroKcal - per100.calories) / per100.calories > 0.25;
+
   const numAmount = Math.max(1, Number(amount) || 1);
   // per100 is always per 100 g/ml. For pieces we treat 1 piece = 1 serving (100g worth).
   const mult = unit === "piece" ? numAmount : numAmount / 100;
   const preview = {
-    calories: Math.round(product.per100.calories * mult),
-    protein:  Math.round(product.per100.protein  * mult * 10) / 10,
-    carbs:    Math.round(product.per100.carbs    * mult * 10) / 10,
-    fat:      Math.round(product.per100.fat      * mult * 10) / 10,
+    calories: Math.round(per100.calories * mult),
+    protein:  Math.round(per100.protein  * mult * 10) / 10,
+    carbs:    Math.round(per100.carbs    * mult * 10) / 10,
+    fat:      Math.round(per100.fat      * mult * 10) / 10,
   };
 
   const unitLabel = unit === "g" ? "g" : unit === "ml" ? "ml" : "adet";
@@ -172,10 +189,10 @@ function AddQuantityModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: fullName,
-            calories: product.per100.calories,
-            protein:  product.per100.protein,
-            carbs:    product.per100.carbs,
-            fat:      product.per100.fat,
+            calories: per100.calories,
+            protein:  per100.protein,
+            carbs:    per100.carbs,
+            fat:      per100.fat,
             servingSize: servingSizeForApi,
             servingLabel: servingLabelForApi,
             isFavorite: false,
@@ -188,10 +205,10 @@ function AddQuantityModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: fullName,
-            calories: product.per100.calories,
-            protein:  product.per100.protein,
-            carbs:    product.per100.carbs,
-            fat:      product.per100.fat,
+            calories: per100.calories,
+            protein:  per100.protein,
+            carbs:    per100.carbs,
+            fat:      per100.fat,
             servingSize: servingSizeForApi,
             servingLabel: servingLabelForApi,
             quantity: mult,
@@ -236,7 +253,7 @@ function AddQuantityModal({
             <p className="text-lg font-bold leading-tight text-white">{product.name}</p>
             {product.brand && <p className="mt-0.5 text-sm text-zinc-500">{product.brand}</p>}
             <p className="mt-1.5 text-xs text-zinc-600">
-              {product.per100.calories} kcal / {product.recent?.unit === "piece" ? "adet" : `100${product.servingLabel}`}
+              {per100.calories} kcal / {product.recent?.unit === "piece" ? "adet" : `100${product.servingLabel}`}
             </p>
           </div>
           <button onClick={onCancel} aria-label="Close" className="text-zinc-500 hover:text-white">✕</button>
@@ -294,7 +311,65 @@ function AddQuantityModal({
 
         {/* Nutrition facts */}
         <div className="mb-5 rounded-2xl bg-zinc-800/60 p-3.5">
-          <p className="mb-2 text-sm font-semibold text-white">Nutrition facts</p>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-semibold text-white">
+              Nutrition facts{edited && <span className="ml-2 text-[11px] font-medium text-amber-400">edited</span>}
+            </p>
+            <button
+              type="button"
+              onClick={() => setEditing((v) => !v)}
+              className="text-xs font-semibold text-green-400 hover:text-green-300"
+            >
+              {editing ? "Done" : "Edit nutrition"}
+            </button>
+          </div>
+          {editing && (
+            <div className="mb-3 rounded-xl bg-zinc-900/60 p-3">
+              <p className="mb-2 text-[11px] text-zinc-500">
+                Values per {unit === "piece" ? "piece" : `100 ${unit}`}
+              </p>
+              <div className="grid grid-cols-4 gap-2">
+                {([
+                  ["calories", "kcal"],
+                  ["protein", "Protein g"],
+                  ["carbs", "Carbs g"],
+                  ["fat", "Fat g"],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="block">
+                    <span className="mb-1 block text-center text-[10px] text-zinc-500">{label}</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={vals[key]}
+                      onChange={(e) => setVals((v) => ({ ...v, [key]: e.target.value }))}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-1 py-2 text-center text-sm font-bold text-white outline-none focus:border-green-600"
+                    />
+                  </label>
+                ))}
+              </div>
+              {kcalMismatch && (
+                <p className="mt-2 text-[11px] text-amber-400">
+                  Calories don&apos;t match the macros (they add up to about {macroKcal} kcal).
+                </p>
+              )}
+              {edited && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setVals({
+                      calories: String(product.per100.calories),
+                      protein: String(product.per100.protein),
+                      carbs: String(product.per100.carbs),
+                      fat: String(product.per100.fat),
+                    })
+                  }
+                  className="mt-2 text-[11px] text-zinc-500 underline hover:text-zinc-300"
+                >
+                  Reset to original
+                </button>
+              )}
+            </div>
+          )}
           <p className="mb-3 text-4xl font-black tabular-nums text-white">
             {preview.calories}
             <span className="ml-1 text-sm font-medium text-zinc-500">kcal</span>
