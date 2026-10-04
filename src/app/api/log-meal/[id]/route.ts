@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parseMealType } from "@/lib/meal-type";
 
 async function getUser() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -54,8 +55,17 @@ export async function PATCH(
   });
   if (!mealLog) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  // Moving an entry to another meal (breakfast/lunch/dinner/snack) only changes
+  // its type; macros and the day's totals stay untouched.
+  if (body.quantity === undefined && body.mealType !== undefined) {
+    const mealType = parseMealType(body.mealType);
+    if (!mealType) return NextResponse.json({ error: "Invalid mealType" }, { status: 400 });
+    await prisma.mealLog.update({ where: { id }, data: { mealType } });
+    return NextResponse.json({ success: true, mealType });
+  }
+
   const newQuantity = Number(body.quantity);
-  if (newQuantity <= 0) return NextResponse.json({ error: "Invalid quantity" }, { status: 400 });
+  if (!(newQuantity > 0)) return NextResponse.json({ error: "Invalid quantity" }, { status: 400 });
 
   // Base macros come from the library meal, or fall back to the stored snapshot
   // (ad-hoc logs whose meal was never saved, or whose meal was later deleted).

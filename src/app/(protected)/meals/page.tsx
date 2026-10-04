@@ -25,6 +25,7 @@ import { EmptyState } from "@/components/ui/Primitives";
 import { METRICS } from "@/lib/metrics";
 import MealTypePicker from "@/components/MealTypePicker";
 import { defaultMealType, mealTypeForLog, type MealType } from "@/lib/meal-type";
+import { DraggableMeal, MealDndProvider, MealDropZone } from "@/components/MealDnd";
 
 const FoodDatabaseModal = dynamic(() => import("@/components/FoodDatabaseModal"), { ssr: false });
 const AIMealAnalyzer = dynamic(() => import("./AIMealAnalyzer"), { ssr: false });
@@ -601,6 +602,21 @@ function MealsContent() {
     fetchTodayLog();
   }
 
+  async function moveLoggedMeal(id: string, to: MealType) {
+    const log = todayLogs.find((l) => l.id === id);
+    if (!log || mealTypeForLog(log) === to) return;
+    const previous = log.mealType ?? null;
+    const setType = (mealType: string | null) =>
+      setTodayLogs((prev) => prev.map((l) => (l.id === id ? { ...l, mealType } : l)));
+    setType(to);
+    const res = await fetch(`/api/log-meal/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mealType: to }),
+    }).catch(() => null);
+    if (!res?.ok) setType(previous);
+  }
+
   function editMeal(meal: Meal) {
     setEditingId(meal.id);
     const servingType: ServingType =
@@ -743,9 +759,11 @@ function MealsContent() {
       if (!groups.has(slot)) groups.set(slot, []);
       groups.get(slot)!.push(log);
     }
-    return SLOT_ORDER.filter((s) => groups.has(s)).map((slot) => {
-      const logs = groups.get(slot)!;
-      return { slot, logs, calories: logs.reduce((s, l) => s + l.calories, 0) };
+    // Every slot is returned (empty ones too) so they can be drop targets
+    // while dragging; MealDropZone hides them the rest of the time.
+    return SLOT_ORDER.map((slot) => {
+      const logs = groups.get(slot) ?? [];
+      return { slot, type: slot.toLowerCase() as MealType, logs, calories: logs.reduce((s, l) => s + l.calories, 0) };
     });
   }, [todayLogs]);
 
@@ -867,8 +885,16 @@ function MealsContent() {
                   onCta={() => setMealView("library")}
                 />
               ) : (
-                todayGroups.map((group) => (
-                  <div key={group.slot} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+                <MealDndProvider
+                  onMove={(id, to) => void moveLoggedMeal(id, to)}
+                  overlay={(id) => {
+                    const log = todayLogs.find((l) => l.id === id);
+                    return log ? { name: loggedInfo(log).name, calories: log.calories } : null;
+                  }}
+                >
+                {todayGroups.map((group) => (
+                  <MealDropZone key={group.slot} type={group.type} label={`${SLOT_ICON[group.slot]} ${group.slot}`} empty={group.logs.length === 0}>
+                  <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
                     <div className="mb-3 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="text-lg">{SLOT_ICON[group.slot]}</span>
@@ -882,7 +908,10 @@ function MealsContent() {
                       {group.logs.map((log) => {
                         const info = loggedInfo(log);
                         return (
-                          <div key={log.id} className="flex items-center gap-2.5 rounded-xl bg-zinc-800/60 p-2.5">
+                          <DraggableMeal key={log.id} id={log.id}>
+                          {(handle) => (
+                          <div className="flex items-center gap-2.5 rounded-xl bg-zinc-800/60 p-2.5">
+                            {handle}
                             <MealAvatar meal={info} />
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-medium text-white">{info.name}</p>
@@ -904,6 +933,8 @@ function MealsContent() {
                               ✕
                             </button>
                           </div>
+                          )}
+                          </DraggableMeal>
                         );
                       })}
                     </div>
@@ -914,7 +945,9 @@ function MealsContent() {
                       + Add meal
                     </button>
                   </div>
-                ))
+                  </MealDropZone>
+                ))}
+                </MealDndProvider>
               )}
             </div>
           )}

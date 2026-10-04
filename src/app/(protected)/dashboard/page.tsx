@@ -9,6 +9,7 @@ import { MacroChip } from "@/components/ui/MacroChip";
 import { SectionHeader, EmptyState, Skeleton } from "@/components/ui/Primitives";
 import { METRICS, SEMANTIC, scoreColor, percent } from "@/lib/metrics";
 import { mealTypeForLog, type MealType } from "@/lib/meal-type";
+import { DraggableMeal, MealDndProvider, MealDropZone } from "@/components/MealDnd";
 import { buildInsights, type InsightLevel } from "@/lib/nutrition-insights";
 
 const FoodDatabaseModal = dynamic(() => import("@/components/FoodDatabaseModal"), { ssr: false });
@@ -235,6 +236,21 @@ export default function DashboardPage() {
     }
   }
 
+  async function moveMeal(id: string, to: MealType) {
+    const log = data?.mealLogs.find((entry) => entry.id === id);
+    if (!log || mealTypeForLog(log) === to) return;
+    const previous = log.mealType ?? null;
+    const setType = (mealType: string | null) =>
+      setData((p) => (p ? { ...p, mealLogs: p.mealLogs.map((e) => (e.id === id ? { ...e, mealType } : e)) } : p));
+    setType(to);
+    const response = await fetch(`/api/log-meal/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mealType: to }),
+    }).catch(() => null);
+    if (!response?.ok) setType(previous);
+  }
+
   async function adjustMeal(log: MealLog, delta: number) {
     const info = mealInfo(log);
     const deltaQuantity = info.servingLabel === "piece" ? delta : delta / info.servingSize;
@@ -420,10 +436,13 @@ export default function DashboardPage() {
       if (!groups.has(slot)) groups.set(slot, []);
       groups.get(slot)!.push(log);
     }
-    return SLOT_ORDER.filter((s) => groups.has(s)).map((slot) => {
-      const logs = groups.get(slot)!;
+    // Every slot is returned (empty ones too) so they can be drop targets
+    // while dragging; MealDropZone hides them the rest of the time.
+    return SLOT_ORDER.map((slot) => {
+      const logs = groups.get(slot) ?? [];
       return {
         slot,
+        type: slot.toLowerCase() as MealType,
         logs,
         calories: logs.reduce((sum, l) => sum + l.calories, 0),
       };
@@ -824,9 +843,17 @@ export default function DashboardPage() {
                 ctaHref={`/meals?date=${selectedDate}`}
               />
             ) : (
+              <MealDndProvider
+                onMove={(id, to) => void moveMeal(id, to)}
+                overlay={(id) => {
+                  const log = data.mealLogs.find((e) => e.id === id);
+                  return log ? { name: mealInfo(log).name, calories: log.calories } : null;
+                }}
+              >
               <div className="space-y-4">
                 {mealGroups.map((group) => (
-                  <Card key={group.slot} tier="secondary">
+                  <MealDropZone key={group.slot} type={group.type} label={`${SLOT_ICON[group.slot]} ${group.slot}`} empty={group.logs.length === 0}>
+                  <Card tier="secondary">
                     <div className="mb-3 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="text-lg">{SLOT_ICON[group.slot]}</span>
@@ -842,9 +869,12 @@ export default function DashboardPage() {
                         const isPiece = info.servingLabel === "piece";
                         const step = isPiece ? 1 : 0.5;
                         return (
-                          <div key={log.id} className="rounded-xl bg-zinc-900/70 p-3">
+                          <DraggableMeal key={log.id} id={log.id}>
+                          {(handle) => (
+                          <div className="rounded-xl bg-zinc-900/70 p-3">
                             <div className="mb-2 flex items-start justify-between gap-3">
                               <div className="flex items-center gap-2.5">
+                                {handle}
                                 {info.imageUrl ? (
                                   // eslint-disable-next-line @next/next/no-img-element
                                   <img src={info.imageUrl} alt="" className="h-9 w-9 rounded-lg object-cover" />
@@ -893,12 +923,16 @@ export default function DashboardPage() {
                               </div>
                             </div>
                           </div>
+                          )}
+                          </DraggableMeal>
                         );
                       })}
                     </div>
                   </Card>
+                  </MealDropZone>
                 ))}
               </div>
+              </MealDndProvider>
             )}
           </section>
 
