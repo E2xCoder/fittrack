@@ -67,6 +67,7 @@ export async function GET(request: Request) {
   let workout = targetSplit ? await prisma.workout.findFirst({
     where: { userId: session.user.id, split: targetSplit, date: targetDate },
     include,
+    orderBy: { createdAt: "asc" }, // same row the save endpoint updates
   }) : null;
 
   // No entry saved for the viewed date yet. Only prefill from the most recent

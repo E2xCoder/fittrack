@@ -470,38 +470,76 @@ function WorkoutPageInner() {
     saveTimerRef.current = setTimeout(doAutoSave, delayMs);
   }
 
-  async function doAutoSave() {
-    const exs   = exercisesRef.current;
-    const n     = notesRef.current;
-    const split = splitRef.current;
+  // Saves are strictly one at a time: a request that overlapped the previous
+  // one used to race on the server (delete + recreate) and duplicate exercises.
+  // Edits made while a save is in flight just mark it dirty and are sent in a
+  // follow-up save with the latest state.
+  const savingRef = useRef(false);
+  const dirtyRef  = useRef(false);
+
+  async function doAutoSave(keepalive = false) {
+    saveTimerRef.current = null;
+    if (savingRef.current) { dirtyRef.current = true; return; }
+    savingRef.current = true;
     try {
-      await fetch("/api/workouts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          split,
-          date: selectedDateRef.current,
-          notes: n,
-          exercises: exs.map((ex, i) => ({
-            name: ex.name,
-            orderIndex: i,
-            sets: ex.sets.map((s, j) => ({
-              setNumber: j + 1,
-              weight: Number(s.weight) || null,
-              reps:   Number(s.reps)   || null,
-              sets:   Number(s.sets)   || 1,
-              rpe:    Number(s.rpe)    || null,
+      do {
+        dirtyRef.current = false;
+        const exs   = exercisesRef.current;
+        const split = splitRef.current;
+        await fetch("/api/workouts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          keepalive,
+          body: JSON.stringify({
+            split,
+            date: selectedDateRef.current,
+            notes: notesRef.current,
+            exercises: exs.map((ex, i) => ({
+              name: ex.name,
+              orderIndex: i,
+              sets: ex.sets.map((s, j) => ({
+                setNumber: j + 1,
+                weight: Number(s.weight) || null,
+                reps:   Number(s.reps)   || null,
+                sets:   Number(s.sets)   || 1,
+                rpe:    Number(s.rpe)    || null,
+              })),
             })),
-          })),
-        }),
-      });
-      posthog.capture("workout_saved", { split, exerciseCount: exs.length });
+          }),
+        });
+        posthog.capture("workout_saved", { split, exerciseCount: exs.length });
+      } while (dirtyRef.current && isReadyRef.current);
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 2000);
     } catch {
       setSaveStatus("idle");
+    } finally {
+      savingRef.current = false;
     }
   }
+
+  // Leaving the page (tab hidden, closed, or navigating away in the app)
+  // within the debounce window used to drop the last edit, e.g. a deleted
+  // exercise coming back. Send any pending save right away instead.
+  const flushSaveRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    flushSaveRef.current = () => {
+      if (!saveTimerRef.current) return;
+      clearTimeout(saveTimerRef.current);
+      void doAutoSave(true);
+    };
+  });
+  useEffect(() => {
+    const flush  = () => flushSaveRef.current();
+    const onHide = () => { if (document.visibilityState === "hidden") flush(); };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, []);
 
   // ── Drag & Drop ────────────────────────────────────────────────────────────
 
