@@ -867,7 +867,7 @@ function MealsContent() {
               <div className="rounded-2xl border border-zinc-700/70 bg-zinc-900 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-3">
                   <div>
-                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">{dayLabel ? `${dayLabel} total` : "Today's total"}</p>
+                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">{dayLabel ? "Day total" : "Today's total"}</p>
                     <p className="text-2xl font-bold tabular-nums" style={{ color: METRICS.calories.hex }}>
                       {Math.round(todayTotals.calories)}
                       {todayGoals && <span className="ml-1 text-sm font-medium text-zinc-500">/ {todayGoals.calories} kcal</span>}
@@ -877,9 +877,10 @@ function MealsContent() {
                   {dateParam && (
                     <Link
                       href={`/dashboard?date=${dateParam}`}
+                      aria-label={`Open ${dayLabel} on Home`}
                       className="order-last w-full rounded-xl border border-zinc-700 bg-zinc-800/70 px-3 py-1.5 text-center text-xs font-semibold text-zinc-200 transition hover:border-green-700 hover:text-green-300 sm:order-none sm:w-auto"
                     >
-                      📅 Open this day on Home →
+                      📅 {dayLabel} →
                     </Link>
                   )}
                   <div className="flex gap-1.5">
