@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Card, LinkCard } from "@/components/ui/Card";
 import { ProgressBar, ProgressRing } from "@/components/ui/Progress";
 import { MacroChip } from "@/components/ui/MacroChip";
@@ -151,10 +152,10 @@ function slotFor(log: MealLog): MealSlot {
   return TYPE_TO_SLOT[mealTypeForLog(log)];
 }
 
-export default function DashboardPage() {
+function DashboardContent({ initialDate }: { initialDate: string }) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState(toDateString(new Date()));
+  const [selectedDate, setSelectedDate] = useState(initialDate);
   const [showGymPicker, setShowGymPicker] = useState(false);
   const [savingGym, setSavingGym] = useState(false);
   const workoutCardRef = useRef<HTMLDivElement>(null);
@@ -1044,5 +1045,21 @@ function Legend({ color, label }: { color: string; label: string }) {
       <div className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
       <span>{label}</span>
     </div>
+  );
+}
+
+// "/dashboard?date=YYYY-MM-DD" opens that day (used by the "open day" link on
+// the Meals page). Anything that isn't a real calendar date is ignored.
+function DashboardWithDate() {
+  const param = useSearchParams().get("date");
+  const valid = param && /^\d{4}-\d{2}-\d{2}$/.test(param) && !Number.isNaN(new Date(param + "T12:00:00").getTime());
+  return <DashboardContent initialDate={valid ? param : toDateString(new Date())} />;
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <DashboardWithDate />
+    </Suspense>
   );
 }

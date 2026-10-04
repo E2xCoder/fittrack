@@ -860,7 +860,7 @@ function MealsContent() {
             <div className="space-y-4">
               {/* Day summary */}
               <div className="rounded-2xl border border-zinc-700/70 bg-zinc-900 p-4">
-                <div className="flex items-baseline justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-3">
                   <div>
                     <p className="text-[11px] uppercase tracking-wide text-zinc-500">Today&apos;s total</p>
                     <p className="text-2xl font-bold tabular-nums" style={{ color: METRICS.calories.hex }}>
@@ -868,6 +868,15 @@ function MealsContent() {
                       {todayGoals && <span className="ml-1 text-sm font-medium text-zinc-500">/ {todayGoals.calories} kcal</span>}
                     </p>
                   </div>
+                  {/* When a specific day is open, jump to that day on Home (Home itself always opens today). */}
+                  {dateParam && (
+                    <Link
+                      href={`/dashboard?date=${dateParam}`}
+                      className="order-last w-full rounded-xl border border-zinc-700 bg-zinc-800/70 px-3 py-1.5 text-center text-xs font-semibold text-zinc-200 transition hover:border-green-700 hover:text-green-300 sm:order-none sm:w-auto"
+                    >
+                      📅 Open this day on Home →
+                    </Link>
+                  )}
                   <div className="flex gap-1.5">
                     <MacroChip metric="protein" value={todayTotals.protein} size="md" />
                     <MacroChip metric="carbs" value={todayTotals.carbs} size="md" />
@@ -915,7 +924,7 @@ function MealsContent() {
                             <MealAvatar meal={info} />
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-medium text-white">{info.name}</p>
-                              <div className="mt-1 flex items-center gap-1.5">
+                              <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
                                 <span className="text-xs font-bold tabular-nums" style={{ color: METRICS.calories.hex }}>
                                   {Math.round(log.calories)}
                                 </span>
