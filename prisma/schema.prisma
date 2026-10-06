@@ -53,6 +53,7 @@ model User {
 
   meals             Meal[]
   mealPacks         MealPack[]
+  mealPlan          MealPlan?
   mealLogs          MealLog[]
   mealCategories    UserMealCategory[]
   dailyLogs         DailyLog[]
@@ -419,4 +420,19 @@ model Passkey {
   @@index([userId])
   @@index([credentialID])
   @@map("passkey")
+}
+
+// The user's current AI meal plan (one per user; generating a new one replaces it).
+// Numbers in `days` are computed server-side from the user's own meal library.
+model MealPlan {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  startDate  String // YYYY-MM-DD, day 1 of the plan
+  target     Json
+  days       Json
+  loggedDays Int[]    @default([]) // plan day indexes already logged to the diary
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

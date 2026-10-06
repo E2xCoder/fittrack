@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { assemblePlan, isPlannable, type LibraryMeal } from "@/lib/meal-plan";
+import { saveMealPlan } from "@/lib/meal-plan-store";
+import { toDateString } from "@/lib/date";
 
 export const maxDuration = 60;
 
@@ -38,7 +40,7 @@ export async function POST(request: Request) {
   const [user, meals] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { calorieTarget: true, proteinTarget: true, carbTarget: true, fatTarget: true, dietaryPreferences: true },
+      select: { calorieTarget: true, proteinTarget: true, carbTarget: true, fatTarget: true, dietaryPreferences: true, timezone: true },
     }),
     prisma.meal.findMany({
       where: { userId: session.user.id },
@@ -120,5 +122,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "The AI didn't return a usable plan, please try again." }, { status: 502 });
   }
 
-  return NextResponse.json({ target, days: plan });
+  // The new plan replaces the saved one, so it follows the user across devices.
+  const startDate = toDateString(new Date(), user.timezone ?? "Europe/Berlin");
+  const saved = await saveMealPlan(prisma, session.user.id, { startDate, target, days: plan });
+  return NextResponse.json(saved);
 }

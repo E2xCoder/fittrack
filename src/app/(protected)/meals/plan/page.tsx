@@ -9,13 +9,13 @@ import { METRICS } from "@/lib/metrics";
 import { ProgressBar } from "@/components/ui/Progress";
 import { macroDeviations, type Macros, type PlanDay } from "@/lib/meal-plan";
 
-const STORAGE_KEY = "fittrack-meal-plan-v1";
 const SLOT_META = Object.fromEntries(MEAL_TYPE_OPTIONS.map((o) => [o.value, o]));
 
 interface StoredPlan {
   target: Macros;
   days: PlanDay[];
   startDate: string;
+  loggedDays: number[];
 }
 
 function addDays(date: string, n: number): string {
@@ -33,26 +33,27 @@ export default function MealPlanPage() {
   const [plan, setPlan] = useState<StoredPlan | null>(null);
   const [active, setActive] = useState(0);
   const [logging, setLogging] = useState<number | null>(null);
-  const [logged, setLogged] = useState<Record<number, boolean>>({});
+  const [restoring, setRestoring] = useState(true);
+  const logged = new Set(plan?.loggedDays ?? []);
 
+  // The plan is saved on the server (it follows you across devices).
   useEffect(() => {
-    queueMicrotask(() => {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) setPlan(JSON.parse(raw) as StoredPlan);
-      } catch {
-        /* ignore corrupt storage */
-      }
-    });
+    let cancelled = false;
+    fetch("/api/meal-plan/current")
+      .then((r) => (r.ok ? r.json() : { plan: null }))
+      .then((d) => { if (!cancelled) setPlan(d.plan ?? null); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setRestoring(false); });
+    return () => { cancelled = true; };
   }, []);
 
-  function persist(p: StoredPlan | null) {
-    setPlan(p);
-    try {
-      if (p) localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
-      else localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* storage unavailable */
+  async function clearPlan() {
+    const previous = plan;
+    setPlan(null);
+    const res = await fetch("/api/meal-plan/current", { method: "DELETE" }).catch(() => null);
+    if (!res?.ok) {
+      setPlan(previous);
+      setError("Couldn't clear the plan — try again.");
     }
   }
 
@@ -70,9 +71,8 @@ export default function MealPlanPage() {
         setError(data.error ?? "Could not generate a plan.");
         return;
       }
-      persist({ target: data.target, days: data.days, startDate: toDateString(new Date()) });
+      setPlan({ target: data.target, days: data.days, startDate: data.startDate, loggedDays: data.loggedDays ?? [] });
       setActive(0);
-      setLogged({});
       posthog.capture("meal_plan_generated", { days: data.days.length });
     } catch {
       setError("Something went wrong — try again.");
@@ -99,7 +99,12 @@ export default function MealPlanPage() {
     if (results.some((r) => r.status === "rejected")) {
       setError("Some items couldn't be logged (a meal may have been deleted). Check the day before retrying.");
     } else {
-      setLogged((p) => ({ ...p, [index]: true }));
+      setPlan((p) => (p ? { ...p, loggedDays: [...new Set([...p.loggedDays, index])] } : p));
+      void fetch("/api/meal-plan/current", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ loggedDay: index }),
+      }).catch(() => {});
       posthog.capture("meal_plan_day_logged");
     }
     setLogging(null);
@@ -154,7 +159,7 @@ export default function MealPlanPage() {
         </label>
         <button
           onClick={generate}
-          disabled={loading}
+          disabled={loading || restoring}
           className="w-full rounded-2xl bg-green-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-green-900/30 transition-colors hover:bg-green-500 disabled:opacity-50"
         >
           {loading ? "Planning your week…" : plan ? "✨ Generate a new plan" : "✨ Generate plan"}
@@ -243,17 +248,17 @@ export default function MealPlanPage() {
 
           <button
             onClick={() => logDay(active)}
-            disabled={logging !== null || logged[active]}
+            disabled={logging !== null || logged.has(active)}
             className="mt-4 w-full rounded-2xl bg-green-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-green-900/30 transition-colors hover:bg-green-500 disabled:opacity-50"
           >
-            {logged[active]
+            {logged.has(active)
               ? `✓ Logged to ${dateLabel(active)}`
               : logging === active
                 ? "Logging…"
                 : `Log this day to ${dateLabel(active)}`}
           </button>
           <button
-            onClick={() => persist(null)}
+            onClick={() => void clearPlan()}
             className="mt-2 w-full rounded-2xl py-2.5 text-xs text-zinc-500 hover:text-zinc-300"
           >
             Clear plan
