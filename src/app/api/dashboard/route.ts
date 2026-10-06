@@ -142,6 +142,7 @@ export async function GET(request: Request) {
     sleep: bodyLog?.sleep ?? 0,
     isGymDay: dailyLog?.isGymDay ?? false,
     gymSplit: dailyLog?.gymSplit ?? null,
+    notes: dailyLog?.notes ?? "",
     splits: splits ?? [],
     latestWeightLog,
     latestMeasurementLog,

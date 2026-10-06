@@ -77,6 +77,7 @@ interface DashboardData {
   sleep: number;
   isGymDay: boolean;
   gymSplit: string | null;
+  notes: string;
   splits: UserSplit[];
   latestWeightLog?: SnapshotLog | null;
   latestMeasurementLog?: SnapshotLog | null;
@@ -954,6 +955,12 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
             </MealDndProvider>
           </section>
 
+          {/* ── Day note ── */}
+          <section>
+            <SectionHeader eyebrow="Notes" title={isToday ? "About today" : "About this day"} />
+            <DayNotes key={selectedDate} date={selectedDate} initial={data.notes ?? ""} />
+          </section>
+
           {/* ── 7. Weekly glance ── */}
           <section>
             <SectionHeader eyebrow="This week" title="Consistency at a glance" />
@@ -1007,6 +1014,81 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
 }
 
 // ── Small local presentational helpers ──────────────────────────────────────
+
+// Free-text note for the viewed day. Saves a moment after typing stops, when the
+// field loses focus, and when leaving the page. `edited` stays null until the
+// user types, so a refetch can still update what's shown.
+function DayNotes({ date, initial }: { date: string; initial: string }) {
+  const [edited, setEdited] = useState<string | null>(null);
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const value = edited ?? initial;
+  const savedRef = useRef(initial.trim());
+  const latestRef = useRef(initial);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function save(keepalive = false) {
+    timerRef.current = null;
+    const text = latestRef.current.trim();
+    if (text === savedRef.current) { setStatus("idle"); return; }
+    setStatus("saving");
+    try {
+      const res = await fetch("/api/daily-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive,
+        body: JSON.stringify({ date, notes: text }),
+      });
+      if (!res.ok) throw new Error("save failed");
+      savedRef.current = text;
+      setStatus("saved");
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  function onChange(text: string) {
+    setEdited(text);
+    latestRef.current = text;
+    setStatus("idle");
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => void save(), 1200);
+  }
+
+  // Leaving (in-app navigation, tab hidden, page closed) inside the typing delay
+  // must not drop the last edit, so flush right away.
+  useEffect(() => {
+    const flush = () => {
+      if (timerRef.current) { clearTimeout(timerRef.current); void save(true); }
+    };
+    const onHide = () => { if (document.visibilityState === "hidden") flush(); };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <Card tier="secondary">
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => { if (timerRef.current) { clearTimeout(timerRef.current); void save(); } }}
+        maxLength={1000}
+        rows={3}
+        placeholder="How did the day go? Sleep, cravings, anything worth remembering…"
+        aria-label="Day note"
+        className="w-full resize-none rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-zinc-600"
+      />
+      <p className="mt-1.5 h-4 text-right text-[11px] text-zinc-500" aria-live="polite">
+        {status === "saving" ? "Saving…" : status === "saved" ? "Saved ✓" : status === "error" ? "Couldn't save — try again" : ""}
+      </p>
+    </Card>
+  );
+}
 
 const INSIGHT_ICON: Record<InsightLevel, string> = { good: "✅", warn: "⚠️", info: "💡" };
 const INSIGHT_ACCENT: Record<InsightLevel, string> = { good: "#22c55e", warn: "#f59e0b", info: "#60a5fa" };

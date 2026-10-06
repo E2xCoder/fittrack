@@ -35,11 +35,16 @@ export async function POST(request: Request) {
     });
   }
 
+  // Notes: only touched when the client sends the field; empty text clears it.
+  const notes =
+    typeof body.notes === "string" ? body.notes.trim().slice(0, 1000) || null : dailyLog.notes;
+
   const updated = await prisma.dailyLog.update({
     where: { id: dailyLog.id },
     data: {
       isGymDay: body.isGymDay ?? dailyLog.isGymDay,
       gymSplit: body.gymSplit ?? dailyLog.gymSplit,
+      notes,
     },
   });
 
