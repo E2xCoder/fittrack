@@ -48,6 +48,16 @@ export async function markDayLogged(db: PrismaClient, userId: string, index: num
   return true;
 }
 
+/** Swaps in an edited day. Returns false if there is no plan or no such day. */
+export async function replacePlanDay(db: PrismaClient, userId: string, index: number, day: PlanDay): Promise<boolean> {
+  const row = await db.mealPlan.findUnique({ where: { userId }, select: { days: true } });
+  const days = row ? ([...(row.days as unknown as PlanDay[])]) : null;
+  if (!days || !Number.isInteger(index) || index < 0 || index >= days.length) return false;
+  days[index] = day;
+  await db.mealPlan.update({ where: { userId }, data: { days: days as unknown as object } });
+  return true;
+}
+
 export async function clearMealPlan(db: PrismaClient, userId: string): Promise<void> {
   await db.mealPlan.deleteMany({ where: { userId } });
 }

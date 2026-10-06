@@ -38,7 +38,7 @@ export interface PlanDay {
 const STEP = 0.25;
 const roundStep = (n: number) => Math.round(n / STEP) * STEP;
 // Countable items (eggs, slices) move in whole pieces; weighed ones in quarter servings.
-function clampQtyFor(m: LibraryMeal, q: number): number {
+export function clampQtyFor(m: Pick<LibraryMeal, "servingLabel">, q: number): number {
   if (m.servingLabel === "piece") return Math.min(6, Math.max(1, Math.round(q)));
   return Math.min(5, Math.max(STEP, roundStep(q)));
 }
@@ -84,6 +84,34 @@ function finishDay(meals: { slot: MealType; picks: { meal: LibraryMeal; quantity
   return { meals: built, totals: sumItems(built.flatMap((m) => m.items)) };
 }
 
+type Picked = { slot: MealType; picks: { meal: LibraryMeal; quantity: number }[] }[];
+
+// ids + quantities in, library meals + clamped quantities out. Unknown ids are dropped.
+function picksFromRaw(rawMeals: unknown[], byId: Map<string, LibraryMeal>): Picked {
+  const meals: Picked = [];
+  for (const rawMeal of rawMeals) {
+    const rm = (rawMeal ?? {}) as { slot?: unknown; items?: unknown };
+    const slot = parseMealType(rm.slot) ?? "snack";
+    const picks: { meal: LibraryMeal; quantity: number }[] = [];
+    for (const rawItem of Array.isArray(rm.items) ? rm.items : []) {
+      const ri = (rawItem ?? {}) as { mealId?: unknown; quantity?: unknown };
+      const meal = typeof ri.mealId === "string" ? byId.get(ri.mealId) : undefined;
+      if (!meal) continue;
+      const q = Number(ri.quantity);
+      picks.push({ meal, quantity: clampQtyFor(meal, Number.isFinite(q) && q > 0 ? q : 1) });
+    }
+    if (picks.length) meals.push({ slot, picks });
+  }
+  return meals;
+}
+
+// A day the user edited by hand: same rebuild from ids + quantities, but never
+// rescaled to the calorie target (the user chose these amounts). May be empty.
+export function buildDay(rawMeals: unknown, library: LibraryMeal[]): PlanDay {
+  const byId = new Map(library.map((m) => [m.id, m]));
+  return finishDay(picksFromRaw(Array.isArray(rawMeals) ? rawMeals : [], byId));
+}
+
 // Turns the model's picks (ids + quantities only) into a plan whose numbers
 // all come from the user's own library. Unknown ids are dropped, quantities
 // are clamped, and a day that misses the calorie target by >8% is scaled once.
@@ -99,20 +127,7 @@ export function assemblePlan(raw: unknown, library: LibraryMeal[], target: Macro
       ? (rawDay as { meals: unknown[] }).meals
       : [];
 
-    const meals: { slot: MealType; picks: { meal: LibraryMeal; quantity: number }[] }[] = [];
-    for (const rawMeal of rawMeals) {
-      const rm = (rawMeal ?? {}) as { slot?: unknown; items?: unknown };
-      const slot = parseMealType(rm.slot) ?? "snack";
-      const picks: { meal: LibraryMeal; quantity: number }[] = [];
-      for (const rawItem of Array.isArray(rm.items) ? rm.items : []) {
-        const ri = (rawItem ?? {}) as { mealId?: unknown; quantity?: unknown };
-        const meal = typeof ri.mealId === "string" ? byId.get(ri.mealId) : undefined;
-        if (!meal) continue;
-        const q = Number(ri.quantity);
-        picks.push({ meal, quantity: clampQtyFor(meal, Number.isFinite(q) && q > 0 ? q : 1) });
-      }
-      if (picks.length) meals.push({ slot, picks });
-    }
+    const meals = picksFromRaw(rawMeals, byId);
     if (!meals.length) continue;
 
     let day = finishDay(meals);

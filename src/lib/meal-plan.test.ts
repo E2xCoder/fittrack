@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assemblePlan, isPlannable, macroDeviations, type LibraryMeal } from "./meal-plan";
+import { assemblePlan, buildDay, isPlannable, macroDeviations, type LibraryMeal } from "./meal-plan";
 
 const lib: LibraryMeal[] = [
   { id: "oats", name: "Oats", calories: 300, protein: 10, carbs: 50, fat: 6, servingSize: 80, servingLabel: "g" },
@@ -72,5 +72,31 @@ describe("macroDeviations", () => {
     const w = macroDeviations({ calories: 1957, protein: 141, carbs: 305, fat: 37 }, { calories: 2050, protein: 138, carbs: 190, fat: 70 });
     expect(w).toEqual(["Carbs is 61% over target", "Fat is 47% under target"]);
     expect(macroDeviations({ calories: 2000, protein: 140, carbs: 190, fat: 70 }, { calories: 2050, protein: 138, carbs: 190, fat: 70 })).toEqual([]);
+  });
+});
+
+describe("buildDay (hand-edited days)", () => {
+  it("recomputes from the library and does NOT rescale to the calorie target", () => {
+    const day = buildDay([{ slot: "lunch", items: [{ mealId: "rice", quantity: 1, calories: 1 }] }], lib);
+    expect(day.totals.calories).toBe(500); // far below the 1000 target, left as chosen
+    expect(day.meals[0].items[0].calories).toBe(500);
+  });
+
+  it("drops unknown ids, clamps quantities by unit and keeps the slot", () => {
+    const day = buildDay(
+      [{ slot: "breakfast", items: [{ mealId: "egg", quantity: 2.4 }, { mealId: "oats", quantity: 0.1 }, { mealId: "ghost", quantity: 1 }] }],
+      lib
+    );
+    const [egg, oats] = day.meals[0].items;
+    expect(day.meals[0].slot).toBe("breakfast");
+    expect(day.meals[0].items).toHaveLength(2);
+    expect(egg.quantity).toBe(2); // pieces are whole
+    expect(oats.quantity).toBe(0.25); // weighed items bottom out at a quarter serving
+  });
+
+  it("allows an emptied day and ignores junk input", () => {
+    expect(buildDay([], lib)).toEqual({ meals: [], totals: { calories: 0, protein: 0, carbs: 0, fat: 0 } });
+    expect(buildDay("nope", lib).meals).toEqual([]);
+    expect(buildDay([{ slot: "lunch", items: [{ mealId: "ghost", quantity: 1 }] }], lib).meals).toEqual([]);
   });
 });

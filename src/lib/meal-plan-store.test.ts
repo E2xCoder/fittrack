@@ -1,18 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { clearMealPlan, getMealPlan, markDayLogged, saveMealPlan } from "./meal-plan-store";
+import { clearMealPlan, getMealPlan, markDayLogged, replacePlanDay, saveMealPlan } from "./meal-plan-store";
 import type { PlanDay } from "./meal-plan";
 
 // In-memory stand-in for the one table the store touches.
 function fakeDb() {
   let row: { userId: string; startDate: string; target: unknown; days: unknown; loggedDays: number[] } | null = null;
   const mealPlan = {
-    findUnique: vi.fn(async () => (row ? { ...row } : null)),
+    findUnique: vi.fn(async ({ where }: { where: { userId: string } }) => (row && row.userId === where.userId ? { ...row } : null)),
     upsert: vi.fn(async ({ create, update }: { create: NonNullable<typeof row>; update: Partial<NonNullable<typeof row>> }) => {
       row = row ? { ...row, ...update } : { ...create };
     }),
-    update: vi.fn(async ({ data }: { data: { loggedDays: { push: number } } }) => {
-      if (row) row.loggedDays = [...row.loggedDays, data.loggedDays.push];
+    update: vi.fn(async ({ data }: { data: { loggedDays?: { push: number }; days?: unknown } }) => {
+      if (!row) return;
+      if (data.loggedDays) row.loggedDays = [...row.loggedDays, data.loggedDays.push];
+      if (data.days) row.days = data.days;
     }),
     deleteMany: vi.fn(async () => { row = null; }),
   };
@@ -58,6 +60,15 @@ describe("meal plan store", () => {
     const plan = await getMealPlan(db, "u1");
     expect(plan?.startDate).toBe("2026-10-08");
     expect(plan?.loggedDays).toEqual([]);
+  });
+
+  it("replaces one day and leaves the others alone", async () => {
+    const { db } = fakeDb();
+    await saveMealPlan(db, "u1", { startDate: "2026-10-07", target, days: [day(1), day(2), day(3)] });
+    expect(await replacePlanDay(db, "u1", 1, day(999))).toBe(true);
+    expect((await getMealPlan(db, "u1"))?.days.map((d) => d.totals.calories)).toEqual([1, 999, 3]);
+    expect(await replacePlanDay(db, "u1", 3, day(5))).toBe(false);
+    expect(await replacePlanDay(db, "nobody", 0, day(5))).toBe(false);
   });
 
   it("clears the plan", async () => {
