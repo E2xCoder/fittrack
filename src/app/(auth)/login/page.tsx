@@ -20,6 +20,8 @@ export default function LoginPage() {
   const [needsTwoFactor, setNeedsTwoFactor] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   const [verifying, setVerifying] = useState(false);
+  // On by default so a personal phone/laptop isn't asked for the code every time.
+  const [trustDevice, setTrustDevice] = useState(true);
 
   async function handleLogin() {
     setLoading(true);
@@ -39,7 +41,7 @@ export default function LoginPage() {
   async function handleVerifyTwoFactor() {
     setVerifying(true);
     setError("");
-    const { error } = await authClient.twoFactor.verifyTotp({ code: otpCode });
+    const { error } = await authClient.twoFactor.verifyTotp({ code: otpCode, trustDevice });
     if (error) {
       setError(error.message ?? "Invalid code");
       setVerifying(false);
@@ -78,6 +80,19 @@ export default function LoginPage() {
               className="rounded-2xl bg-zinc-900 p-3 text-center text-lg tracking-widest outline-none focus:ring-1 focus:ring-zinc-600"
               autoFocus
             />
+
+            <label className="flex cursor-pointer items-center gap-2.5 rounded-xl bg-zinc-900/60 px-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={trustDevice}
+                onChange={(e) => setTrustDevice(e.target.checked)}
+                className="h-4 w-4 accent-green-600"
+              />
+              <span className="text-sm text-zinc-300">
+                Trust this device
+                <span className="block text-[11px] text-zinc-500">No code needed here for the next 90 days. Untick on a shared computer.</span>
+              </span>
+            </label>
 
             {error && <p className="text-sm text-red-400">{error}</p>}
 
