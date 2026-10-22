@@ -35,6 +35,9 @@ export async function POST(
     });
   }
 
+  // Entries from one tap share this id, so the diary can show them as one pack.
+  const packLogId = crypto.randomUUID();
+
   let totalCalories = 0;
   let totalProtein = 0;
   let totalCarbs = 0;
@@ -70,6 +73,7 @@ export async function POST(
           carbs: meal.carbs,
           fat: meal.fat,
           fiber: meal.fiber,
+          pack: { id: pack.id, name: pack.name, logId: packLogId },
           servingLabel: meal.servingLabel,
           servingSize: meal.servingSize,
         },

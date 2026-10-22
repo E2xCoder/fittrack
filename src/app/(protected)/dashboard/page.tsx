@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, LinkCard } from "@/components/ui/Card";
 import { ProgressBar, ProgressRing } from "@/components/ui/Progress";
@@ -33,7 +33,14 @@ interface MealLog {
   createdAt?: string;
   mealType?: string | null;
   meal: ({ id: string; imageUrl?: string | null } & MealInfo) | null;
-  mealSnapshot: MealInfo | null;
+  mealSnapshot: (MealInfo & { pack?: PackRef | null }) | null;
+}
+
+// Set on entries that were logged by tapping "Add All" on a pack.
+interface PackRef {
+  id: string;
+  name: string;
+  logId: string;
 }
 
 interface Goals {
@@ -432,6 +439,84 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
       allDone: actions.length === 0,
     };
   }, [data, selectedDate, todayStr]);
+
+  // One logged entry as a card (used for single entries).
+  const renderLogRow = (log: MealLog, handle: ReactNode) => {
+    const info = mealInfo(log);
+    const isPiece = info.servingLabel === "piece";
+    const step = isPiece ? 1 : 0.5;
+    return (
+      <div className="rounded-xl bg-zinc-900/70 p-3">
+        <div className="mb-2 flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            {handle}
+            {info.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={info.imageUrl} alt="" className="h-9 w-9 rounded-lg object-cover" />
+            ) : (
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-800 text-sm">🍴</div>
+            )}
+            <div>
+              <p className="text-sm font-medium text-white">{info.name}</p>
+              <p className="text-xs tabular-nums" style={{ color: METRICS.calories.hex }}>
+                {Math.round(log.calories)} kcal
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => void removeMeal(log.id)}
+            aria-label={`Remove ${info.name}`}
+            className="rounded-lg bg-zinc-800 px-2 py-1 text-xs text-zinc-400 hover:bg-red-900 hover:text-red-300"
+          >
+            Remove
+          </button>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <MacroChip metric="protein" value={log.protein} />
+            <MacroChip metric="carbs" value={log.carbs} />
+            <MacroChip metric="fat" value={log.fat} />
+            {log.fiber != null && log.fiber > 0 && <MacroChip metric="fiber" value={log.fiber} />}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void adjustMeal(log, -step)}
+              aria-label="Decrease quantity"
+              className="h-7 w-7 rounded-lg bg-zinc-800 text-sm hover:bg-zinc-700"
+            >
+              −
+            </button>
+            <span className="min-w-14 text-center text-xs font-medium tabular-nums">{formatQuantity(log)}</span>
+            <button
+              onClick={() => void adjustMeal(log, step)}
+              aria-label="Increase quantity"
+              className="h-7 w-7 rounded-lg bg-zinc-800 text-sm hover:bg-zinc-700"
+            >
+              +
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const [openPacks, setOpenPacks] = useState<Set<string>>(new Set());
+  const togglePack = (key: string) =>
+    setOpenPacks((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+
+  // Moving a pack moves every entry that came from it.
+  function onDropMove(id: string, to: MealType) {
+    if (id.startsWith("pack:")) {
+      const logId = id.slice(5);
+      for (const l of data?.mealLogs ?? []) if (l.mealSnapshot?.pack?.logId === logId) void moveMeal(l.id, to);
+    } else {
+      void moveMeal(id, to);
+    }
+  }
 
   // Fibre is summed from the entries, so edits and removals are reflected at once.
   const fiberInfo = useMemo(() => {
@@ -878,8 +963,14 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
               </p>
             )}
             <MealDndProvider
-                onMove={(id, to) => void moveMeal(id, to)}
+                onMove={onDropMove}
                 overlay={(id) => {
+                  if (id.startsWith("pack:")) {
+                    const items = data.mealLogs.filter((e) => e.mealSnapshot?.pack?.logId === id.slice(5));
+                    return items.length
+                      ? { name: `📦 ${items[0].mealSnapshot?.pack?.name ?? "Pack"}`, calories: items.reduce((s, l) => s + l.calories, 0) }
+                      : null;
+                  }
                   const log = data.mealLogs.find((e) => e.id === id);
                   return log ? { name: mealInfo(log).name, calories: log.calories } : null;
                 }}
@@ -900,70 +991,24 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
                       )}
                     </div>
                     <div className="space-y-2.5">
-                      {group.logs.map((log) => {
-                        const info = mealInfo(log);
-                        const isPiece = info.servingLabel === "piece";
-                        const step = isPiece ? 1 : 0.5;
-                        return (
-                          <DraggableMeal key={log.id} id={log.id}>
-                          {(handle) => (
-                          <div className="rounded-xl bg-zinc-900/70 p-3">
-                            <div className="mb-2 flex items-start justify-between gap-3">
-                              <div className="flex items-center gap-2.5">
-                                {handle}
-                                {info.imageUrl ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img src={info.imageUrl} alt="" className="h-9 w-9 rounded-lg object-cover" />
-                                ) : (
-                                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-800 text-sm">🍴</div>
-                                )}
-                                <div>
-                                  <p className="text-sm font-medium text-white">{info.name}</p>
-                                  <p className="text-xs tabular-nums" style={{ color: METRICS.calories.hex }}>
-                                    {Math.round(log.calories)} kcal
-                                  </p>
-                                </div>
-                              </div>
-                              <button
-                                onClick={() => void removeMeal(log.id)}
-                                aria-label={`Remove ${info.name}`}
-                                className="rounded-lg bg-zinc-800 px-2 py-1 text-xs text-zinc-400 hover:bg-red-900 hover:text-red-300"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-1.5">
-                                <MacroChip metric="protein" value={log.protein} />
-                                <MacroChip metric="carbs" value={log.carbs} />
-                                <MacroChip metric="fat" value={log.fat} />
-                                {log.fiber != null && log.fiber > 0 && <MacroChip metric="fiber" value={log.fiber} />}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => void adjustMeal(log, -step)}
-                                  aria-label="Decrease quantity"
-                                  className="h-7 w-7 rounded-lg bg-zinc-800 text-sm hover:bg-zinc-700"
-                                >
-                                  −
-                                </button>
-                                <span className="min-w-14 text-center text-xs font-medium tabular-nums">
-                                  {formatQuantity(log)}
-                                </span>
-                                <button
-                                  onClick={() => void adjustMeal(log, step)}
-                                  aria-label="Increase quantity"
-                                  className="h-7 w-7 rounded-lg bg-zinc-800 text-sm hover:bg-zinc-700"
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                          )}
+                      {groupEntries(group.logs).map((entry) =>
+                        entry.kind === "log" ? (
+                          <DraggableMeal key={entry.log.id} id={entry.log.id}>
+                            {(handle) => renderLogRow(entry.log, handle)}
                           </DraggableMeal>
-                        );
-                      })}
+                        ) : (
+                          <PackGroupCard
+                            key={`${group.slot}:${entry.logId}`}
+                            logId={entry.logId}
+                            name={entry.name}
+                            logs={entry.logs}
+                            open={openPacks.has(entry.logId)}
+                            onToggle={() => togglePack(entry.logId)}
+                            onRemoveAll={() => entry.logs.forEach((l) => void removeMeal(l.id))}
+                            onRemoveItem={(id) => void removeMeal(id)}
+                          />
+                        )
+                      )}
                     </div>
                     <button
                       type="button"
@@ -1044,6 +1089,146 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
 }
 
 // ── Small local presentational helpers ──────────────────────────────────────
+
+type MealEntry =
+  | { kind: "log"; log: MealLog }
+  | { kind: "pack"; logId: string; name: string; logs: MealLog[] };
+
+// Entries that came from the same "Add All" tap show as one pack row. A pack
+// only collapses when at least two of its entries are in this meal, so a lone
+// leftover item stays a normal row.
+function groupEntries(logs: MealLog[]): MealEntry[] {
+  const byPack = new Map<string, MealLog[]>();
+  for (const l of logs) {
+    const p = l.mealSnapshot?.pack;
+    if (p) byPack.set(p.logId, [...(byPack.get(p.logId) ?? []), l]);
+  }
+  const seen = new Set<string>();
+  const out: MealEntry[] = [];
+  for (const l of logs) {
+    const p = l.mealSnapshot?.pack;
+    const items = p ? byPack.get(p.logId) : undefined;
+    if (p && items && items.length >= 2) {
+      if (seen.has(p.logId)) continue;
+      seen.add(p.logId);
+      out.push({ kind: "pack", logId: p.logId, name: p.name, logs: items });
+    } else {
+      out.push({ kind: "log", log: l });
+    }
+  }
+  return out;
+}
+
+function PackGroupCard({
+  logId,
+  name,
+  logs,
+  open,
+  onToggle,
+  onRemoveAll,
+  onRemoveItem,
+}: {
+  logId: string;
+  name: string;
+  logs: MealLog[];
+  open: boolean;
+  onToggle: () => void;
+  onRemoveAll: () => void;
+  onRemoveItem: (id: string) => void;
+}) {
+  const sum = (f: (l: MealLog) => number) => logs.reduce((s, l) => s + f(l), 0);
+  const kcal = sum((l) => l.calories);
+  const fiber = sum((l) => l.fiber ?? 0);
+  return (
+    <DraggableMeal id={`pack:${logId}`}>
+      {(handle) => (
+        <div className="rounded-xl bg-zinc-900/70 p-3">
+          <div className="flex items-center gap-2.5">
+            {handle}
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-expanded={open}
+              aria-label={`${open ? "Hide" : "Show"} what's in ${name}`}
+              className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-800 text-base">📦</div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-white">{name}</p>
+                <p className="text-xs tabular-nums" style={{ color: METRICS.calories.hex }}>
+                  {Math.round(kcal)} kcal <span className="text-zinc-500">· {logs.length} items</span>
+                </p>
+              </div>
+              <span className="shrink-0 text-zinc-500" aria-hidden>{open ? "▾" : "▸"}</span>
+            </button>
+            <button
+              onClick={onRemoveAll}
+              aria-label={`Remove ${name}`}
+              className="shrink-0 rounded-lg bg-zinc-800 px-2 py-1 text-xs text-zinc-400 hover:bg-red-900 hover:text-red-300"
+            >
+              Remove
+            </button>
+          </div>
+
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <MacroChip metric="protein" value={sum((l) => l.protein)} />
+            <MacroChip metric="carbs" value={sum((l) => l.carbs)} />
+            <MacroChip metric="fat" value={sum((l) => l.fat)} />
+            {fiber > 0 && <MacroChip metric="fiber" value={fiber} />}
+          </div>
+
+          {open && (
+            <div className="mt-3 overflow-x-auto rounded-lg border border-zinc-800">
+              <table className="w-full text-xs tabular-nums">
+                <thead>
+                  <tr className="text-[10px] uppercase tracking-wide text-zinc-500">
+                    <th className="px-2 py-1.5 text-left font-medium">Item</th>
+                    <th className="px-1.5 py-1.5 text-right font-medium">Amount</th>
+                    <th className="px-1.5 py-1.5 text-right font-medium">kcal</th>
+                    <th className="px-1.5 py-1.5 text-right font-medium" style={{ color: METRICS.protein.hex }}>P</th>
+                    <th className="px-1.5 py-1.5 text-right font-medium" style={{ color: METRICS.carbs.hex }}>C</th>
+                    <th className="px-1.5 py-1.5 text-right font-medium" style={{ color: METRICS.fat.hex }}>F</th>
+                    <th className="w-6" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {logs.map((l) => (
+                    <tr key={l.id} className="border-t border-zinc-800/80 text-zinc-300">
+                      <td className="max-w-[8rem] truncate px-2 py-1.5 text-left text-zinc-100">{mealInfo(l).name}</td>
+                      <td className="px-1.5 py-1.5 text-right text-zinc-400">{formatQuantity(l)}</td>
+                      <td className="px-1.5 py-1.5 text-right">{Math.round(l.calories)}</td>
+                      <td className="px-1.5 py-1.5 text-right">{Math.round(l.protein)}</td>
+                      <td className="px-1.5 py-1.5 text-right">{Math.round(l.carbs)}</td>
+                      <td className="px-1.5 py-1.5 text-right">{Math.round(l.fat)}</td>
+                      <td className="pr-1.5 text-right">
+                        <button
+                          onClick={() => onRemoveItem(l.id)}
+                          aria-label={`Remove ${mealInfo(l).name}`}
+                          className="text-zinc-600 hover:text-red-400"
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="border-t border-zinc-700 font-semibold text-white">
+                    <td className="px-2 py-1.5 text-left">Total</td>
+                    <td />
+                    <td className="px-1.5 py-1.5 text-right">{Math.round(kcal)}</td>
+                    <td className="px-1.5 py-1.5 text-right">{Math.round(sum((l) => l.protein))}</td>
+                    <td className="px-1.5 py-1.5 text-right">{Math.round(sum((l) => l.carbs))}</td>
+                    <td className="px-1.5 py-1.5 text-right">{Math.round(sum((l) => l.fat))}</td>
+                    <td />
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </DraggableMeal>
+  );
+}
 
 // Free-text note for the viewed day. Saves a moment after typing stops, when the
 // field loses focus, and when leaving the page. `edited` stays null until the
