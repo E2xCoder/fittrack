@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   let baseFiber: number | null;
   let snapshot: {
     name: string; calories: number; protein: number; carbs: number; fat: number; fiber: number | null;
-    servingLabel: string; servingSize: number;
+    servingLabel: string; servingSize: number; imageUrl: string | null;
   };
 
   // Meal and timezone lookups are independent — run them in parallel.
@@ -63,6 +63,7 @@ export async function POST(request: Request) {
       carbs: meal.carbs,
       fat: meal.fat,
       fiber: baseFiber,
+      imageUrl: meal.imageUrl ?? null,
       servingLabel: meal.servingLabel,
       servingSize: meal.servingSize,
     };
@@ -79,6 +80,11 @@ export async function POST(request: Request) {
       name: body.name.trim(),
       ...base,
       fiber: baseFiber,
+      // Only plain web addresses; this ends up in an <img src>.
+      imageUrl:
+        typeof body.imageUrl === "string" && /^https?:\/\//i.test(body.imageUrl) && body.imageUrl.length <= 500
+          ? body.imageUrl
+          : null,
       servingLabel: typeof body.servingLabel === "string" ? body.servingLabel : "g",
       servingSize:  Number(body.servingSize) || 100,
     };

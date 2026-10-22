@@ -73,6 +73,7 @@ export async function POST(
           carbs: meal.carbs,
           fat: meal.fat,
           fiber: meal.fiber,
+          imageUrl: meal.imageUrl,
           pack: { id: pack.id, name: pack.name, logId: packLogId },
           servingLabel: meal.servingLabel,
           servingSize: meal.servingSize,

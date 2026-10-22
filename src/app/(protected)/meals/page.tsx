@@ -171,6 +171,85 @@ function MealAvatar({ meal }: { meal: { name: string; imageUrl?: string | null }
   );
 }
 
+// Suggests pictures for a library meal from the food database: type the name,
+// tap a thumbnail. (Products saved from the database already come with theirs.)
+function ImageFinder({ name, current, onPick }: { name: string; current: string; onPick: (url: string) => void }) {
+  const [state, setState] = useState<{ loading: boolean; items: { url: string; label: string }[]; message: string } | null>(null);
+
+  async function search(q: string) {
+    const res = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    const seen = new Set<string>();
+    return ((data.products ?? []) as { image_thumb_url?: string | null; product_name?: string; brands?: string }[])
+      .filter((p) => p.image_thumb_url && !seen.has(p.image_thumb_url) && seen.add(p.image_thumb_url))
+      .slice(0, 8)
+      .map((p) => ({
+        url: p.image_thumb_url as string,
+        label: (p.product_name ?? "") + (p.brands ? ` (${p.brands.split(",")[0].trim()})` : ""),
+      }));
+  }
+
+  async function find() {
+    const q = name.trim();
+    if (!q) return;
+    setState({ loading: true, items: [], message: "" });
+    try {
+      let items = await search(q);
+      // "Pizza (Dr. Oetker)" -> also try just "Pizza" when nothing matched
+      const base = q.split("(")[0].trim();
+      if (items.length === 0 && base && base !== q) items = await search(base);
+      setState({
+        loading: false,
+        items,
+        message: items.length ? "" : "No pictures found for this name. Try a shorter name or paste an image URL.",
+      });
+    } catch {
+      setState({ loading: false, items: [], message: "Couldn't reach the food database. Try again in a moment." });
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={find}
+          disabled={!name.trim() || state?.loading}
+          className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-200 hover:bg-zinc-700 disabled:opacity-40"
+        >
+          {state?.loading ? "Searching…" : "🔍 Find picture"}
+        </button>
+        {current && (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={current} alt="" className="h-9 w-9 rounded-lg object-cover" />
+            <button type="button" onClick={() => onPick("")} className="text-xs text-zinc-500 hover:text-red-400">
+              Remove picture
+            </button>
+          </>
+        )}
+      </div>
+      {state && !state.loading && state.message && <p className="text-xs text-zinc-500">{state.message}</p>}
+      {state && state.items.length > 0 && (
+        <div className="grid grid-cols-4 gap-2">
+          {state.items.map((it) => (
+            <button
+              key={it.url}
+              type="button"
+              title={it.label}
+              onClick={() => { onPick(it.url); setState(null); }}
+              className="overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800 hover:border-green-600"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={it.url} alt={it.label} className="aspect-square w-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function getPreview(meal: Meal, amount: string | undefined) {
   if (!amount) return null;
   const n = Number(amount);
@@ -1205,6 +1284,12 @@ function MealsContent() {
                       value={form.imageUrl}
                       onChange={(e) => setForm((p) => ({ ...p, imageUrl: e.target.value }))}
                       className="w-full rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-zinc-600 placeholder:text-zinc-600"
+                    />
+                    <ImageFinder
+                      key={editingId ?? "new"}
+                      name={form.name}
+                      current={form.imageUrl}
+                      onPick={(url) => setForm((p) => ({ ...p, imageUrl: url }))}
                     />
 
                     <div className="flex items-center gap-2">
