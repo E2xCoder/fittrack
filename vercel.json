@@ -8,5 +8,8 @@
       "path": "/api/social/streak-cron",
       "schedule": "0 17 * * *"
     }
+  ],
+  "regions": [
+    "fra1"
   ]
 }
