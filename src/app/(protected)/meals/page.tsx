@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, Suspense } from "react";
+import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -70,6 +70,61 @@ interface MealPack {
   id: string;
   name: string;
   items: MealPackItem[];
+}
+
+// Amount of one meal inside a pack: type it (e.g. 250) or nudge with -/+.
+// Shown in grams/ml (or pieces); the pack stores it as a multiple of the meal's serving.
+function PackAmount({ item, onChange, onNudge, onRemove }: { item: MealPackItem; onChange: (quantity: number) => void; onNudge: (dir: 1 | -1) => void; onRemove: () => void }) {
+  const piece = item.meal.servingLabel === "piece";
+  const unit = piece ? "pc" : item.meal.servingLabel;
+  const size = piece ? 1 : item.meal.servingSize || 100;
+  const amount = Math.round(item.quantity * size * 100) / 100;
+  const [draft, setDraft] = useState<string | null>(null);
+
+  const commit = () => {
+    const n = Number((draft ?? "").replace(",", "."));
+    setDraft(null);
+    if (!Number.isFinite(n) || n <= 0 || n === amount) return;
+    onChange(Math.min(n, 99999) / size);
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        onClick={(e) => { e.stopPropagation(); onNudge(-1); }}
+        aria-label="Decrease"
+        className="h-7 w-7 rounded-lg bg-zinc-700 text-xs hover:bg-zinc-600"
+      >
+        −
+      </button>
+      <input
+        value={draft ?? String(amount)}
+        inputMode="decimal"
+        aria-label={`Amount of ${item.meal.name}`}
+        onClick={(e) => e.stopPropagation()}
+        onFocus={(e) => { setDraft(String(amount)); e.currentTarget.select(); }}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setDraft(null); e.currentTarget.blur(); } }}
+        className="h-7 w-14 rounded-lg border border-zinc-700 bg-zinc-900 px-1 text-center text-xs font-semibold outline-none focus:border-green-600"
+      />
+      <span className="w-5 text-[10px] text-zinc-500">{unit}</span>
+      <button
+        onClick={(e) => { e.stopPropagation(); onNudge(1); }}
+        aria-label="Increase"
+        className="h-7 w-7 rounded-lg bg-zinc-700 text-xs hover:bg-zinc-600"
+      >
+        +
+      </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        aria-label="Remove from pack"
+        className="ml-1 text-[10px] text-zinc-600 hover:text-red-400 transition-colors"
+      >
+        ✕
+      </button>
+    </div>
+  );
 }
 
 // Today's logged entries (from the daily log)
@@ -668,28 +723,56 @@ function MealsContent() {
     fetchAll();
   }
 
+  // Pack edits change the screen at once and only talk to the server in the
+  // background (no full library reload), so they stay fast and rapid taps
+  // never act on stale numbers.
   async function addMealToPack(packId: string, mealId: string) {
-    await fetch(`/api/meal-packs/${packId}/items`, {
+    const res = await fetch(`/api/meal-packs/${packId}/items`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mealId, quantity: 1 }),
-    });
-    fetchAll();
+    }).catch(() => null);
+    if (!res?.ok) { fetchAll(); return; }
+    const item = (await res.json()) as MealPackItem;
+    setPacks((prev) => prev.map((p) => (p.id === packId ? { ...p, items: [...p.items, item] } : p)));
   }
 
   async function removeMealFromPack(packId: string, itemId: string) {
-    await fetch(`/api/meal-packs/${packId}/items?itemId=${itemId}`, { method: "DELETE" });
-    fetchAll();
+    setPacks((prev) => prev.map((p) => (p.id === packId ? { ...p, items: p.items.filter((i) => i.id !== itemId) } : p)));
+    const res = await fetch(`/api/meal-packs/${packId}/items?itemId=${itemId}`, { method: "DELETE" }).catch(() => null);
+    if (!res?.ok) fetchAll();
   }
 
-  async function updatePackItemQuantity(packId: string, itemId: string, quantity: number) {
-    if (quantity <= 0) return;
-    await fetch(`/api/meal-packs/${packId}/items`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ itemId, quantity }),
-    });
-    fetchAll();
+  const qtyTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // Latest value per item while a save is pending, so taps in quick succession
+  // build on each other instead of on the last render.
+  const pendingQty = useRef<Record<string, number>>({});
+
+  function nudgePackItem(packId: string, item: MealPackItem, dir: 1 | -1) {
+    const piece = item.meal.servingLabel === "piece";
+    const size = piece ? 1 : item.meal.servingSize || 100;
+    const step = piece ? 1 : 10; // g / ml / pieces per tap
+    const amount = (pendingQty.current[item.id] ?? item.quantity) * size;
+    const next = Math.max(step, Math.round((amount + dir * step) * 100) / 100);
+    updatePackItemQuantity(packId, item.id, next / size);
+  }
+
+  function updatePackItemQuantity(packId: string, itemId: string, quantity: number) {
+    if (!(quantity > 0)) return;
+    const q = Math.round(quantity * 10000) / 10000;
+    pendingQty.current[itemId] = q;
+    setPacks((prev) => prev.map((p) => (p.id !== packId ? p : { ...p, items: p.items.map((i) => (i.id === itemId ? { ...i, quantity: q } : i)) })));
+    // Taps in a row send only the last value.
+    clearTimeout(qtyTimers.current[itemId]);
+    qtyTimers.current[itemId] = setTimeout(async () => {
+      const res = await fetch(`/api/meal-packs/${packId}/items`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId, quantity: q }),
+      }).catch(() => null);
+      if (pendingQty.current[itemId] === q) delete pendingQty.current[itemId];
+      if (!res?.ok) fetchAll();
+    }, 350);
   }
 
   async function logPack(packId: string) {
@@ -1390,37 +1473,12 @@ function MealsContent() {
                             <p className="truncate text-xs font-semibold">{item.meal.name}</p>
                             <p className="text-[10px] text-zinc-500">{Math.round(item.meal.calories * item.quantity)} kcal</p>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); updatePackItemQuantity(pack.id, item.id,
-                                Math.max(item.meal.servingLabel === "piece" ? 1 : 0.5,
-                                  item.quantity - (item.meal.servingLabel === "piece" ? 1 : 0.5))); }}
-                              aria-label="Decrease"
-                              className="rounded-lg bg-zinc-700 px-2 py-1 text-xs hover:bg-zinc-600"
-                            >
-                              −
-                            </button>
-                            <span className="min-w-[3rem] text-center text-xs">
-                              {item.meal.servingLabel === "piece"
-                                ? `${item.quantity} pc`
-                                : `${Math.round(item.quantity * item.meal.servingSize)}${item.meal.servingLabel}`}
-                            </span>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); updatePackItemQuantity(pack.id, item.id,
-                                item.quantity + (item.meal.servingLabel === "piece" ? 1 : 0.5)); }}
-                              aria-label="Increase"
-                              className="rounded-lg bg-zinc-700 px-2 py-1 text-xs hover:bg-zinc-600"
-                            >
-                              +
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); removeMealFromPack(pack.id, item.id); }}
-                              aria-label="Remove from pack"
-                              className="ml-1 text-[10px] text-zinc-600 hover:text-red-400 transition-colors"
-                            >
-                              ✕
-                            </button>
-                          </div>
+                          <PackAmount
+                            item={item}
+                            onChange={(q) => updatePackItemQuantity(pack.id, item.id, q)}
+                            onNudge={(dir) => nudgePackItem(pack.id, item, dir)}
+                            onRemove={() => void removeMealFromPack(pack.id, item.id)}
+                          />
                         </div>
                       ))}
                     </div>
