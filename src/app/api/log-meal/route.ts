@@ -105,17 +105,22 @@ export async function POST(request: Request) {
   const fiber = baseFiber === null ? null : baseFiber * quantity;
 
   // Merge into an existing entry only for library meals (identified by mealId).
-  // Ad-hoc entries (mealId null) always create a fresh row.
-  const existing = mealId
-    ? await prisma.mealLog.findFirst({
+  // Ad-hoc entries (mealId null) always create a fresh row. Entries that came
+  // from a pack's "Add All" are never merged into: an extra serving of the same
+  // meal is its own entry, otherwise it would silently grow the pack's amounts.
+  const candidates = mealId
+    ? await prisma.mealLog.findMany({
         where: {
           dailyLogId: dailyLog.id,
           mealId,
           userId: user.id,
           mealType,
         },
+        orderBy: { createdAt: "asc" },
       })
-    : null;
+    : [];
+  const existing =
+    candidates.find((c) => !(c.mealSnapshot as { pack?: unknown } | null)?.pack) ?? null;
 
   // The mealLog write and the dailyLog totals update are independent —
   // run them in parallel to save a round trip.
