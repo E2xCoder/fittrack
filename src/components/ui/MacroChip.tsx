@@ -9,6 +9,7 @@ const SHORT: Record<MetricKey, string> = {
   protein: "P",
   carbs: "C",
   fat: "F",
+  fiber: "Fi",
   steps: "",
   water: "",
   sleep: "",
@@ -20,7 +21,7 @@ export function MacroChip({
   unit = "g",
   size = "sm",
 }: {
-  metric: Extract<MetricKey, "protein" | "carbs" | "fat" | "calories">;
+  metric: Extract<MetricKey, "protein" | "carbs" | "fat" | "fiber" | "calories">;
   value: number;
   unit?: string;
   size?: "sm" | "md";

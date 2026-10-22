@@ -70,7 +70,7 @@ export async function PATCH(
   // Base macros come from the library meal, or fall back to the stored snapshot
   // (ad-hoc logs whose meal was never saved, or whose meal was later deleted).
   const snapshot = mealLog.mealSnapshot as {
-    calories?: number; protein?: number; carbs?: number; fat?: number;
+    calories?: number; protein?: number; carbs?: number; fat?: number; fiber?: number | null;
   } | null;
   const base = mealLog.meal ?? snapshot;
   if (!base) return NextResponse.json({ error: "Original meal deleted" }, { status: 400 });
@@ -79,6 +79,8 @@ export async function PATCH(
   const newProtein = (base.protein ?? 0) * newQuantity;
   const newCarbs = (base.carbs ?? 0) * newQuantity;
   const newFat = (base.fat ?? 0) * newQuantity;
+  const baseFiber = (mealLog.meal ? mealLog.meal.fiber : snapshot?.fiber) ?? null;
+  const newFiber = baseFiber === null ? null : baseFiber * newQuantity;
 
   if (mealLog.dailyLogId) {
     await prisma.dailyLog.update({
@@ -100,6 +102,7 @@ export async function PATCH(
       protein: newProtein,
       carbs: newCarbs,
       fat: newFat,
+      fiber: newFiber,
     },
   });
 

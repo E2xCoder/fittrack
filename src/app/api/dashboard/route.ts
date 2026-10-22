@@ -19,6 +19,7 @@ export async function GET(request: Request) {
       proteinTarget: true,
       carbTarget: true,
       fatTarget: true,
+      fiberTarget: true,
       stepTarget: true,
       timezone: true,
     },
@@ -128,12 +129,15 @@ export async function GET(request: Request) {
     totalProtein: dailyLog?.totalProtein ?? 0,
     totalCarbs: dailyLog?.totalCarbs ?? 0,
     totalFat: dailyLog?.totalFat ?? 0,
+    // Summed from the entries (not stored on the day), so it can never drift.
+    totalFiber: (dailyLog?.mealLogs ?? []).reduce((sum, l) => sum + (l.fiber ?? 0), 0),
     mealLogs: dailyLog?.mealLogs ?? [],
     goals: {
       calories: userRow?.calorieTarget ?? 2400,
       protein: userRow?.proteinTarget ?? 150,
       carbs: userRow?.carbTarget ?? 200,
       fat: userRow?.fatTarget ?? 70,
+      fiber: userRow?.fiberTarget ?? 30,
       steps: userRow?.stepTarget ?? 10000,
     },
     steps: bodyLog?.steps ?? 0,

@@ -49,6 +49,7 @@ export async function POST(
     const protein = meal.protein * quantity;
     const carbs = meal.carbs * quantity;
     const fat = meal.fat * quantity;
+    const fiber = meal.fiber === null ? null : meal.fiber * quantity;
 
     await prisma.mealLog.create({
       data: {
@@ -61,12 +62,14 @@ export async function POST(
         protein,
         carbs,
         fat,
+        fiber,
         mealSnapshot: {
           name: meal.name,
           calories: meal.calories,
           protein: meal.protein,
           carbs: meal.carbs,
           fat: meal.fat,
+          fiber: meal.fiber,
           servingLabel: meal.servingLabel,
           servingSize: meal.servingSize,
         },

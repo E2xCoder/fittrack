@@ -12,6 +12,7 @@ export interface HistoryLogInput {
     protein: number;
     carbs: number;
     fat: number;
+    fiber?: number | null;
     servingSize: number;
     servingLabel: string;
     imageUrl: string | null;
@@ -22,6 +23,7 @@ export interface HistoryLogInput {
     protein?: number;
     carbs?: number;
     fat?: number;
+    fiber?: number | null;
     servingSize?: number;
     servingLabel?: string;
     imageUrl?: string | null;
@@ -32,7 +34,7 @@ export interface HistoryItem {
   key: string;
   name: string;
   /** Macros for ONE unit (1 g / 1 ml / 1 piece). */
-  perUnit: { calories: number; protein: number; carbs: number; fat: number };
+  perUnit: { calories: number; protein: number; carbs: number; fat: number; fiber: number | null };
   unit: "g" | "ml" | "piece";
   /** Amount of the last log, in `unit`s. */
   lastAmount: number;
@@ -68,6 +70,8 @@ export function buildFoodHistory(logs: HistoryLogInput[], limit = 25): HistoryIt
     const protein = Number(src?.protein) || 0;
     const carbs = Number(src?.carbs) || 0;
     const fat = Number(src?.fat) || 0;
+    const rawFiber = (src as { fiber?: number | null } | null | undefined)?.fiber;
+    const fiber = typeof rawFiber === "number" && rawFiber >= 0 ? rawFiber : null;
     const amount = log.quantity * servingSize;
     // Zero-calorie, zero-amount rows are junk (e.g. a failed import) — not worth suggesting.
     if (!(amount > 0) || (calories === 0 && protein === 0 && carbs === 0 && fat === 0)) continue;
@@ -80,6 +84,7 @@ export function buildFoodHistory(logs: HistoryLogInput[], limit = 25): HistoryIt
         protein: protein / servingSize,
         carbs: carbs / servingSize,
         fat: fat / servingSize,
+        fiber: fiber === null ? null : fiber / servingSize,
       },
       unit,
       lastAmount: Math.round(amount * 100) / 100,

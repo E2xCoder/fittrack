@@ -35,8 +35,10 @@ export async function POST(request: Request) {
   //  • an ad-hoc payload (name + macros) — logs to the day WITHOUT saving a Meal.
   let mealId: string | null = null;
   let base: { calories: number; protein: number; carbs: number; fat: number };
+  // Fibre is optional everywhere: null means "not tracked for this food".
+  let baseFiber: number | null;
   let snapshot: {
-    name: string; calories: number; protein: number; carbs: number; fat: number;
+    name: string; calories: number; protein: number; carbs: number; fat: number; fiber: number | null;
     servingLabel: string; servingSize: number;
   };
 
@@ -53,12 +55,14 @@ export async function POST(request: Request) {
     if (!meal) return NextResponse.json({ error: "Meal not found" }, { status: 404 });
     mealId = meal.id;
     base = { calories: meal.calories, protein: meal.protein, carbs: meal.carbs, fat: meal.fat };
+    baseFiber = meal.fiber ?? null;
     snapshot = {
       name: meal.name,
       calories: meal.calories,
       protein: meal.protein,
       carbs: meal.carbs,
       fat: meal.fat,
+      fiber: baseFiber,
       servingLabel: meal.servingLabel,
       servingSize: meal.servingSize,
     };
@@ -69,9 +73,12 @@ export async function POST(request: Request) {
       carbs:    Number(body.carbs)    || 0,
       fat:      Number(body.fat)      || 0,
     };
+    const rawFiber = body.fiber === null || body.fiber === undefined || body.fiber === "" ? NaN : Number(body.fiber);
+    baseFiber = Number.isFinite(rawFiber) && rawFiber >= 0 ? rawFiber : null;
     snapshot = {
       name: body.name.trim(),
       ...base,
+      fiber: baseFiber,
       servingLabel: typeof body.servingLabel === "string" ? body.servingLabel : "g",
       servingSize:  Number(body.servingSize) || 100,
     };
@@ -95,6 +102,7 @@ export async function POST(request: Request) {
   const protein = base.protein * quantity;
   const carbs = base.carbs * quantity;
   const fat = base.fat * quantity;
+  const fiber = baseFiber === null ? null : baseFiber * quantity;
 
   // Merge into an existing entry only for library meals (identified by mealId).
   // Ad-hoc entries (mealId null) always create a fresh row.
@@ -120,6 +128,7 @@ export async function POST(request: Request) {
           protein: existing.protein + protein,
           carbs: existing.carbs + carbs,
           fat: existing.fat + fat,
+          fiber: existing.fiber === null && fiber === null ? null : (existing.fiber ?? 0) + (fiber ?? 0),
         },
       })
     : prisma.mealLog.create({
@@ -133,6 +142,7 @@ export async function POST(request: Request) {
           protein,
           carbs,
           fat,
+          fiber,
           mealSnapshot: snapshot,
         },
       });

@@ -58,6 +58,11 @@ function fdcNutrient(food: FDCFood, id: number): number {
   return food.foodNutrients?.find((n) => n.nutrientId === id)?.value ?? 0;
 }
 
+function fdcFiber(food: FDCFood): number | undefined {
+  const v = food.foodNutrients?.find((n) => n.nutrientId === 1079)?.value;
+  return typeof v === "number" ? Math.round(v * 10) / 10 : undefined;
+}
+
 async function fetchUSDABarcode(code: string) {
   const key = process.env.FDC_API_KEY;
   if (!key) return null;
@@ -89,6 +94,7 @@ async function fetchUSDABarcode(code: string) {
           "proteins_100g":    Math.round(fdcNutrient(match, 1003) * 10) / 10,
           "carbohydrates_100g": Math.round(fdcNutrient(match, 1005) * 10) / 10,
           "fat_100g":         Math.round(fdcNutrient(match, 1004) * 10) / 10,
+          "fiber_100g":       fdcFiber(match),
         },
       },
     };

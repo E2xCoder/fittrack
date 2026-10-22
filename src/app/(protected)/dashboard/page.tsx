@@ -29,6 +29,7 @@ interface MealLog {
   protein: number;
   carbs: number;
   fat: number;
+  fiber?: number | null; // null/absent = not tracked for this entry
   createdAt?: string;
   mealType?: string | null;
   meal: ({ id: string; imageUrl?: string | null } & MealInfo) | null;
@@ -40,6 +41,7 @@ interface Goals {
   protein: number;
   carbs: number;
   fat: number;
+  fiber: number;
   steps: number;
 }
 
@@ -268,6 +270,7 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
       protein: log.protein * ratio,
       carbs: log.carbs * ratio,
       fat: log.fat * ratio,
+      fiber: log.fiber == null ? null : log.fiber * ratio,
     };
     setData((p) =>
       p
@@ -429,6 +432,15 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
       allDone: actions.length === 0,
     };
   }, [data, selectedDate, todayStr]);
+
+  // Fibre is summed from the entries, so edits and removals are reflected at once.
+  const fiberInfo = useMemo(() => {
+    const logs = data?.mealLogs ?? [];
+    return {
+      total: logs.reduce((s, l) => s + (l.fiber ?? 0), 0),
+      untracked: logs.filter((l) => l.fiber == null).length,
+    };
+  }, [data]);
 
   const mealGroups = useMemo(() => {
     if (!data) return [];
@@ -605,6 +617,23 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
                       <ProgressBar value={m.current} target={m.target} color={METRICS[m.metric].hex} height={6} />
                     </div>
                   ))}
+                </div>
+
+                {/* Fibre: only entries with fibre data count, so say when some don't */}
+                <div>
+                  <div className="mb-1 flex items-baseline justify-between">
+                    <p className="text-[10px] uppercase tracking-wide text-zinc-500">Fiber</p>
+                    <p className="text-sm font-bold tabular-nums text-white">
+                      {Math.round(fiberInfo.total)}
+                      <span className="text-[11px] font-medium text-zinc-500"> / {data.goals.fiber}g</span>
+                    </p>
+                  </div>
+                  <ProgressBar value={fiberInfo.total} target={data.goals.fiber} color={METRICS.fiber.hex} height={6} />
+                  {fiberInfo.untracked > 0 && data.mealLogs.length > 0 && (
+                    <p className="mt-1 text-[10px] text-zinc-600">
+                      {fiberInfo.untracked} of {data.mealLogs.length} entries have no fiber data
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -908,6 +937,7 @@ function DashboardContent({ initialDate }: { initialDate: string }) {
                                 <MacroChip metric="protein" value={log.protein} />
                                 <MacroChip metric="carbs" value={log.carbs} />
                                 <MacroChip metric="fat" value={log.fat} />
+                                {log.fiber != null && log.fiber > 0 && <MacroChip metric="fiber" value={log.fiber} />}
                               </div>
                               <div className="flex items-center gap-2">
                                 <button

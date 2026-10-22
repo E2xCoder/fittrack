@@ -22,6 +22,7 @@ interface OFFProduct {
     "proteins_100g"?: number;
     "carbohydrates_100g"?: number;
     "fat_100g"?: number;
+    "fiber_100g"?: number;
   };
 }
 
@@ -33,7 +34,8 @@ interface NormalizedProduct {
   name: string;
   brand: string;
   imageUrl: string | null;
-  per100: { calories: number; protein: number; carbs: number; fat: number };
+  // fiber: null/absent = the source has no value (unknown, not zero)
+  per100: { calories: number; protein: number; carbs: number; fat: number; fiber?: number | null };
   source: FoodSource;
   servingLabel: "g" | "ml";
   /** Set for foods from the history list: how it was last logged. For "piece" the
@@ -50,7 +52,7 @@ interface QueuedItem {
 interface HistoryApiItem {
   key: string;
   name: string;
-  perUnit: { calories: number; protein: number; carbs: number; fat: number };
+  perUnit: { calories: number; protein: number; carbs: number; fat: number; fiber?: number | null };
   unit: Unit;
   lastAmount: number;
   imageUrl: string | null;
@@ -75,6 +77,7 @@ function fromHistory(h: HistoryApiItem): NormalizedProduct {
       protein: r1(h.perUnit.protein * k),
       carbs: r1(h.perUnit.carbs * k),
       fat: r1(h.perUnit.fat * k),
+      fiber: h.perUnit.fiber == null ? null : r1(h.perUnit.fiber * k),
     },
     recent: { unit: h.unit, amount: h.lastAmount },
   };
@@ -108,6 +111,7 @@ function normalize(p: OFFProduct & { source?: FoodSource }): NormalizedProduct |
       protein:  Math.round((n["proteins_100g"] ?? 0) * 10) / 10,
       carbs:    Math.round((n["carbohydrates_100g"] ?? 0) * 10) / 10,
       fat:      Math.round((n["fat_100g"] ?? 0) * 10) / 10,
+      fiber:    typeof n["fiber_100g"] === "number" ? Math.round(n["fiber_100g"] * 10) / 10 : null,
     },
   };
 }
@@ -154,12 +158,20 @@ function AddQuantityModal({
     protein: String(product.per100.protein),
     carbs: String(product.per100.carbs),
     fat: String(product.per100.fat),
+    fiber: product.per100.fiber == null ? "" : String(product.per100.fiber),
   });
   const num = (v: string) => Math.max(0, Number(v.replace(",", ".")) || 0);
-  const per100 = { calories: num(vals.calories), protein: num(vals.protein), carbs: num(vals.carbs), fat: num(vals.fat) };
+  const per100 = {
+    calories: num(vals.calories),
+    protein: num(vals.protein),
+    carbs: num(vals.carbs),
+    fat: num(vals.fat),
+    fiber: vals.fiber.trim() === "" ? null : num(vals.fiber),
+  };
   const edited =
     per100.calories !== product.per100.calories || per100.protein !== product.per100.protein ||
-    per100.carbs !== product.per100.carbs || per100.fat !== product.per100.fat;
+    per100.carbs !== product.per100.carbs || per100.fat !== product.per100.fat ||
+    per100.fiber !== (product.per100.fiber ?? null);
   const macroKcal = Math.round(per100.protein * 4 + per100.carbs * 4 + per100.fat * 9);
   const kcalMismatch = per100.calories > 0 && Math.abs(macroKcal - per100.calories) / per100.calories > 0.25;
 
@@ -171,6 +183,7 @@ function AddQuantityModal({
     protein:  Math.round(per100.protein  * mult * 10) / 10,
     carbs:    Math.round(per100.carbs    * mult * 10) / 10,
     fat:      Math.round(per100.fat      * mult * 10) / 10,
+    fiber:    per100.fiber === null ? null : Math.round(per100.fiber * mult * 10) / 10,
   };
 
   const unitLabel = unit === "g" ? "g" : unit === "ml" ? "ml" : "adet";
@@ -193,6 +206,7 @@ function AddQuantityModal({
             protein:  per100.protein,
             carbs:    per100.carbs,
             fat:      per100.fat,
+            fiber:    per100.fiber,
             servingSize: servingSizeForApi,
             servingLabel: servingLabelForApi,
             isFavorite: false,
@@ -209,6 +223,7 @@ function AddQuantityModal({
             protein:  per100.protein,
             carbs:    per100.carbs,
             fat:      per100.fat,
+            fiber:    per100.fiber,
             servingSize: servingSizeForApi,
             servingLabel: servingLabelForApi,
             quantity: mult,
@@ -328,12 +343,13 @@ function AddQuantityModal({
               <p className="mb-2 text-[11px] text-zinc-500">
                 Values per {unit === "piece" ? "piece" : `100 ${unit}`}
               </p>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-5 gap-1.5">
                 {([
                   ["calories", "kcal"],
-                  ["protein", "Protein g"],
+                  ["protein", "Prot. g"],
                   ["carbs", "Carbs g"],
                   ["fat", "Fat g"],
+                  ["fiber", "Fiber g"],
                 ] as const).map(([key, label]) => (
                   <label key={key} className="block">
                     <span className="mb-1 block text-center text-[10px] text-zinc-500">{label}</span>
@@ -341,6 +357,7 @@ function AddQuantityModal({
                       type="text"
                       inputMode="decimal"
                       value={vals[key]}
+                      placeholder={key === "fiber" ? "—" : undefined}
                       onChange={(e) => setVals((v) => ({ ...v, [key]: e.target.value }))}
                       className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-1 py-2 text-center text-sm font-bold text-white outline-none focus:border-green-600"
                     />
@@ -361,6 +378,7 @@ function AddQuantityModal({
                       protein: String(product.per100.protein),
                       carbs: String(product.per100.carbs),
                       fat: String(product.per100.fat),
+                      fiber: product.per100.fiber == null ? "" : String(product.per100.fiber),
                     })
                   }
                   className="mt-2 text-[11px] text-zinc-500 underline hover:text-zinc-300"
@@ -398,6 +416,9 @@ function AddQuantityModal({
               </div>
             ))}
           </div>
+          <p className="mt-2 text-center text-xs" style={{ color: preview.fiber === null ? "#71717a" : "#a3e635" }}>
+            {preview.fiber === null ? "Fiber: no data — tap Edit nutrition to add it" : `Fiber ${preview.fiber} g`}
+          </p>
         </div>
 
         <div className="flex gap-2">
@@ -433,6 +454,7 @@ interface LabelForm {
   protein: string;
   carbs: string;
   fat: string;
+  fiber: string; // "" = not printed on the label
 }
 
 function LabelScanner({ onProduct }: { onProduct: (p: NormalizedProduct) => void }) {
@@ -468,6 +490,7 @@ function LabelScanner({ onProduct }: { onProduct: (p: NormalizedProduct) => void
         protein: v(data.per100.protein),
         carbs: v(data.per100.carbs),
         fat: v(data.per100.fat),
+        fiber: v(data.per100.fiber),
       });
       posthog.capture("label_scanned");
     } catch {
@@ -492,11 +515,12 @@ function LabelScanner({ onProduct }: { onProduct: (p: NormalizedProduct) => void
         protein: Math.round(num(form.protein) * 10) / 10,
         carbs: Math.round(num(form.carbs) * 10) / 10,
         fat: Math.round(num(form.fat) * 10) / 10,
+        fiber: form.fiber.trim() === "" ? null : Math.round(num(form.fiber) * 10) / 10,
       },
     });
   }
 
-  const field = (key: "calories" | "protein" | "carbs" | "fat", label: string, suffix: string) =>
+  const field = (key: "calories" | "protein" | "carbs" | "fat" | "fiber", label: string, suffix: string) =>
     form && (
       <label className="block">
         <span className="mb-1 block text-[11px] font-semibold text-zinc-400">{label}</span>
@@ -592,6 +616,7 @@ function LabelScanner({ onProduct }: { onProduct: (p: NormalizedProduct) => void
             {field("protein", "Protein", "g")}
             {field("carbs", "Carbs", "g")}
             {field("fat", "Fat", "g")}
+            {field("fiber", "Fiber", "g")}
           </div>
           <button
             onClick={submit}
@@ -682,6 +707,7 @@ export default function FoodDatabaseModal({ onClose, dateParam, onAdded, initial
             protein:  product.per100.protein,
             carbs:    product.per100.carbs,
             fat:      product.per100.fat,
+            fiber:    product.per100.fiber ?? null,
             servingSize: unit === "piece" ? 1 : 100,
             servingLabel: unit,
             quantity: unitMult(unit, Math.max(unit === "piece" ? 0.5 : 1, amount)),

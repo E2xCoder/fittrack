@@ -48,6 +48,12 @@ function fdcNutrient(food: FDCFood, id: number): number {
   return food.foodNutrients?.find((n) => n.nutrientId === id)?.value ?? 0;
 }
 
+/** Total dietary fibre (1079); undefined when USDA has no value, so "unknown" isn't shown as 0. */
+function fdcFiber(food: FDCFood): number | undefined {
+  const v = food.foodNutrients?.find((n) => n.nutrientId === 1079)?.value;
+  return typeof v === "number" ? Math.round(v * 10) / 10 : undefined;
+}
+
 function fdcToUnified(food: FDCFood) {
   const name = food.description ?? "";
   return {
@@ -62,6 +68,7 @@ function fdcToUnified(food: FDCFood) {
       "proteins_100g":    Math.round(fdcNutrient(food, 1003) * 10) / 10,
       "carbohydrates_100g": Math.round(fdcNutrient(food, 1005) * 10) / 10,
       "fat_100g":         Math.round(fdcNutrient(food, 1004) * 10) / 10,
+      "fiber_100g":       fdcFiber(food),
     },
   };
 }

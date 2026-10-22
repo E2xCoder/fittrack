@@ -61,3 +61,14 @@ describe("buildFoodHistory", () => {
     expect(items.map((i) => i.name)).toEqual(["A"]);
   });
 });
+
+describe("buildFoodHistory fibre", () => {
+  it("carries fibre per unit and keeps unknown fibre as null (not 0)", () => {
+    const items = buildFoodHistory([
+      { quantity: 2, createdAt: "2026-10-03T10:00:00Z", mealSnapshot: snap("Oats", { fiber: 10 }) },
+      { quantity: 1, createdAt: "2026-10-02T10:00:00Z", mealSnapshot: snap("Rice") },
+    ]);
+    expect(items[0].perUnit.fiber).toBeCloseTo(0.1); // 10 g per 100 g serving
+    expect(items[1].perUnit.fiber).toBeNull();
+  });
+});

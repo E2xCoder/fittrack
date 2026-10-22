@@ -11,13 +11,13 @@ const SYSTEM_PROMPT =
   "- If a value is missing or unreadable, use null.\n" +
   "- A label may have a per-100g/100ml column, a per-serving column, or both. Fill each column separately; use null for a column that is absent.\n" +
   "- calories is kcal. If only kJ is printed, put it in energyKj and leave calories null.\n" +
-  "- carbs is total carbohydrate (not sugars). fat is total fat. All macros in grams.\n" +
+  "- carbs is total carbohydrate (not sugars). fat is total fat. fiber is dietary fibre (Ballaststoffe). All macros in grams.\n" +
   "- servingSize is the number printed for one serving (e.g. 30), servingUnit is \"g\" or \"ml\". null if not printed.\n" +
   "- unit is \"ml\" for liquids (label says per 100 ml), otherwise \"g\".\n" +
   "Return ONLY this JSON:\n" +
   "{\"productName\": string|null, \"unit\": \"g\"|\"ml\", \"servingSize\": number|null, \"servingUnit\": \"g\"|\"ml\"|null, " +
-  "\"per100\": {\"calories\": number|null, \"energyKj\": number|null, \"protein\": number|null, \"carbs\": number|null, \"fat\": number|null}|null, " +
-  "\"perServing\": {\"calories\": number|null, \"energyKj\": number|null, \"protein\": number|null, \"carbs\": number|null, \"fat\": number|null}|null}";
+  "\"per100\": {\"calories\": number|null, \"energyKj\": number|null, \"protein\": number|null, \"carbs\": number|null, \"fat\": number|null, \"fiber\": number|null}|null, " +
+  "\"perServing\": {\"calories\": number|null, \"energyKj\": number|null, \"protein\": number|null, \"carbs\": number|null, \"fat\": number|null, \"fiber\": number|null}|null}";
 
 interface Column {
   calories: number | null;
@@ -25,6 +25,7 @@ interface Column {
   protein: number | null;
   carbs: number | null;
   fat: number | null;
+  fiber: number | null;
 }
 
 function numOrNull(v: unknown): number | null {
@@ -42,6 +43,7 @@ function parseColumn(raw: unknown): Column | null {
     protein: numOrNull(r.protein),
     carbs: numOrNull(r.carbs),
     fat: numOrNull(r.fat),
+    fiber: numOrNull(r.fiber),
   };
   return Object.values(col).every((v) => v === null) ? null : col;
 }
@@ -129,6 +131,7 @@ export async function POST(request: Request) {
       protein: scale(perServingCol.protein),
       carbs: scale(perServingCol.carbs),
       fat: scale(perServingCol.fat),
+      fiber: scale(perServingCol.fiber),
     };
     converted = true;
   }
@@ -146,6 +149,7 @@ export async function POST(request: Request) {
     protein: col.protein === null ? null : round1(col.protein),
     carbs: col.carbs === null ? null : round1(col.carbs),
     fat: col.fat === null ? null : round1(col.fat),
+    fiber: col.fiber === null ? null : round1(col.fiber),
   };
 
   const warnings: string[] = [];

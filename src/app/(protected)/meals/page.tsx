@@ -135,6 +135,7 @@ interface LoggedMeal {
   protein: number;
   carbs: number;
   fat: number;
+  fiber?: number | null;
   createdAt?: string;
   mealType?: string | null;
   meal: { id: string; name: string; servingLabel: string; servingSize: number; imageUrl?: string | null } | null;
@@ -1021,6 +1022,7 @@ function MealsContent() {
                                 <MacroChip metric="protein" value={log.protein} />
                                 <MacroChip metric="carbs" value={log.carbs} />
                                 <MacroChip metric="fat" value={log.fat} />
+                              {log.fiber != null && log.fiber > 0 && <MacroChip metric="fiber" value={log.fiber} />}
                               </div>
                             </div>
                             <button

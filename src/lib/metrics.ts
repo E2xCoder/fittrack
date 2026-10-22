@@ -13,6 +13,7 @@ export type MetricKey =
   | "protein"
   | "carbs"
   | "fat"
+  | "fiber"
   | "steps"
   | "water"
   | "sleep";
@@ -32,6 +33,7 @@ export const METRICS: Record<MetricKey, MetricStyle> = {
   protein: make("#3b82f6", "Protein"),
   carbs: make("#eab308", "Carbs"),
   fat: make("#a855f7", "Fat"),
+  fiber: make("#84cc16", "Fiber"),
   steps: make("#14b8a6", "Steps"),
   water: make("#06b6d4", "Water"),
   sleep: make("#6366f1", "Sleep"),

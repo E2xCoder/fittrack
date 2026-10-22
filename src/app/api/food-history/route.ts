@@ -20,7 +20,7 @@ export async function GET() {
       mealSnapshot: true,
       meal: {
         select: {
-          id: true, name: true, calories: true, protein: true, carbs: true, fat: true,
+          id: true, name: true, calories: true, protein: true, carbs: true, fat: true, fiber: true,
           servingSize: true, servingLabel: true, imageUrl: true,
         },
       },
