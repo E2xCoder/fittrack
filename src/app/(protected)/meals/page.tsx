@@ -181,6 +181,7 @@ function getPreview(meal: Meal, amount: string | undefined) {
     protein: Math.round(meal.protein * multiplier),
     carbs: Math.round(meal.carbs * multiplier),
     fat: Math.round(meal.fat * multiplier),
+    fiber: typeof meal.fiber === "number" ? Math.round(meal.fiber * multiplier * 10) / 10 : null,
   };
 }
 
@@ -307,6 +308,7 @@ function MealCard({
             <MacroChip metric="protein" value={meal.protein} />
             <MacroChip metric="carbs" value={meal.carbs} />
             <MacroChip metric="fat" value={meal.fat} />
+            {typeof meal.fiber === "number" && meal.fiber > 0 && <MacroChip metric="fiber" value={meal.fiber} />}
           </div>
         </div>
 
@@ -367,6 +369,7 @@ function MealCard({
                 <MacroChip metric="protein" value={preview.protein} />
                 <MacroChip metric="carbs" value={preview.carbs} />
                 <MacroChip metric="fat" value={preview.fat} />
+                {preview.fiber !== null && preview.fiber > 0 && <MacroChip metric="fiber" value={preview.fiber} />}
               </span>
             )}
           </div>
@@ -824,8 +827,9 @@ function MealsContent() {
         protein: acc.protein + item.meal.protein * item.quantity,
         carbs: acc.carbs + item.meal.carbs * item.quantity,
         fat: acc.fat + item.meal.fat * item.quantity,
+        fiber: acc.fiber + (item.meal.fiber ?? 0) * item.quantity,
       }),
-      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+      { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
     );
   }
 
@@ -1464,6 +1468,7 @@ function MealsContent() {
                     <MacroChip metric="protein" value={totals.protein} />
                     <MacroChip metric="carbs" value={totals.carbs} />
                     <MacroChip metric="fat" value={totals.fat} />
+                    {totals.fiber > 0 && <MacroChip metric="fiber" value={totals.fiber} />}
                   </div>
 
                   {isExpanded && pack.items.length > 0 && (
