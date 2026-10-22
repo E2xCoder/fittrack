@@ -1194,6 +1194,10 @@ function MealsContent() {
                       <input type="number" placeholder="Fat (g)" value={form.fat}
                         onChange={(e) => setForm((p) => ({ ...p, fat: e.target.value }))}
                         className="rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none placeholder:text-zinc-600" />
+                      <input type="number" step="any" min="0" placeholder="Lif / Fiber (g, optional)" value={form.fiber}
+                        onChange={(e) => setForm((p) => ({ ...p, fiber: e.target.value }))}
+                        aria-label="Fiber (g)"
+                        className="col-span-2 rounded-xl bg-zinc-800 px-3 py-2 text-sm outline-none placeholder:text-zinc-600" />
                     </div>
 
                     <input

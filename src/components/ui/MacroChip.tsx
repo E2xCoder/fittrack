@@ -35,7 +35,8 @@ export function MacroChip({
       style={{ backgroundColor: `${hex}1f`, color: hex }}
     >
       {prefix && <span className="opacity-70">{prefix}</span>}
-      {Math.round(value)}
+      {/* Fibre is usually a few grams, so keep one decimal (2.5, not 3). */}
+      {metric === "fiber" ? Math.round(value * 10) / 10 : Math.round(value)}
       {unit}
     </span>
   );

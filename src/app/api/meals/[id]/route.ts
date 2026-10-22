@@ -39,6 +39,15 @@ export async function PUT(
     },
   });
 
+  // Fibre entered for a meal also applies to the times it was already logged
+  // without fibre data (same scaling as the other macros: per serving x quantity).
+  // Entries that already have a value are left alone.
+  if (updated.fiber !== null) {
+    await prisma.$executeRaw`
+      UPDATE "MealLog" SET "fiber" = ${updated.fiber} * "quantity"
+      WHERE "mealId" = ${id} AND "userId" = ${user.id} AND "fiber" IS NULL`;
+  }
+
   return NextResponse.json(updated);
 }
 
