@@ -13,6 +13,10 @@ export const auth = betterAuth({
   session: {
     expiresIn: 90 * DAY,
     updateAge: DAY,
+    // Every API call used to look the session and the user up in the database
+    // (two queries). A signed cookie now answers that for 5 minutes. Signing out
+    // elsewhere can therefore take up to 5 minutes to take effect.
+    cookieCache: { enabled: true, maxAge: 5 * 60 },
   },
   database: prismaAdapter(prisma, {
     provider: "postgresql",

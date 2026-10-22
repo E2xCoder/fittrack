@@ -2,6 +2,20 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  // Every serverless function carried the whole Prisma runtime folder (~57 MB):
+  // wasm builds for MySQL, SQLite, SQL Server and CockroachDB, the old query
+  // engine and source maps. Only the PostgreSQL query compiler is used, and
+  // smaller functions start faster.
+  outputFileTracingExcludes: {
+    "*": [
+      "node_modules/@prisma/client/runtime/*.map",
+      "node_modules/@prisma/client/runtime/*.mysql.*",
+      "node_modules/@prisma/client/runtime/*.sqlite.*",
+      "node_modules/@prisma/client/runtime/*.sqlserver.*",
+      "node_modules/@prisma/client/runtime/*.cockroachdb.*",
+      "node_modules/@prisma/client/runtime/query_engine_bg.*",
+    ],
+  },
   env: {
     TZ: "Europe/Istanbul",
     // Bridge SENTRY_DSN (server-only var) into the client bundle
