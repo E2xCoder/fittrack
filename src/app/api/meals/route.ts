@@ -34,6 +34,7 @@ export async function POST(request: Request) {
       sodium: body.sodium ?? null,
       servingSize: body.servingSize ?? 1,
       servingLabel: body.servingLabel ?? "piece",
+      imageUrl: body.imageUrl ?? null,
       categoryId: body.categoryId ?? null,
       isFavorite: body.isFavorite ?? false,
     },

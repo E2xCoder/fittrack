@@ -29,14 +29,24 @@ export async function PUT(
       protein: Number(body.protein) || 0,
       carbs: Number(body.carbs) || 0,
       fat: Number(body.fat) || 0,
-      fiber: Number(body.fiber) || 0,
-      sodium: Number(body.sodium) || 0,
+      fiber: Number(body.fiber) || null,
+      sodium: Number(body.sodium) || null,
       servingSize: Number(body.servingSize) || 1,
       servingLabel: body.servingLabel || "piece",
-      category: body.category || "SNACK",
+      imageUrl: body.imageUrl ?? null,
+      categoryId: body.categoryId ?? null,
       isFavorite: Boolean(body.isFavorite),
     },
   });
+
+  // Fibre entered for a meal also applies to the times it was already logged
+  // without fibre data (same scaling as the other macros: per serving x quantity).
+  // Entries that already have a value are left alone.
+  if (updated.fiber !== null) {
+    await prisma.$executeRaw`
+      UPDATE "MealLog" SET "fiber" = ${updated.fiber} * "quantity"
+      WHERE "mealId" = ${id} AND "userId" = ${user.id} AND "fiber" IS NULL`;
+  }
 
   return NextResponse.json(updated);
 }

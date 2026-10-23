@@ -11,9 +11,15 @@ export async function POST(request: Request) {
   const body = await request.json();
   const dateParam = body.date;
 
+  const userRow = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { timezone: true },
+  });
+  const userTz = userRow?.timezone ?? "Europe/Berlin";
+
   const date = dateParam
     ? new Date(dateParam + "T12:00:00")
-    : getTodayInTimezone();
+    : getTodayInTimezone(userTz);
 
   if (dateParam) date.setHours(0, 0, 0, 0);
 
@@ -29,11 +35,16 @@ export async function POST(request: Request) {
     });
   }
 
+  // Notes: only touched when the client sends the field; empty text clears it.
+  const notes =
+    typeof body.notes === "string" ? body.notes.trim().slice(0, 1000) || null : dailyLog.notes;
+
   const updated = await prisma.dailyLog.update({
     where: { id: dailyLog.id },
     data: {
       isGymDay: body.isGymDay ?? dailyLog.isGymDay,
       gymSplit: body.gymSplit ?? dailyLog.gymSplit,
+      notes,
     },
   });
 
@@ -47,9 +58,15 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const dateParam = searchParams.get("date");
 
+  const userRow = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { timezone: true },
+  });
+  const userTz = userRow?.timezone ?? "Europe/Berlin";
+
   const date = dateParam
     ? new Date(dateParam + "T12:00:00")
-    : getTodayInTimezone();
+    : getTodayInTimezone(userTz);
 
   if (dateParam) date.setHours(0, 0, 0, 0);
 

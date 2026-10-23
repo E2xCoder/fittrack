@@ -3,10 +3,12 @@
   "short_name": "FitTrack",
   "description": "Your personal fitness tracker",
   "start_url": "/dashboard",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#16a34a",
   "orientation": "portrait",
+  "categories": ["health", "fitness"],
   "icons": [
     {
       "src": "/icon-192.png",

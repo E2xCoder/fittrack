@@ -10,7 +10,7 @@ export async function POST(request: Request) {
 
   const user = await prisma.user.findUnique({
     where: { apiToken: token },
-    select: { id: true, weight: true },
+    select: { id: true, weight: true, timezone: true },
   });
 
   if (!user) return NextResponse.json({ error: "Invalid token" }, { status: 401 });
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
   const date = dateParam
     ? new Date(dateParam + "T12:00:00")
-    : getTodayInTimezone();
+    : getTodayInTimezone(user.timezone ?? "Europe/Berlin");
 
   if (dateParam) date.setHours(0, 0, 0, 0);
 

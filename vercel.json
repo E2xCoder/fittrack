@@ -1,0 +1,15 @@
+{
+  "crons": [
+    {
+      "path": "/api/notifications/cron",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/social/streak-cron",
+      "schedule": "0 17 * * *"
+    }
+  ],
+  "regions": [
+    "fra1"
+  ]
+}

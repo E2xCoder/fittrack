@@ -49,13 +49,14 @@ export async function PATCH(
   const pack = await prisma.mealPack.findFirst({ where: { id: packId, userId: user.id } });
   if (!pack) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const updated = await prisma.mealPackItem.update({
-    where: { id: itemId },
-    data: { quantity: Number(quantity) },
-    include: { meal: true },
-  });
+  const q = Number(quantity);
+  if (!(q > 0) || q > 100000) return NextResponse.json({ error: "Invalid quantity" }, { status: 400 });
 
-  return NextResponse.json(updated);
+  // The item must belong to this (the user's own) pack.
+  const result = await prisma.mealPackItem.updateMany({ where: { id: itemId, packId }, data: { quantity: q } });
+  if (result.count === 0) return NextResponse.json({ error: "Item not found" }, { status: 404 });
+
+  return NextResponse.json(await prisma.mealPackItem.findUnique({ where: { id: itemId }, include: { meal: true } }));
 }
 
 export async function DELETE(
@@ -74,6 +75,7 @@ export async function DELETE(
   const pack = await prisma.mealPack.findFirst({ where: { id: packId, userId: user.id } });
   if (!pack) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  await prisma.mealPackItem.delete({ where: { id: itemId } });
+  const result = await prisma.mealPackItem.deleteMany({ where: { id: itemId, packId } });
+  if (result.count === 0) return NextResponse.json({ error: "Item not found" }, { status: 404 });
   return NextResponse.json({ success: true });
 }

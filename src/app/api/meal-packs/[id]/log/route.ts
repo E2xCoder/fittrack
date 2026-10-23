@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parseMealType } from "@/lib/meal-type";
 
 export async function POST(
   request: Request,
@@ -20,7 +21,9 @@ export async function POST(
   });
   if (!pack) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const today = new Date();
+  const { date: dateParam, mealType: rawMealType } = await request.json().catch(() => ({}));
+  const mealType = parseMealType(rawMealType);
+  const today = dateParam ? new Date(dateParam + "T12:00:00") : new Date();
   today.setHours(0, 0, 0, 0);
 
   let dailyLog = await prisma.dailyLog.findFirst({
@@ -31,6 +34,9 @@ export async function POST(
       data: { userId: user.id, date: today },
     });
   }
+
+  // Entries from one tap share this id, so the diary can show them as one pack.
+  const packLogId = crypto.randomUUID();
 
   let totalCalories = 0;
   let totalProtein = 0;
@@ -46,23 +52,29 @@ export async function POST(
     const protein = meal.protein * quantity;
     const carbs = meal.carbs * quantity;
     const fat = meal.fat * quantity;
+    const fiber = meal.fiber === null ? null : meal.fiber * quantity;
 
     await prisma.mealLog.create({
       data: {
         mealId: meal.id,
         userId: user.id,
         dailyLogId: dailyLog.id,
+        mealType,
         quantity,
         calories,
         protein,
         carbs,
         fat,
+        fiber,
         mealSnapshot: {
           name: meal.name,
           calories: meal.calories,
           protein: meal.protein,
           carbs: meal.carbs,
           fat: meal.fat,
+          fiber: meal.fiber,
+          imageUrl: meal.imageUrl,
+          pack: { id: pack.id, name: pack.name, logId: packLogId },
           servingLabel: meal.servingLabel,
           servingSize: meal.servingSize,
         },

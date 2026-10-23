@@ -1,4 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { strictLimit, apiLimit, searchLimit, aiLimit } from "@/lib/ratelimit";
+
+// Routes that cost money per call (GPT-4o). Open sign-up means anyone can get an
+// account, so these must not be hammerable.
+const AI_ROUTES = ["/api/nutrition-ai", "/api/nutrition-label", "/api/body-ai", "/api/workout-ai"];
+const isAiRoute = (path: string, method: string) =>
+  AI_ROUTES.some((r) => path === r || path.startsWith(r + "/")) || (path === "/api/meal-plan" && method === "POST");
+
+// ─── Protected page routes ────────────────────────────────────────────────────
 
 const protectedRoutes = [
   "/dashboard",
@@ -8,8 +17,56 @@ const protectedRoutes = [
   "/profile",
 ];
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getIp(req: NextRequest): string {
+  return (
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "127.0.0.1"
+  );
+}
+
+function tooManyRequests(retryAfter: number) {
+  return new NextResponse("Too Many Requests", {
+    status: 429,
+    headers: {
+      "Retry-After": String(retryAfter),
+      "Content-Type": "text/plain",
+    },
+  });
+}
+
+// ─── Middleware ───────────────────────────────────────────────────────────────
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // ── Rate limiting for API routes ──────────────────────────────────────────
+  if (pathname.startsWith("/api/")) {
+    const ip = getIp(request);
+
+    if (pathname.startsWith("/api/auth/")) {
+      const { success, reset } = await strictLimit.limit(ip);
+      if (!success)
+        return tooManyRequests(Math.ceil((reset - Date.now()) / 1000));
+    } else if (isAiRoute(pathname, request.method)) {
+      const { success, reset } = await aiLimit.limit(ip);
+      if (!success)
+        return tooManyRequests(Math.ceil((reset - Date.now()) / 1000));
+    } else if (
+      pathname.startsWith("/api/food-search") ||
+      pathname.startsWith("/api/food-barcode")
+    ) {
+      const { success, reset } = await searchLimit.limit(ip);
+      if (!success)
+        return tooManyRequests(Math.ceil((reset - Date.now()) / 1000));
+    } else {
+      const { success, reset } = await apiLimit.limit(ip);
+      if (!success)
+        return tooManyRequests(Math.ceil((reset - Date.now()) / 1000));
+    }
+
+    return NextResponse.next();
+  }
 
   const isProtected = protectedRoutes.some((route) =>
     pathname.startsWith(route)
@@ -30,6 +87,7 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/api/:path*",
     "/dashboard/:path*",
     "/meals/:path*",
     "/workout/:path*",

@@ -1,13 +1,11 @@
-export function getTodayInTimezone(): Date {
+export function getTodayInTimezone(timezone = "Europe/Berlin"): Date {
   const now = new Date();
-  const berlinTime = new Date(
-    now.toLocaleString("en-US", { timeZone: "Europe/Berlin" })
-  );
-  berlinTime.setHours(0, 0, 0, 0);
-  return berlinTime;
+  const tzTime = new Date(now.toLocaleString("en-US", { timeZone: timezone }));
+  tzTime.setHours(0, 0, 0, 0);
+  return tzTime;
 }
 
-export function toDateString(date?: Date): string {
+export function toDateString(date?: Date, timezone = "Europe/Berlin"): string {
   const d = date ?? new Date();
-  return d.toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
+  return d.toLocaleDateString("en-CA", { timeZone: timezone });
 }
