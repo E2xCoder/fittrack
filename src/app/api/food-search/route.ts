@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
 
 const OFF_FIELDS =
   "product_name,brands,nutriments,image_thumb_url,code,categories,quantity,serving_quantity_unit";
@@ -117,6 +119,9 @@ async function fetchOFF(q: string) {
 // ── Route ──────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const q = req.nextUrl.searchParams.get("q")?.trim();
   if (!q) return NextResponse.json({ products: [] });
 

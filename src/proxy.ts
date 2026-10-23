@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { strictLimit, apiLimit, searchLimit } from "@/lib/ratelimit";
+import { strictLimit, apiLimit, searchLimit, aiLimit } from "@/lib/ratelimit";
+
+// Routes that cost money per call (GPT-4o). Open sign-up means anyone can get an
+// account, so these must not be hammerable.
+const AI_ROUTES = ["/api/nutrition-ai", "/api/nutrition-label", "/api/body-ai", "/api/workout-ai"];
+const isAiRoute = (path: string, method: string) =>
+  AI_ROUTES.some((r) => path === r || path.startsWith(r + "/")) || (path === "/api/meal-plan" && method === "POST");
 
 // ─── Protected page routes ────────────────────────────────────────────────────
 
@@ -40,6 +46,10 @@ export async function proxy(request: NextRequest) {
 
     if (pathname.startsWith("/api/auth/")) {
       const { success, reset } = await strictLimit.limit(ip);
+      if (!success)
+        return tooManyRequests(Math.ceil((reset - Date.now()) / 1000));
+    } else if (isAiRoute(pathname, request.method)) {
+      const { success, reset } = await aiLimit.limit(ip);
       if (!success)
         return tooManyRequests(Math.ceil((reset - Date.now()) / 1000));
     } else if (

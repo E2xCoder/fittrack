@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendPushNotification } from "@/lib/webpush";
 import { calcStreak } from "@/lib/social";
+import { isCronAuthorized } from "@/lib/cron-auth";
 
 // Vercel Cron fires at 17:00 UTC = 19:00 Turkey time (UTC+2, CEST)
 // Schedule declared in vercel.json: "0 17 * * *"
@@ -10,8 +11,7 @@ export const dynamic  = "force-dynamic";
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

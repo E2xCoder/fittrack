@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
 
 const UA = "FitTrack/1.0 (fitness tracking app)";
 
@@ -106,6 +108,9 @@ async function fetchUSDABarcode(code: string) {
 // ── Route ──────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const code = req.nextUrl.searchParams.get("code")?.trim();
   if (!code) return NextResponse.json({ status: 0, error: "Missing code" }, { status: 400 });
 

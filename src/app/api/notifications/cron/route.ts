@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendPushNotification } from "@/lib/webpush";
 import { getTodayInTimezone } from "@/lib/date";
+import { isCronAuthorized } from "@/lib/cron-auth";
 
 // Vercel Cron fires every hour: "0 * * * *"
 // This handler notifies users where their local time is 08:xx
@@ -25,8 +26,7 @@ function isUserMorning(timezone: string): boolean {
 
 export async function POST(request: Request) {
   // Verify request comes from Vercel Cron (or our own server)
-  const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

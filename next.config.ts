@@ -1,7 +1,19 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
+const securityHeaders = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  // The app is never meant to be embedded in another site (clickjacking).
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  // Camera is needed (self) for the barcode scanner; nothing else is.
+  { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=(), payment=()" },
+];
+
 const nextConfig: NextConfig = {
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders }];
+  },
   // Every serverless function carried the whole Prisma runtime folder (~57 MB):
   // wasm builds for MySQL, SQLite, SQL Server and CockroachDB, the old query
   // engine and source maps. Only the PostgreSQL query compiler is used, and

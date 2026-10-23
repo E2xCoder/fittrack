@@ -44,5 +44,8 @@ export const strictLimit = makeLimiter(10, "rl:strict");
 /** General API routes — dashboard, meals, workout, etc. */
 export const apiLimit = makeLimiter(60, "rl:api");
 
+/** Endpoints that call the paid OpenAI API: a few per minute is plenty for one person. */
+export const aiLimit = makeLimiter(10, "rl:ai");
+
 /** Food search & barcode scan */
 export const searchLimit = makeLimiter(20, "rl:search");
